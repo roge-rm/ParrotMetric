@@ -336,11 +336,22 @@ DisplayMesh withCurvature(const DisplayMesh& mesh, bool smooth) {
             sum[i] += k; ++count[i];
             sum[j] += k; ++count[j];
         }
-    out.shade.assign(n, 0.0f);
-    for (size_t i = 0; i < n; ++i) {
-        uint32_t s = same[i];
-        out.shade[i] = count[s] > 0 ? sum[s] / float(count[s]) : 0.0f;
+    std::vector<float> k(n, 0.0f);
+    for (size_t i = 0; i < n; ++i) k[i] = count[i] > 0 ? sum[i] / float(count[i]) : 0.0f;
+    // Each edge's estimate is rough on uneven triangles: evened out with the neighbours a few times.
+    for (int pass = 0; pass < 4; ++pass) {
+        std::vector<float> total(k), many(n, 1.0f);
+        for (size_t t = 0; t + 2 < mesh.indices.size(); t += 3)
+            for (int e = 0; e < 3; ++e) {
+                uint32_t i = same[mesh.indices[t + size_t(e)]], j = same[mesh.indices[t + size_t((e + 1) % 3)]];
+                if (i == j) continue;
+                total[i] += k[j]; many[i] += 1;
+                total[j] += k[i]; many[j] += 1;
+            }
+        for (size_t i = 0; i < n; ++i) if (same[i] == i) k[i] = total[i] / many[i];
     }
+    out.shade.assign(n, 0.0f);
+    for (size_t i = 0; i < n; ++i) out.shade[i] = k[same[i]];
     return out;
 }
 

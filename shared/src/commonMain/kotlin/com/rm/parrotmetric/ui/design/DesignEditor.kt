@@ -568,13 +568,20 @@ class DesignEditor(
 
     /** Sketches nothing has used yet, and the panel's sketch. */
     private fun sketchesToShow(features: List<Feature>, draft: FeatureDraft?): List<SketchFeature> {
-        val used = features.mapNotNull {
+        fun pathSketch(p: com.rm.parrotmetric.design.PathRef?) = (p as? com.rm.parrotmetric.design.PathRef.Sketch)?.sketchId
+        val used = features.flatMap {
             when (it) {
-                is ExtrudeFeature -> it.sketchId
-                is RevolveFeature -> it.sketchId
-                is com.rm.parrotmetric.design.RibFeature -> it.sketchId
-                is com.rm.parrotmetric.design.EmbossFeature -> it.sketchId
-                else -> null
+                is ExtrudeFeature -> listOf(it.sketchId)
+                is RevolveFeature -> listOf(it.sketchId)
+                is HoleFeature -> listOf(it.sketchId)
+                is com.rm.parrotmetric.design.RibFeature -> listOf(it.sketchId)
+                is com.rm.parrotmetric.design.EmbossFeature -> listOf(it.sketchId)
+                is com.rm.parrotmetric.design.SweepFeature -> listOfNotNull(it.sketchId, pathSketch(it.path))
+                is com.rm.parrotmetric.design.PipeFeature -> listOfNotNull(pathSketch(it.path))
+                is com.rm.parrotmetric.design.LoftFeature -> it.sections.map { s -> s.sketchId }
+                is com.rm.parrotmetric.design.PatchFeature -> listOfNotNull(it.sketchId)
+                is PatternFeature -> listOfNotNull(pathSketch(it.path))
+                else -> emptyList()
             }
         }.toSet()
         val keep = (draft as? AreaDraft)?.sketchId

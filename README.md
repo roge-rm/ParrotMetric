@@ -18,6 +18,25 @@ Dan
 
 ---
 
+## Screenshots
+
+<table>
+  <tr>
+    <td align="center"><img src="screenshots/box.png" width="250" alt="A project box with a hinged lid"></td>
+    <td align="center"><img src="screenshots/sketch.png" width="250" alt="A sketch with its constraints and dimensions"></td>
+    <td align="center"><img src="screenshots/vase.png" width="250" alt="A lofted vase"></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="screenshots/zebra.png" width="250" alt="Zebra stripes on the vase"></td>
+    <td align="center"><img src="screenshots/curvature.png" width="250" alt="Curvature on the vase"></td>
+    <td align="center"><img src="screenshots/overhang.png" width="250" alt="Overhangs under the vase that need support"></td>
+  </tr>
+</table>
+
+The box has rounded corners, a hollow, vents and a lid on a hinge joint, with its sizes as parameters. The vase is a loft through four rings, hollowed out.
+
+---
+
 ## What's in it
 
 ### Sketching
