@@ -42,6 +42,14 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.rm.parrotmetric.sketch.SketchPlane
+import com.rm.parrotmetric.ui.sketch.CameraState
+import com.rm.parrotmetric.ui.sketch.PlaneProjection
+import com.rm.parrotmetric.ui.sketch.SketchBottom
+import com.rm.parrotmetric.ui.sketch.SketchEditor
+import com.rm.parrotmetric.ui.sketch.SketchOverlay
+import com.rm.parrotmetric.ui.sketch.SketchStatus
+import com.rm.parrotmetric.ui.sketch.SketchTopBar
 
 /** What the model screen shows. */
 data class ModelState(
@@ -55,8 +63,13 @@ data class ModelState(
     val triangles: Int = 0,
     val yaw: Float = 0f,
     val pitch: Float = 0f,
+    /** The camera as last drawn, for lining the sketch overlay up with the view. */
+    val camera: CameraState? = null,
+    /** The sketch being edited, if any. */
+    val sketch: SketchEditor? = null,
 )
 
+/** A step in the history bar. Tapping it calls [ModelActions.openHistory] with its place in the list. */
 data class HistoryItem(val name: String, val kind: ToolGroup)
 
 /** What the model screen can ask the platform to do. */
@@ -69,6 +82,12 @@ interface ModelActions {
     fun clearSelection()
     fun fit()
     fun viewFrom(yaw: Float, pitch: Float)
+    fun pan(dx: Float, dy: Float)
+    fun zoom(factor: Float)
+    /** Starts a sketch on a plane, or on the selected flat face when plane is null. */
+    fun startSketch(plane: SketchPlane?)
+    fun finishSketch()
+    fun openHistory(index: Int)
 }
 
 /**
@@ -80,9 +99,20 @@ interface ModelActions {
 fun ModelScreen(viewport: @Composable () -> Unit, logo: @Composable () -> Unit, state: ModelState, actions: ModelActions) {
     var openGroup by remember { mutableStateOf<ToolGroup?>(null) }
     MaterialTheme(colorScheme = Palette.scheme) {
+        val sketch = state.sketch
+        // The view stays put while the controls over it change, so it keeps its GL context.
         Box(Modifier.fillMaxSize().background(Palette.ground)) {
             viewport()
-            Column(Modifier.fillMaxSize().safeDrawingPadding()) {
+            if (sketch != null) {
+                state.camera?.let { SketchOverlay(sketch, PlaneProjection(it, sketch.plane), actions::pan, actions::zoom) }
+                Column(Modifier.fillMaxSize().safeDrawingPadding()) {
+                    SketchTopBar(sketch, actions::finishSketch)
+                    Box(Modifier.weight(1f).fillMaxWidth()) {
+                        SketchStatus(sketch, Modifier.align(Alignment.TopCenter).padding(top = 6.dp))
+                    }
+                    SketchBottom(sketch)
+                }
+            } else Column(Modifier.fillMaxSize().safeDrawingPadding()) {
                 TopBar(logo, state, actions)
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     Column(
@@ -117,7 +147,7 @@ fun ModelScreen(viewport: @Composable () -> Unit, logo: @Composable () -> Unit, 
                     ) {
                         openGroup?.let { ToolSheet(it, state, actions) { openGroup = null } }
                     }
-                    if (openGroup == null) HistoryBar(state.history)
+                    if (openGroup == null) HistoryBar(state.history, actions::openHistory)
                     GroupBar(openGroup) { openGroup = if (openGroup == it) null else it }
                 }
             }
@@ -176,14 +206,14 @@ private fun SelectionChip(state: ModelState, actions: ModelActions, modifier: Mo
 }
 
 @Composable
-private fun HistoryBar(history: List<HistoryItem>) {
+private fun HistoryBar(history: List<HistoryItem>, onOpen: (Int) -> Unit) {
     Row(
         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        for (item in history) {
-            Surface(color = Palette.surface, contentColor = Palette.text, shape = RoundedCornerShape(18.dp)) {
+        for ((index, item) in history.withIndex()) {
+            Surface(onClick = { onOpen(index) }, color = Palette.surface, contentColor = Palette.text, shape = RoundedCornerShape(18.dp)) {
                 Row(Modifier.height(36.dp).padding(start = 9.dp, end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(item.kind.icon, null, Modifier.size(15.dp), tint = item.kind.colour)
                     Spacer(Modifier.width(6.dp))
@@ -226,7 +256,12 @@ private class Tool(val label: String, val icon: ImageVector, val action: (() -> 
 private fun ToolSheet(group: ToolGroup, state: ModelState, actions: ModelActions, close: () -> Unit) {
     var meshTools by remember(group) { mutableStateOf(state.isMesh) }
     val tools = when (group) {
-        ToolGroup.Sketch -> listOf(Tool("Sketch", Icons.sketch, null))
+        ToolGroup.Sketch -> listOf(
+            Tool("Top", Icons.plane) { actions.startSketch(SketchPlane.Top) },
+            Tool("Front", Icons.plane) { actions.startSketch(SketchPlane.Front) },
+            Tool("Right", Icons.plane) { actions.startSketch(SketchPlane.Right) },
+            Tool("On face", Icons.sketch, if (state.selectedFaces == 1 && state.selectedEdges == 0 && !state.isMesh) ({ actions.startSketch(null) }) else null),
+        )
         ToolGroup.Create -> listOf(
             Tool("Box", Icons.box) { actions.newBox() },
             Tool("Extrude", Icons.extrude, null),

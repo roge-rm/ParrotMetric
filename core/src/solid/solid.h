@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <vector>
 
 #include "display/display_mesh.h"
 #include "mesh/mesh.h"
@@ -26,6 +27,12 @@ public:
     Solid filletAllEdges(double radius) const;
 
     Mesh tessellate(const Tessellation& t = {}) const;
+
+    /**
+     * If face number `face` (OCCT map order) is flat: a point in its middle
+     * and its outward normal, as ox oy oz nx ny nz. Empty otherwise.
+     */
+    std::vector<double> facePlane(uint32_t face) const;
     /** For the renderer: smooth normals on each face, and every edge. Numbered in OCCT map order. */
     DisplayMesh display(const Tessellation& t = {}) const;
     double volume() const;

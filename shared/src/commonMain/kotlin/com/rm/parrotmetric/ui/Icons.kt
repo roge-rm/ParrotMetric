@@ -57,5 +57,17 @@ object Icons {
     val point = stroke("point", circle(12f, 12f, 3f), "M12 3v3M12 18v3M3 12h3M18 12h3")
     val measure = stroke("measure", "M4 20L20 4", "M4 16v4h4M16 4h4v4")
     val section = stroke("section", "M3 12h18", "M12 3a9 9 0 0 1 9 9H3a9 9 0 0 1 9-9z")
+    // Sketch tools.
+    val select = stroke("select", "M5 3l13 8-6 1.5L9 19z")
+    val line = stroke("line", "M5 19L19 5", circle(5f, 19f, 1.6f), circle(19f, 5f, 1.6f))
+    val rectangle = stroke("rectangle", "M4.5 6h15a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1z")
+    val circleTool = stroke("circle", circle(12f, 12f, 8f), circle(12f, 12f, 0.6f))
+    val arc = stroke("arc", "M4 18a9 9 0 0 1 16 0")
+    val pointTool = stroke("point", circle(12f, 12f, 2.5f), "M12 4v3M12 17v3M4 12h3M17 12h3")
+    val dimension = stroke("dimension", "M4 12h16M4 8v8M20 8v8", "M7 10l-3 2 3 2M17 10l3 2-3 2")
+    val constrain = stroke("constrain", "M5 19L19 5", "M5 19h9")
+    val construction = stroke("construction", "M4 20l2-2M8 16l2-2M12 12l2-2M16 8l2-2M20 4l0 0")
+    val delete = stroke("delete", "M4 7h16", "M9 7V4h6v3", "M6 7l1 13h10l1-13")
+    val check = stroke("check", "M5 12l5 5 9-10", width = 2.2f)
     val export = stroke("export", "M12 15V3M8 7l4-4 4 4", "M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6")
 }

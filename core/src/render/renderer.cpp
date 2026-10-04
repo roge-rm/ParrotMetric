@@ -80,9 +80,10 @@ const char* kEdgeFragment = R"(#version 300 es
 precision mediump float;
 flat in float chosen;
 flat in uint id;
+uniform vec4 edgeColour;
 out vec4 colour;
 void main() {
-    colour = mix(vec4(0.13, 0.18, 0.17, 0.9), vec4(1.0, 0.48, 0.24, 1.0), chosen);
+    colour = mix(edgeColour, vec4(1.0, 0.48, 0.24, 1.0), chosen);
 })";
 
 // The id passes write the picked number as colour.
@@ -224,6 +225,7 @@ void Renderer::upload() {
     for (const auto& b : bodies_) {
         Gpu g;
         g.faceCount = b.faceCount;
+        std::copy(b.edgeColour, b.edgeColour + 4, g.edgeColour);
         g.edgeCount = uint32_t(b.edges.size());
 
         glGenVertexArrays(1, &g.faceVao);
@@ -432,6 +434,7 @@ void Renderer::drawScene(bool ids, const float* vp, const float* normal) {
     for (uint32_t i = 0; i < gpu_.size(); ++i) {
         const Gpu& g = gpu_[i];
         if (ids) glUniform1ui(glGetUniformLocation(edgeProgram, "base"), (i << 20) | kEdgeBit);
+        else glUniform4fv(glGetUniformLocation(edgeProgram, "edgeColour"), 1, g.edgeColour);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, g.edgeSelected);
         glBindVertexArray(g.edgeVao);
@@ -451,6 +454,7 @@ bool Renderer::draw() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     float vp[16], normal[9];
     camera(vp, normal);
+    std::copy(vp, vp + 16, lastViewProjection_);
     drawScene(false, vp, normal);
     return moving_;
 }

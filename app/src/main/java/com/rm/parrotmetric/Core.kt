@@ -49,4 +49,12 @@ object Core {
     external fun viewFrom(yaw: Float, pitch: Float)
     /** The camera's yaw and pitch in radians. */
     external fun cameraAngles(): FloatArray
+    /** Yaw, pitch, viewport width and height, then the last frame's view-projection matrix. */
+    external fun cameraState(): FloatArray
+    /** Centre and outward normal of the one selected flat face, or null. */
+    external fun selectedFacePlane(): DoubleArray?
+    /** Finished sketches as light lines; see jni.cpp for the layout. */
+    external fun setSketches(data: FloatArray)
+    /** A sketch's closed regions; see jni.cpp for the layouts. */
+    external fun findRegions(kinds: IntArray, ids: IntArray, numbers: DoubleArray): FloatArray
 }

@@ -16,6 +16,7 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
+            api(project(":model"))
             api(libs.jb.compose.runtime)
             api(libs.jb.compose.foundation)
             api(libs.jb.compose.ui)

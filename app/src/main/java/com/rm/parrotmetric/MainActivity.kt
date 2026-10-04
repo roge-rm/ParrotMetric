@@ -28,6 +28,10 @@ import com.rm.parrotmetric.ui.ModelActions
 import com.rm.parrotmetric.ui.ModelScreen
 import com.rm.parrotmetric.ui.ModelState
 import com.rm.parrotmetric.ui.ToolGroup
+import com.rm.parrotmetric.sketch.Sketch
+import com.rm.parrotmetric.sketch.SketchPlane
+import com.rm.parrotmetric.ui.sketch.CameraState
+import com.rm.parrotmetric.ui.sketch.SketchEditor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -35,6 +39,18 @@ import kotlinx.coroutines.withContext
 class MainActivity : ComponentActivity() {
     private var state by mutableStateOf(ModelState())
     private var view: ModelView? = null
+
+    // The history bar's steps; sketches keep their records here so they can be opened again.
+    private val steps = mutableListOf<Pair<HistoryItem, SketchRecord?>>()
+    private var editingRecord: SketchRecord? = null
+
+    private fun setSteps(items: List<Pair<HistoryItem, SketchRecord?>>) {
+        steps.clear()
+        steps += items
+        state = state.copy(history = steps.map { it.first })
+        Core.setSketches(sketchLines(steps.mapNotNull { it.second }))
+        view?.requestRender()
+    }
 
     private val openFile = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
@@ -45,11 +61,8 @@ class MainActivity : ComponentActivity() {
                 return@registerForActivityResult
             }
             inBackground(onDone = {
-                state.copy(
-                    title = name.substringBeforeLast('.'),
-                    isMesh = format == Core.Format.Stl,
-                    history = listOf(HistoryItem(name, ToolGroup.Create)),
-                )
+                setSteps(listOf(HistoryItem(name, ToolGroup.Create) to null))
+                state.copy(title = name.substringBeforeLast('.'), isMesh = format == Core.Format.Stl)
             }) {
                 val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return@inBackground "Couldn't read the file"
                 Core.importFile(bytes, format)
@@ -68,11 +81,8 @@ class MainActivity : ComponentActivity() {
 
     private val actions = object : ModelActions {
         override fun newBox() = inBackground(onDone = {
-            state.copy(
-                title = "Untitled",
-                isMesh = false,
-                history = listOf(HistoryItem("Box", ToolGroup.Create), HistoryItem("Fillet", ToolGroup.Modify)),
-            )
+            setSteps(listOf(HistoryItem("Box", ToolGroup.Create) to null, HistoryItem("Fillet", ToolGroup.Modify) to null))
+            state.copy(title = "Untitled", isMesh = false)
         }) { Core.showFilletedBox(20.0, 2.0) }
 
         override fun openFile() = this@MainActivity.openFile.launch(arrayOf("*/*"))
@@ -80,7 +90,8 @@ class MainActivity : ComponentActivity() {
         override fun exportStep() = export(Core.Format.Step)
 
         override fun cutHole() = inBackground(onDone = {
-            state.copy(isMesh = true, history = state.history + HistoryItem("Cut", ToolGroup.Modify))
+            setSteps(steps + (HistoryItem("Cut", ToolGroup.Modify) to null))
+            state.copy(isMesh = true)
         }) { Core.cutHole() }
 
         override fun clearSelection() {
@@ -95,6 +106,53 @@ class MainActivity : ComponentActivity() {
         override fun viewFrom(yaw: Float, pitch: Float) {
             view?.gl { Core.viewFrom(yaw, pitch) }
         }
+
+        override fun pan(dx: Float, dy: Float) {
+            view?.gl { Core.pan(dx, dy) }
+        }
+
+        override fun zoom(factor: Float) {
+            view?.gl { Core.zoom(factor) }
+        }
+
+        override fun startSketch(plane: SketchPlane?) {
+            val name = "Sketch ${steps.count { it.second != null } + 1}"
+            val p = plane ?: Core.selectedFacePlane()?.let { facePlane(it, state.yaw, "Face") } ?: return
+            editingRecord = null
+            openSketch(SketchRecord(name, p, Sketch()))
+        }
+
+        override fun finishSketch() {
+            val editor = state.sketch ?: return
+            editor.endDrawing()
+            val existing = editingRecord
+            if (existing == null) {
+                if (editor.sketch.curves.isNotEmpty()) {
+                    setSteps(steps + (HistoryItem(editor.name, ToolGroup.Sketch) to SketchRecord(editor.name, editor.plane, editor.sketch)))
+                }
+            } else {
+                setSteps(steps.toList())
+            }
+            editingRecord = null
+            state = state.copy(sketch = null)
+        }
+
+        override fun openHistory(index: Int) {
+            val record = steps.getOrNull(index)?.second ?: return
+            editingRecord = record
+            openSketch(record)
+        }
+    }
+
+    private fun openSketch(record: SketchRecord) {
+        view?.gl { Core.clearSelection() }
+        val (yaw, pitch) = viewOf(record.plane)
+        view?.gl { Core.viewFrom(yaw, pitch) }
+        state = state.copy(
+            sketch = SketchEditor(record.plane, record.name, record.sketch, coreRegionFinder),
+            selectedFaces = 0,
+            selectedEdges = 0,
+        )
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -111,7 +169,10 @@ class MainActivity : ComponentActivity() {
                         factory = { context ->
                             ModelView(
                                 context,
-                                onCamera = { yaw, pitch -> state = state.copy(yaw = yaw, pitch = pitch) },
+                                onCamera = { c ->
+                                    val camera = CameraState.from(c)
+                                    state = state.copy(yaw = camera.yaw, pitch = camera.pitch, camera = camera)
+                                },
                                 onSelection = { faces, edges -> state = state.copy(selectedFaces = faces, selectedEdges = edges) },
                             ).also { view = it }
                         },

@@ -15,12 +15,13 @@ import kotlin.math.hypot
  * fingers pan and pinch to zoom, a tap selects and a double tap fits the view.
  * It draws only when something changes or the view is moving.
  *
- * [onCamera] and [onSelection] are called on the main thread.
+ * [onCamera] gets the core's camera state (see Core.cameraState) when it
+ * changes. It and [onSelection] are called on the main thread.
  */
 @SuppressLint("ViewConstructor", "ClickableViewAccessibility")
 class ModelView(
     context: Context,
-    private val onCamera: (yaw: Float, pitch: Float) -> Unit,
+    private val onCamera: (state: FloatArray) -> Unit,
     private val onSelection: (faces: Int, edges: Int) -> Unit,
 ) : GLSurfaceView(context) {
     private val slop = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
@@ -32,8 +33,7 @@ class ModelView(
     private var dragging = false
     private var multi = false
     private var lastTapTime = 0L
-    private var lastYaw = Float.NaN
-    private var lastPitch = Float.NaN
+    private var lastCamera = FloatArray(0)
 
     private val scale = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
         override fun onScale(detector: ScaleGestureDetector): Boolean {
@@ -58,11 +58,10 @@ class ModelView(
 
             override fun onDrawFrame(gl: GL10?) {
                 if (Core.drawFrame()) requestRender()
-                val (yaw, pitch) = Core.cameraAngles()
-                if (yaw != lastYaw || pitch != lastPitch) {
-                    lastYaw = yaw
-                    lastPitch = pitch
-                    post { onCamera(yaw, pitch) }
+                val camera = Core.cameraState()
+                if (!camera.contentEquals(lastCamera)) {
+                    lastCamera = camera
+                    post { onCamera(camera) }
                 }
             }
         })

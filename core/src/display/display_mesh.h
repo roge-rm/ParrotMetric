@@ -28,6 +28,9 @@ struct DisplayMesh {
 
     uint32_t faceCount = 0;
 
+    // Edge colour, RGBA. Sketches show light on the dark ground; bodies' edges are dark.
+    float edgeColour[4] = {0.13f, 0.18f, 0.17f, 0.9f};
+
     size_t vertexCount() const { return positions.size() / 3; }
 };
 

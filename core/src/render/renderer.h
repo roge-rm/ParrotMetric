@@ -50,6 +50,11 @@ public:
     /** Turns smoothly to look from a direction, in radians: yaw round Z from +X, pitch up from the XY plane. */
     void viewFrom(float yaw, float pitch);
 
+    /** The view-projection matrix of the last frame drawn, column-major, for mapping touches. */
+    const float* viewProjection() const { return lastViewProjection_; }
+    int width() const { return width_; }
+    int height() const { return height_; }
+
     /** The camera's turn, for the orientation cube: yaw and pitch in radians. */
     float yaw() const { return yaw_; }
     float pitch() const { return pitch_; }
@@ -60,6 +65,7 @@ private:
         uint32_t edgeVao = 0, edgeVbo = 0, edgeIbo = 0;
         uint32_t faceSelected = 0, edgeSelected = 0;  // R8 textures, one texel per face or edge.
         int faceIndices = 0, edgeIndices = 0;
+        float edgeColour[4];
         uint32_t faceCount = 0, edgeCount = 0;
     };
 
@@ -78,6 +84,7 @@ private:
     std::vector<Gpu> gpu_;
 
     int width_ = 1, height_ = 1;
+    float lastViewProjection_[16] = {};
     float density_ = 1;
 
     std::vector<DisplayMesh> bodies_;

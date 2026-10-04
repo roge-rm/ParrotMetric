@@ -3,7 +3,9 @@
 #include <BRepBuilderAPI_MakeShape.hxx>
 #include <BRepCheck_Analyzer.hxx>
 #include <BRepFilletAPI_MakeFillet.hxx>
+#include <BRepAdaptor_Surface.hxx>
 #include <BRepGProp.hxx>
+#include <BRepGProp_Face.hxx>
 #include <BRepMesh_IncrementalMesh.hxx>
 #include <BRepPrimAPI_MakeBox.hxx>
 #include <BRep_Tool.hxx>
@@ -130,6 +132,21 @@ DisplayMesh Solid::display(const Tessellation& t) const {
         }
     }
     return d;
+}
+
+std::vector<double> Solid::facePlane(uint32_t face) const {
+    TopTools_IndexedMapOfShape faces;
+    TopExp::MapShapes(*shape_, TopAbs_FACE, faces);
+    if (face >= uint32_t(faces.Extent())) return {};
+    const TopoDS_Face& f = TopoDS::Face(faces(int(face) + 1));
+    BRepAdaptor_Surface surface(f);
+    if (surface.GetType() != GeomAbs_Plane) return {};
+    GProp_GProps props;
+    BRepGProp::SurfaceProperties(f, props);
+    gp_Pnt c = props.CentreOfMass();
+    gp_Dir n = surface.Plane().Axis().Direction();
+    if (f.Orientation() == TopAbs_REVERSED) n.Reverse();
+    return {c.X(), c.Y(), c.Z(), n.X(), n.Y(), n.Z()};
 }
 
 double Solid::volume() const {
