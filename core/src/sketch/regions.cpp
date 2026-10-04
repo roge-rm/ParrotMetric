@@ -1,4 +1,5 @@
 #include "sketch/regions.h"
+#include "sketch/region_faces.h"
 
 #include <BRepAdaptor_Curve.hxx>
 #include <BRepAlgoAPI_Splitter.hxx>
@@ -58,8 +59,8 @@ Region::Loop sampleWire(const TopoDS_Wire& wire, const TopoDS_Face& face) {
 
 }  // namespace
 
-std::vector<Region> findRegions(const std::vector<SketchCurve>& curves) {
-    std::vector<Region> regions;
+std::vector<RegionFace> buildRegionFaces(const std::vector<SketchCurve>& curves) {
+    std::vector<RegionFace> regions;
     try {
         TopTools_ListOfShape tools;
         std::vector<std::pair<TopoDS_Edge, int>> inputs;
@@ -98,7 +99,9 @@ std::vector<Region> findRegions(const std::vector<SketchCurve>& curves) {
             const double tol = 1e-6 * margin;
             if (fx0 <= x0 + tol || fy0 <= y0 + tol || fx1 >= x1 - tol || fy1 >= y1 - tol) continue;
 
-            Region r;
+            RegionFace rf;
+            rf.face = face;
+            Region& r = rf.info;
             TopoDS_Wire outer = BRepTools::OuterWire(face);
             r.loops.push_back(sampleWire(outer, face));
             for (TopExp_Explorer w(face, TopAbs_WIRE); w.More(); w.Next()) {
@@ -113,7 +116,11 @@ std::vector<Region> findRegions(const std::vector<SketchCurve>& curves) {
                             if (piece.IsSame(e.Current())) { from = true; break; }
                         }
                     }
-                    if (from) { r.curveIds.push_back(id); break; }
+                    if (from) {
+                        r.curveIds.push_back(id);
+                        rf.edgeCurves.push_back({TopoDS::Edge(e.Current()), id});
+                        break;
+                    }
                 }
             }
             std::sort(r.curveIds.begin(), r.curveIds.end());
@@ -121,14 +128,20 @@ std::vector<Region> findRegions(const std::vector<SketchCurve>& curves) {
             GProp_GProps props;
             BRepGProp::SurfaceProperties(face, props);
             r.area = std::abs(props.Mass());
-            regions.push_back(std::move(r));
+            regions.push_back(std::move(rf));
         }
     } catch (const Standard_Failure&) {
         regions.clear();
     }
     // Largest first, so a tap on nested regions can prefer the smallest by going backwards.
-    std::sort(regions.begin(), regions.end(), [](const Region& a, const Region& b) { return a.area > b.area; });
+    std::sort(regions.begin(), regions.end(), [](const RegionFace& a, const RegionFace& b) { return a.info.area > b.info.area; });
     return regions;
+}
+
+std::vector<Region> findRegions(const std::vector<SketchCurve>& curves) {
+    std::vector<Region> out;
+    for (auto& r : buildRegionFaces(curves)) out.push_back(std::move(r.info));
+    return out;
 }
 
 }  // namespace pm
