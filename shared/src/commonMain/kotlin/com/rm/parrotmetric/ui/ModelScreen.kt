@@ -78,6 +78,9 @@ data class ModelState(
 
 /** What the model screen asks the platform to do. */
 interface ModelActions {
+    fun newDesign()
+    fun save()
+    fun saveAs()
     fun openFile()
     fun exportStl()
     fun exportStep()
@@ -171,7 +174,10 @@ private fun TopBar(logo: @Composable () -> Unit, state: ModelState, design: Desi
         Box {
             IconButton(onClick = { menu = true }) { logo() }
             DropdownMenu(menu, onDismissRequest = { menu = false }, containerColor = Palette.raised) {
+                DropdownMenuItem({ Text("New") }, onClick = { menu = false; actions.newDesign() }, leadingIcon = { Icon(Icons.newFile, null, tint = Palette.mint) })
                 DropdownMenuItem({ Text("Open…") }, onClick = { menu = false; actions.openFile() }, leadingIcon = { Icon(Icons.open, null, tint = Palette.mint) })
+                DropdownMenuItem({ Text("Save") }, onClick = { menu = false; actions.save() }, leadingIcon = { Icon(Icons.save, null, tint = Palette.mint) })
+                DropdownMenuItem({ Text("Save as…") }, onClick = { menu = false; actions.saveAs() }, leadingIcon = { Icon(Icons.save, null, tint = Palette.mint) })
                 DropdownMenuItem({ Text("Export STL…") }, onClick = { menu = false; actions.exportStl() }, leadingIcon = { Icon(Icons.export, null, tint = Palette.mint) })
                 DropdownMenuItem({ Text("Export STEP…") }, onClick = { menu = false; actions.exportStep() }, leadingIcon = { Icon(Icons.export, null, tint = Palette.mint) })
             }

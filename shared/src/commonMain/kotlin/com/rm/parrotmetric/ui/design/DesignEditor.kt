@@ -19,6 +19,7 @@ import com.rm.parrotmetric.design.Rebuilder
 import com.rm.parrotmetric.design.RegionRef
 import com.rm.parrotmetric.design.RevolveFeature
 import com.rm.parrotmetric.design.SketchFeature
+import com.rm.parrotmetric.io.DesignFile
 import com.rm.parrotmetric.sketch.ProfileCurve
 import com.rm.parrotmetric.sketch.RegionFinder
 import com.rm.parrotmetric.sketch.Sketch
@@ -82,6 +83,9 @@ class DesignEditor(
     var panel by mutableStateOf<FeatureDraft?>(null)
         private set
 
+    /** Called when the history changes, for autosave. */
+    var onHistoryChanged: () -> Unit = {}
+
     /** Called on the main thread after each rebuild is shown, which clears the view's selection. */
     var onShown: () -> Unit = {}
 
@@ -134,7 +138,33 @@ class DesignEditor(
 
     private fun changed(refit: Boolean = false) {
         version++
+        onHistoryChanged()
         rebuild(refit = refit)
+    }
+
+    /** The design as a .pmet file. */
+    fun fileText(title: String): String = DesignFile.write(design, title)
+
+    /** Replaces the design with a file's. Returns its title; throws IllegalArgumentException if it can't be read. */
+    fun openFile(text: String): String {
+        val title = DesignFile.read(text, design)
+        afterReplace()
+        return title
+    }
+
+    /** Starts again with nothing. Undo brings the old design back. */
+    fun newDesign() {
+        checkpoint()
+        design.load(emptyList(), 0)
+        panel = null
+        changed(refit = true)
+    }
+
+    private fun afterReplace() {
+        undoStack.clear()
+        redoStack.clear()
+        panel = null
+        changed(refit = true)
     }
 
     fun addSketch(name: String, plane: PlaneRef, sketch: Sketch): SketchFeature {

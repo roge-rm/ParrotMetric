@@ -53,9 +53,21 @@ class MainActivity : ComponentActivity() {
     private val openFile = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@registerForActivityResult
         val name = displayName(uri)
+        if (name.endsWith(".pmet", ignoreCase = true)) {
+            lifecycleScope.launch {
+                val text = withContext(Dispatchers.IO) { contentResolver.openInputStream(uri)?.use { it.readBytes().decodeToString() } }
+                try {
+                    state = state.copy(title = design.openFile(text ?: throw IllegalArgumentException("Couldn't read the file")))
+                    documentUri = uri
+                } catch (e: IllegalArgumentException) {
+                    design.message = e.message
+                }
+            }
+            return@registerForActivityResult
+        }
         val format = Core.Format.forName(name)
         if (format == null) {
-            design.message = "Open an STL, STEP or IGES file"
+            design.message = "Open a design, or an STL, STEP or IGES file"
             return@registerForActivityResult
         }
         lifecycleScope.launch {
@@ -66,6 +78,51 @@ class MainActivity : ComponentActivity() {
             }
             if (design.design.features.isEmpty()) state = state.copy(title = name.substringBeforeLast('.'))
             design.importFile(name, bytes, format.ordinal)
+        }
+    }
+
+    /** Where Save writes: the design file last opened or saved, if any. */
+    private var documentUri: Uri? = null
+
+    private val saveDesign = registerForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+        if (uri != null) writeDesign(uri)
+    }
+
+    private fun writeDesign(uri: Uri) {
+        val text = design.fileText(state.title)
+        lifecycleScope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                try {
+                    contentResolver.openOutputStream(uri, "wt")?.use { it.write(text.encodeToByteArray()) } != null
+                } catch (e: Exception) {
+                    false
+                }
+            }
+            if (ok) {
+                documentUri = uri
+                val name = displayName(uri)
+                state = state.copy(title = name.substringBeforeLast('.'))
+                design.message = "Saved $name"
+            } else {
+                design.message = "Couldn't save the file"
+            }
+        }
+    }
+
+    /** The design as it is, kept in the app's own files so it's there next time. */
+    private val autosave by lazy { java.io.File(filesDir, "autosave.pmet") }
+    private var autosaveJob: kotlinx.coroutines.Job? = null
+
+    private fun scheduleAutosave() {
+        autosaveJob?.cancel()
+        autosaveJob = lifecycleScope.launch {
+            kotlinx.coroutines.delay(800)
+            val text = design.fileText(state.title)
+            withContext(Dispatchers.IO) {
+                val tmp = java.io.File(filesDir, "autosave.pmet.tmp")
+                tmp.writeText(text)
+                tmp.renameTo(autosave)
+            }
         }
     }
 
@@ -89,6 +146,18 @@ class MainActivity : ComponentActivity() {
     }
 
     private val actions = object : ModelActions {
+        override fun newDesign() {
+            design.newDesign()
+            documentUri = null
+            state = state.copy(title = "Untitled")
+        }
+
+        override fun save() {
+            documentUri?.let { writeDesign(it) } ?: saveAs()
+        }
+
+        override fun saveAs() = saveDesign.launch(state.title + ".pmet")
+
         override fun openFile() = this@MainActivity.openFile.launch(arrayOf("*/*"))
         override fun exportStl() = export(Core.Format.Stl)
         override fun exportStep() = export(Core.Format.Step)
@@ -193,6 +262,15 @@ class MainActivity : ComponentActivity() {
         Core.setScratchDirectory(cacheDir.absolutePath)
         design = DesignEditor(CoreKernel, coreRegionFinder, CoreViewport { work -> view?.gl(work) }, lifecycleScope)
         design.onShown = { state = state.copy(selectedFaces = 0, selectedEdges = 0, selectedAreas = 0) }
+        design.onHistoryChanged = ::scheduleAutosave
+        // Carry on from where the last session left off.
+        if (autosave.exists()) {
+            try {
+                state = state.copy(title = design.openFile(autosave.readText()))
+            } catch (e: IllegalArgumentException) {
+                design.message = "The last design couldn't be read back"
+            }
+        }
         setContent {
             ModelScreen(
                 viewport = {

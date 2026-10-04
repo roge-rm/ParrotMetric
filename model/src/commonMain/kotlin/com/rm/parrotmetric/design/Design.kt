@@ -18,6 +18,14 @@ class Design {
 
     fun newId() = nextId++
 
+    /** Puts features read from a file in place of what's here. */
+    fun load(features: List<Feature>, marker: Int) {
+        list.clear()
+        list += features
+        this.marker = marker.coerceIn(0, features.size)
+        nextId = (features.maxOfOrNull { it.id } ?: 0) + 1
+    }
+
     /** The features before the marker: what's built. */
     val active: List<Feature> get() = list.subList(0, marker)
 

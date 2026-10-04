@@ -171,6 +171,33 @@ class Sketch {
 
     internal fun value(i: Int) = values[i]
 
+    // Reading a sketch back from a file, with the ids it was saved with.
+
+    internal fun loadPoint(id: Int, x: Double, y: Double): Point {
+        if (id == 0) return origin
+        val p = Point(id, slot(x), slot(y))
+        pointMap[id] = p
+        nextId = maxOf(nextId, id + 1)
+        return p
+    }
+
+    internal fun loadCurve(c: Curve) {
+        curveMap[c.id] = c
+        nextId = maxOf(nextId, c.id + 1)
+    }
+
+    internal fun loadLine(id: Int, a: Point, b: Point, construction: Boolean) = loadCurve(Line(id, a, b, construction))
+    internal fun loadCircle(id: Int, centre: Point, r: Double, construction: Boolean) = loadCurve(Circle(id, centre, slot(r), construction))
+    internal fun loadArc(id: Int, centre: Point, start: Point, end: Point, construction: Boolean) {
+        val arc = Arc(id, centre, start, end, construction)
+        loadCurve(arc)
+        constraintList += Constraint.ArcRadius(arc)
+    }
+
+    internal fun loadConstraint(c: Constraint) {
+        constraintList += c
+    }
+
     /** Everything about the sketch as it is now, to go back to with [restore]. */
     class Snapshot internal constructor(
         internal val values: List<Double>,

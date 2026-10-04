@@ -72,5 +72,7 @@ object Icons {
     val extend = stroke("extend", "M3 12h11", "M14 12h3", "M20 5v14", "M15 9l3 3-3 3")
     val offset = stroke("offset", "M4 18h10a6 6 0 0 0 6-6V4", "M4 13h8a3 3 0 0 0 3-3V4")
     val check = stroke("check", "M5 12l5 5 9-10", width = 2.2f)
+    val newFile = stroke("new", "M6 3h8l4 4v14H6z", "M14 3v4h4", "M12 11v6M9 14h6")
+    val save = stroke("save", "M5 4h11l3 3v13H5z", "M8 4v5h7V4", "M8 20v-6h8v6")
     val export = stroke("export", "M12 15V3M8 7l4-4 4 4", "M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6")
 }
