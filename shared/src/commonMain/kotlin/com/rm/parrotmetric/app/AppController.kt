@@ -213,9 +213,20 @@ class AppController(
             }
             return
         }
+        // A picture goes on a plane as a canvas to trace over.
+        if (name.substringAfterLast('.').lowercase() in setOf("png", "jpg", "jpeg")) {
+            if (state.screen != AppScreen.Model) {
+                design.newDesign()
+                document = null
+                state = state.copy(title = "Untitled")
+            }
+            opening()
+            design.startCanvas(name, bytes)
+            return
+        }
         val format = FileFormat.forName(name)
         if (format == null) {
-            design.message = "Open a design, or an STL, 3MF, OBJ, STEP or IGES file"
+            design.message = "Open a design, a picture, or an STL, 3MF, OBJ, STEP or IGES file"
             return
         }
         // From the start screen, a mesh or solid file starts a new design.
@@ -303,6 +314,10 @@ class AppController(
 
         override fun closeSettings() = showScreen(beforeSettings)
 
+        override fun insertCanvas() = files.open { name, bytes ->
+            if (bytes == null) design.message = "Couldn't read the file" else design.startCanvas(name, bytes)
+        }
+
         override fun setDetail(detail: DisplayDetail) {
             state = state.copy(detail = detail)
             settings["detail"] = detail.name
@@ -343,7 +358,7 @@ class AppController(
             val name = design.nextSketchName()
             val (ref, p) = if (plane != null) PlaneRef.Fixed(plane) to plane else design.sketchPlaneUnderSelection(state.yaw, name) ?: return
             newSketch = ref to name
-            openSketch(SketchEditor(p, name, Sketch(), regionFinder, outlineFor(ref, p), design::names, design::constructionPoints))
+            openSketch(SketchEditor(p, name, Sketch(), regionFinder, outlineFor(ref, p), design::names, design::constructionPoints, files::open, ::textOutline))
         }
 
         override fun finishSketch() {
@@ -378,10 +393,22 @@ class AppController(
                 val plane = design.planeOf(f) ?: return
                 design.checkpoint()
                 newSketch = null
-                openSketch(SketchEditor(plane, f.name, f.sketch, regionFinder, outlineFor(f.plane, plane), design::names, design::constructionPoints))
+                openSketch(SketchEditor(plane, f.name, f.sketch, regionFinder, outlineFor(f.plane, plane), design::names, design::constructionPoints, files::open, ::textOutline))
             } else {
                 design.edit(id)
             }
+        }
+    }
+
+    /** Text as outline curves at (0, 0), from the core's fonts. */
+    private fun textOutline(text: String, height: Double, bold: Boolean): List<ProfileCurve> {
+        val n = core.textOutline(text, height, bold)
+        return (0 until n.size / 9).map { i ->
+            val o = i * 9
+            ProfileCurve(
+                if (n[o].toInt() == 3) ProfileCurve.Kind.Bezier else ProfileCurve.Kind.Line, 0,
+                n[o + 1], n[o + 2], n[o + 3], n[o + 4], cx1 = n[o + 5], cy1 = n[o + 6], cx2 = n[o + 7], cy2 = n[o + 8],
+            )
         }
     }
 

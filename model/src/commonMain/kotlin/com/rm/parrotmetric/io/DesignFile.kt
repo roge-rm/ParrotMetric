@@ -16,6 +16,7 @@ import com.rm.parrotmetric.design.PrimitiveFeature
 import com.rm.parrotmetric.design.PrimitiveKind
 import com.rm.parrotmetric.design.ShellFeature
 import com.rm.parrotmetric.design.AlignFeature
+import com.rm.parrotmetric.design.CanvasFeature
 import com.rm.parrotmetric.design.CoilFeature
 import com.rm.parrotmetric.design.LoftFeature
 import com.rm.parrotmetric.design.LoftSection
@@ -41,6 +42,8 @@ import com.rm.parrotmetric.sketch.Circle
 import com.rm.parrotmetric.sketch.Constraint
 import com.rm.parrotmetric.sketch.Line
 import com.rm.parrotmetric.sketch.Sketch
+import com.rm.parrotmetric.sketch.SketchText
+import com.rm.parrotmetric.sketch.ProfileCurve
 import com.rm.parrotmetric.sketch.SketchPlane
 import com.rm.parrotmetric.sketch.Spline
 import com.rm.parrotmetric.sketch.Vec3
@@ -172,6 +175,10 @@ object DesignFile {
                 "turns" to f.turns, "section" to f.section, "square" to f.square, "operation" to f.operation.name,
             )
             is ThreadFeature -> mapOf("type" to "thread", "face" to f.face, "pitch" to f.pitch)
+            is CanvasFeature -> mapOf(
+                "type" to "canvas", "plane" to plane(f.plane), "image" to Base64.encode(f.image), "aspect" to f.aspect, "width" to f.width,
+                "u" to f.u, "v" to f.v, "angle" to f.angle, "opacity" to f.opacity,
+            )
             is LoftFeature -> mapOf(
                 "type" to "loft", "sections" to f.sections.map { mapOf("sketch" to it.sketchId, "region" to writeRegions(listOf(it.region)).first()) },
                 "ruled" to f.ruled, "operation" to f.operation.name,
@@ -254,6 +261,10 @@ object DesignFile {
                 o.bool("square"), Operation.valueOf(o.str("operation")),
             )
             "thread" -> ThreadFeature(id, name, o.str("face"), o.num("pitch"))
+            "canvas" -> CanvasFeature(
+                id, name, plane(o.obj("plane")), Base64.decode(o.str("image")), o.num("aspect"), o.num("width"), o.num("u"), o.num("v"),
+                o.num("angle"), o.num("opacity"),
+            )
             "loft" -> LoftFeature(
                 id, name, o.arr("sections").map { s -> s as Json.Obj; LoftSection(s.int("sketch"), readRegions(listOf(s.obj("region"))).first()) },
                 o.bool("ruled"), Operation.valueOf(o.str("operation")),
@@ -336,6 +347,12 @@ object DesignFile {
             }
         },
         "constraints" to s.constraints.mapNotNull { constraint(it) },
+        "texts" to s.texts.map { t ->
+            mapOf(
+                "id" to t.id, "anchor" to t.anchor.id, "text" to t.text, "height" to t.height, "bold" to t.bold, "angle" to t.angle,
+                "outline" to t.outline.map { listOf(it.kind.ordinal, it.x1, it.y1, it.x2, it.y2, it.cx1, it.cy1, it.cx2, it.cy2) },
+            )
+        },
     )
 
     private fun constraint(c: Constraint): Map<String, Any?>? = when (c) {
@@ -382,6 +399,14 @@ object DesignFile {
                 "arc" -> s.loadArc(id, pt(c, "centre"), pt(c, "start"), pt(c, "end"), cons)
                 "spline" -> s.loadSpline(id, c.arr("through").map { s.point((it as Json.Num).value.toInt()) ?: throw IllegalArgumentException("A sketch refers to a missing point") }, cons)
             }
+        }
+        for (j in o.arr("texts")) {
+            val t = j as Json.Obj
+            val outline = t.arr("outline").map { r ->
+                val n = (r as Json.Arr).items.map { (it as Json.Num).value }
+                ProfileCurve(ProfileCurve.Kind.entries[n[0].toInt()], 0, n[1], n[2], n[3], n[4], cx1 = n[5], cy1 = n[6], cx2 = n[7], cy2 = n[8])
+            }
+            s.loadText(SketchText(t.int("id"), pt(t, "anchor"), t.str("text"), t.num("height"), t.bool("bold"), t.num("angle"), outline))
         }
         fun line(c: Json.Obj, k: String) = s.curve(c.int(k)) as? Line ?: throw IllegalArgumentException("A sketch refers to a missing line")
         fun curve(c: Json.Obj, k: String) = s.curve(c.int(k)) ?: throw IllegalArgumentException("A sketch refers to a missing curve")

@@ -20,6 +20,7 @@ import com.rm.parrotmetric.sketch.SketchOps
 import com.rm.parrotmetric.sketch.SketchRegion
 import com.rm.parrotmetric.sketch.Spline
 import com.rm.parrotmetric.sketch.profileCurves
+import com.rm.parrotmetric.sketch.placedOutline
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.atan2
@@ -27,14 +28,18 @@ import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.sin
 
-enum class SketchTool { Select, Line, Rectangle, Circle, Arc, Point, Spline, Polygon, Slot, Dimension, Trim, Extend }
+enum class SketchTool { Select, Line, Rectangle, Circle, Arc, Point, Spline, Polygon, Slot, Dimension, Trim, Extend, Text }
 
 /** Something in a sketch that can be tapped and selected. */
 sealed class SketchItem {
     data class P(val point: Point) : SketchItem()
     data class C(val curve: Curve) : SketchItem()
     data class K(val constraint: Constraint) : SketchItem()
+    data class T(val text: com.rm.parrotmetric.sketch.SketchText) : SketchItem()
 }
+
+/** Text being typed: new at (u, v), or a change to [existing]. */
+class TextEdit(val existing: com.rm.parrotmetric.sketch.SketchText?, val u: Double, val v: Double)
 
 /**
  * Where a touch lands once snapped: on an existing point, along a curve, at a
@@ -82,6 +87,10 @@ class SketchEditor(
     private val names: () -> Map<String, Double> = { emptyMap() },
     /** The design's construction points, which Project brings in as fixed points. */
     private val points: () -> List<com.rm.parrotmetric.sketch.Vec3> = { emptyList() },
+    /** Asks for a file and calls back with its name and contents, for drawings to add; null where there's no picker. */
+    private val pickFile: ((then: (String, ByteArray?) -> Unit) -> Unit)? = null,
+    /** Text as outline curves at (0, 0): text, capital height (mm), bold. Null where there are no fonts. */
+    private val outliner: ((String, Double, Boolean) -> List<ProfileCurve>)? = null,
 ) {
     /** Goes up whenever anything changes, so the overlay redraws. */
     var version by mutableIntStateOf(0)
@@ -173,10 +182,16 @@ class SketchEditor(
             }
             return true
         }
+        if (tool == SketchTool.Text) {
+            textEdit = TextEdit(null, u, v)
+            return true
+        }
         if (tool == SketchTool.Select) {
             dragging = when (val hit = hitTest(u, v, tol)) {
                 is SketchItem.P -> if (hit.point === sketch.origin) emptyList() else listOf(hit.point)
                 is SketchItem.C -> hit.curve.points()
+                // Text moves by its anchor.
+                is SketchItem.T -> if (hit.text.anchor === sketch.origin) emptyList() else listOf(hit.text.anchor)
                 else -> emptyList()
             }
             dragFrom = sketch.snapshot()
@@ -988,10 +1003,56 @@ class SketchEditor(
         sketch.points.minByOrNull { hypot(sketch.x(it) - u, sketch.y(it) - v) }
             ?.takeIf { hypot(sketch.x(it) - u, sketch.y(it) - v) < tol }
             ?.let { return SketchItem.P(it) }
-        return sketch.curves.mapNotNull { c -> nearestOn(c, u, v)?.let { c to hypot(it.first - u, it.second - v) } }
+        sketch.curves.mapNotNull { c -> nearestOn(c, u, v)?.let { c to hypot(it.first - u, it.second - v) } }
             .minByOrNull { it.second }
             ?.takeIf { it.second < tol }
-            ?.let { SketchItem.C(it.first) }
+            ?.let { return SketchItem.C(it.first) }
+        // Text anywhere in the box round it.
+        return sketch.texts.lastOrNull { t ->
+            val o = sketch.placedOutline(t)
+            o.isNotEmpty() && u >= o.minOf { minOf(it.x1, it.x2) } - tol && u <= o.maxOf { maxOf(it.x1, it.x2) } + tol &&
+                v >= o.minOf { minOf(it.y1, it.y2) } - tol && v <= o.maxOf { maxOf(it.y1, it.y2) } + tol
+        }?.let { SketchItem.T(it) }
+    }
+
+    // Text.
+
+    /** Whether text can be set here. */
+    val canWriteText get() = outliner != null
+
+    /** Text being typed, with its sheet open. */
+    var textEdit by mutableStateOf<TextEdit?>(null)
+        private set
+
+    /** Opens the text sheet for a text in the sketch. */
+    fun editText(t: com.rm.parrotmetric.sketch.SketchText) {
+        textEdit = TextEdit(t, sketch.x(t.anchor), sketch.y(t.anchor))
+    }
+
+    fun cancelText() {
+        textEdit = null
+        version++
+    }
+
+    /** Sets the text being typed. False, with a message, if it can't be. */
+    fun commitText(text: String, height: Double, bold: Boolean, degrees: Double): Boolean {
+        val edit = textEdit ?: return false
+        val make = outliner ?: return false
+        if (text.isBlank()) { message = "Type some text"; return false }
+        if (height <= 0) { message = "The text has to be taller than 0"; return false }
+        val outline = try { make(text, height, bold) } catch (e: RuntimeException) { message = e.message; return false }
+        checkpoint()
+        val angle = degrees * PI / 180
+        val old = edit.existing
+        if (old != null) sketch.replaceText(com.rm.parrotmetric.sketch.SketchText(old.id, old.anchor, text, height, bold, angle, outline))
+        else {
+            val anchor = sketch.addPoint(edit.u, edit.v)
+            sketch.addText(anchor, text, height, bold, angle, outline)
+        }
+        textEdit = null
+        selection.clear()
+        changed()
+        return true
     }
 
     // Dimensions.
@@ -1229,6 +1290,33 @@ class SketchEditor(
         version++
     }
 
+    /** Whether drawings can be added from files here. */
+    val canAddDrawing get() = pickFile != null
+
+    /** Asks for an SVG or DXF file and adds its curves. */
+    fun addDrawing() {
+        pickFile?.invoke { name, bytes ->
+            if (bytes == null) { message = "Couldn't read the file"; return@invoke }
+            addDrawing(name, bytes.decodeToString())
+        }
+    }
+
+    /** Adds an SVG or DXF drawing's curves, as they are in the file, in mm. */
+    fun addDrawing(name: String, text: String) {
+        val curves = try {
+            com.rm.parrotmetric.io.DrawingImport.read(name, text)
+        } catch (e: IllegalArgumentException) {
+            message = e.message
+            return
+        }
+        if (curves.isEmpty()) { message = "Nothing in it could be read"; return }
+        endDrawing()
+        checkpoint()
+        val n = com.rm.parrotmetric.io.DrawingImport.addTo(sketch, curves)
+        message = if (n == 1) "Added 1 curve" else "Added $n curves"
+        changed()
+    }
+
     fun deleteSelection() {
         if (selection.isEmpty()) return
         checkpoint()
@@ -1236,6 +1324,7 @@ class SketchEditor(
             is SketchItem.K -> sketch.remove(item.constraint)
             is SketchItem.C -> sketch.remove(item.curve)
             is SketchItem.P -> sketch.removePoint(item.point)
+            is SketchItem.T -> sketch.removeText(item.text)
         }
         selection.clear()
         changed()

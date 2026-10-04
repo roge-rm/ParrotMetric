@@ -17,6 +17,8 @@ class Built(
     val axes: Map<Int, Pair<Vec3, Vec3>> = emptyMap(),
     /** Construction points by feature id. */
     val points: Map<Int, Vec3> = emptyMap(),
+    /** Canvases where they're shown, by feature id. */
+    val canvases: Map<Int, PlacedCanvas> = emptyMap(),
     /** Where each sketch ended up, by feature id. */
     val sketchPlanes: Map<Int, SketchPlane>,
     /** Why a feature couldn't be built, by feature id. */
@@ -50,6 +52,7 @@ class Rebuilder(private val kernel: Kernel) {
         val bodyCount: Int,
         val axes: Map<Int, Pair<Vec3, Vec3>> = emptyMap(),
         val points: Map<Int, Vec3> = emptyMap(),
+        val canvases: Map<Int, PlacedCanvas> = emptyMap(),
     ) {
         /** Names found again by shape while building it, old to new. */
         var found: Map<String, String> = emptyMap()
@@ -87,6 +90,7 @@ class Rebuilder(private val kernel: Kernel) {
             last?.bodies ?: emptyList(),
             steps.fold(emptyMap()) { m, s -> m + s.axes },
             steps.fold(emptyMap()) { m, s -> m + s.points },
+            steps.fold(emptyMap()) { m, s -> m + s.canvases },
             last?.planes ?: emptyMap(),
             steps.withIndex().mapNotNull { (i, s) -> s.error?.let { features[i].id to it } }.toMap(),
             steps.withIndex().mapNotNull { (i, s) ->
@@ -258,6 +262,19 @@ class Rebuilder(private val kernel: Kernel) {
                 Triple(planes[s.sketchId] ?: throw KernelException("A sketch of it couldn't be built"), sketch.curves(), s.region)
             }
             applyTool(f, kernel.loft(f.id, sections, f.ruled), f.operation, bodies, planes, made)
+        }
+        is CanvasFeature -> {
+            val plane = resolvePlane(f.plane, bodies, f, planes)
+            val c = kotlin.math.cos(f.angle); val s = kotlin.math.sin(f.angle)
+            val ex = plane.x * c + plane.y * s
+            val ey = plane.y * c - plane.x * s
+            val middle = plane.origin + plane.x * f.u + plane.y * f.v
+            val hw = f.width / 2; val hh = f.width * f.aspect / 2
+            val corners = listOf(
+                middle - ex * hw - ey * hh, middle + ex * hw - ey * hh, middle + ex * hw + ey * hh, middle - ex * hw + ey * hh,
+            )
+            keep(bodies)
+            Step(f.key(), bodies, planes, null, made, canvases = mapOf(f.id to PlacedCanvas(f.id, f.image, corners, f.opacity)))
         }
         is PrimitiveFeature -> {
             val plane = resolvePlane(f.plane, bodies, f, planes)

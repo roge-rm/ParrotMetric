@@ -56,8 +56,11 @@ interface Viewport {
     /** Shows these bodies, these sketches with their areas pickable, and construction planes, axes and points. Clears the selection. */
     fun show(
         bodies: List<Long>, sketches: List<Pair<SketchPlane, List<ProfileCurve>>>,
-        planes: List<SketchPlane>, axes: List<Pair<Vec3, Vec3>>, points: List<Vec3>, colours: List<Int>, refit: Boolean,
+        planes: List<SketchPlane>, axes: List<Pair<Vec3, Vec3>>, points: List<Vec3>, colours: List<Int>,
+        canvases: List<com.rm.parrotmetric.design.PlacedCanvas>, refit: Boolean,
     )
+    /** Reads a picture and keeps it under key for canvases; its width and height in pixels, or null if it can't be read. */
+    fun canvasImage(key: Int, bytes: ByteArray): IntArray?
     /** Selected construction planes, by their place in the list shown. */
     fun selectedPlanes(): List<Int>
     /** The selected flat part of a mesh: its middle and outward normal, or null. */
@@ -152,7 +155,7 @@ class DesignEditor(
                 is ExtrudeFeature, is RevolveFeature, is com.rm.parrotmetric.design.PrimitiveFeature, is com.rm.parrotmetric.design.SweepFeature,
                 is com.rm.parrotmetric.design.PipeFeature, is com.rm.parrotmetric.design.CoilFeature, is com.rm.parrotmetric.design.LoftFeature -> HistoryEntry.Kind.Create
                 is ImportFeature -> HistoryEntry.Kind.Import
-                is PlaneFeature, is AxisFeature, is PointFeature -> HistoryEntry.Kind.Construct
+                is PlaneFeature, is AxisFeature, is PointFeature, is com.rm.parrotmetric.design.CanvasFeature -> HistoryEntry.Kind.Construct
                 else -> HistoryEntry.Kind.Modify
             }
             val off = f.id in design.suppressed
@@ -473,7 +476,7 @@ class DesignEditor(
                         shownBodies = visible
                         viewport.show(
                             visible.map { it.handle }, shown.map { it.second to it.first.sketch.profileCurves() },
-                            planeFeatures.map { b.sketchPlanes.getValue(it.id) }, b.axes.values.toList(), b.points.values.toList(), visible.map { design.info(it.label).colour ?: -1 }, refit,
+                            planeFeatures.map { b.sketchPlanes.getValue(it.id) }, b.axes.values.toList(), b.points.values.toList(), visible.map { design.info(it.label).colour ?: -1 }, canvasesToShow(b), refit,
                         )
                         shownPlanes = planeFeatures
                         Triple(b, shown.map { it.first }, draft)
@@ -743,6 +746,35 @@ class DesignEditor(
         rebuild()
     }
 
+    /** Pictures given to the view, by feature id, so each is read once. */
+    private val registered = mutableMapOf<Int, ByteArray>()
+
+    /** The canvases built, their pictures given to the view first. */
+    private fun canvasesToShow(b: Built): List<com.rm.parrotmetric.design.PlacedCanvas> = b.canvases.values.filter { c ->
+        if (registered[c.featureId] !== c.image) {
+            if (viewport.canvasImage(c.featureId, c.image) == null) return@filter false
+            registered[c.featureId] = c.image
+        }
+        true
+    }
+
+    /** Starts a canvas from a picture file. */
+    fun startCanvas(name: String, bytes: ByteArray) {
+        val d = CanvasDraft(null, bytes)
+        val size = viewport.canvasImage(d.id, bytes)
+        if (size == null || size[0] <= 0) {
+            message = "That picture couldn't be read: use PNG or JPEG"
+            return
+        }
+        registered[d.id] = bytes
+        d.aspect = size[1].toDouble() / size[0]
+        d.label = name.substringBeforeLast('.')
+        d.planes = planeChoices()
+        d.planes.firstOrNull { it.first == "The face" }?.let { d.plane = it.second }
+        panel = d
+        rebuild()
+    }
+
     /** Construction points as last built, for Project in sketches. */
     fun constructionPoints(): List<Vec3> = built?.points?.values?.toList().orEmpty()
 
@@ -853,6 +885,7 @@ class DesignEditor(
             is com.rm.parrotmetric.design.CoilFeature -> CoilDraft(f).also { it.planes = planeChoices() }
             is com.rm.parrotmetric.design.ThreadFeature -> ThreadDraft(f)
             is com.rm.parrotmetric.design.LoftFeature -> LoftDraft(f)
+            is com.rm.parrotmetric.design.CanvasFeature -> CanvasDraft(f, f.image).also { it.planes = planeChoices() }
             else -> return f
         }
         design.expressions[id]?.let { d.exprs.putAll(it) }
@@ -1398,6 +1431,24 @@ class DesignEditor(
         var c by mutableStateOf(editing?.c ?: 20.0)
         var operation by mutableStateOf(editing?.operation ?: Operation.NewBody)
         override fun feature() = com.rm.parrotmetric.design.PrimitiveFeature(id, name, kind, plane, u, v, a, b, c, operation)
+        override fun missing() = ""
+    }
+
+    /** A picture on a plane. */
+    inner class CanvasDraft(editing: com.rm.parrotmetric.design.CanvasFeature?, val image: ByteArray) : FeatureDraft() {
+        val id = editing?.id ?: newId()
+        var label = editing?.name ?: "Canvas"
+        var aspect = editing?.aspect ?: 1.0
+        var planes: List<Pair<String, PlaneRef>> = emptyList()
+        var plane by mutableStateOf<PlaneRef>(editing?.plane ?: PlaneRef.Fixed(SketchPlane.Front))
+        var width by mutableStateOf(editing?.width ?: 100.0)
+        var u by mutableStateOf(editing?.u ?: 0.0)
+        var v by mutableStateOf(editing?.v ?: 0.0)
+        var degrees by mutableStateOf((editing?.angle ?: 0.0) * 180 / PI)
+        var opacityPercent by mutableStateOf((editing?.opacity ?: 0.5) * 100)
+        override fun feature() = com.rm.parrotmetric.design.CanvasFeature(
+            id, label, plane, image, aspect, width, u, v, degrees * PI / 180, (opacityPercent / 100).coerceIn(0.05, 1.0),
+        )
         override fun missing() = ""
     }
 

@@ -1,6 +1,7 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <cmath>
 
 #include "sketch/regions.h"
@@ -71,4 +72,25 @@ TEST_CASE("a spline closing a shape with a line makes a region") {
     REQUIRE(regions.size() == 1);
     // The area under it: the integral of y dx, 1440 times the integral of t²(1-t)², so 48.
     CHECK(regions[0].area == Catch::Approx(48).epsilon(1e-3));
+}
+
+#include "sketch/text.h"
+
+TEST_CASE("text outlines are capital letters the height asked for, and close into areas") {
+    auto curves = textOutline("Ho", 10, false, 100);
+    REQUIRE(!curves.empty());
+    double top = -1e9, bottom = 1e9;
+    for (const auto& c : curves) { top = std::max(top, std::max(c.y1, c.y2)); bottom = std::min(bottom, std::min(c.y1, c.y2)); }
+    CHECK(top == Catch::Approx(10.0).margin(0.3));
+    CHECK(bottom == Catch::Approx(0.0).margin(0.3));
+    CHECK(curves.front().id == 100);
+    // H is one area; o is a ring, so its outer area has a hole.
+    auto regions = findRegions(curves);
+    CHECK(regions.size() >= 2);
+    auto bold = textOutline("H", 10, true, 0);
+    double width = 0, boldWidth = 0;
+    for (const auto& c : textOutline("H", 10, false, 0)) width = std::max(width, std::max(c.x1, c.x2));
+    for (const auto& c : bold) boldWidth = std::max(boldWidth, std::max(c.x1, c.x2));
+    CHECK(boldWidth > width);
+    CHECK_THROWS(textOutline("H", 0, false, 0));
 }

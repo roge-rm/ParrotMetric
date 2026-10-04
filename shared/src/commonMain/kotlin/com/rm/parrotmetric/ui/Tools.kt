@@ -90,6 +90,7 @@ object Tools {
         ToolDef("plane.along", "Plane along an edge", Icons.plane, ToolGroup.Construct, cluster = "Planes") { it.design.startPlane(PlaneFeature.Kind.AlongEdge) },
         ToolDef("axis", "Axis", Icons.axis, ToolGroup.Construct) { it.design.startAxis() },
         ToolDef("point", "Point", Icons.pointTool, ToolGroup.Construct) { it.design.startPoint() },
+        ToolDef("canvas", "Canvas", Icons.canvas, ToolGroup.Construct) { it.actions.insertCanvas() },
 
         ToolDef("measure", "Measure", Icons.measure, ToolGroup.Inspect, key = "I", suggest = { faces(it) || edges(it) }) {
             it.design.startMeasuring(); it.openSheet("measure")

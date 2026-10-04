@@ -138,18 +138,21 @@ class CoreKernel(private val core: NativeCore) : Kernel {
 class CoreViewport(private val core: NativeCore, private val gl: (() -> Unit) -> Unit) : Viewport {
     override fun show(
         bodies: List<Long>, sketches: List<Pair<SketchPlane, List<ProfileCurve>>>,
-        planes: List<SketchPlane>, axes: List<Pair<Vec3, Vec3>>, points: List<Vec3>, colours: List<Int>, refit: Boolean,
+        planes: List<SketchPlane>, axes: List<Pair<Vec3, Vec3>>, points: List<Vec3>, colours: List<Int>,
+        canvases: List<com.rm.parrotmetric.design.PlacedCanvas>, refit: Boolean,
     ) {
+        val canvasNumbers = canvases.flatMap { c -> listOf(c.featureId.toDouble()) + c.corners.flatMap { listOf(it.x, it.y, it.z) } + c.opacity }.toDoubleArray()
         val all = sketches.flatMap { it.second }
         val c = Curves(all)
         val sketchPlanes = sketches.flatMap { it.first.numbers().asList() }.toDoubleArray()
         val construction = planes.flatMap { it.numbers().asList() }.toDoubleArray()
         val axisNumbers = axes.flatMap { (p, d) -> listOf(p.x, p.y, p.z, d.x, d.y, d.z) }.toDoubleArray()
         core.show(bodies.toLongArray(), sketchPlanes, IntArray(sketches.size) { sketches[it].second.size }, c.kinds, c.ids, c.nums, construction, axisNumbers,
-            points.flatMap { listOf(it.x, it.y, it.z) }.toDoubleArray(), colours.toIntArray(), refit)
+            points.flatMap { listOf(it.x, it.y, it.z) }.toDoubleArray(), colours.toIntArray(), canvasNumbers, refit)
         gl {}
     }
 
+    override fun canvasImage(key: Int, bytes: ByteArray) = core.canvasImage(key, bytes)
     override fun selectedPlanes() = core.selectedPlanes().toList()
     override fun measure() = core.measure().toList()
     override fun setSection(on: Boolean, origin: Vec3, normal: Vec3) {

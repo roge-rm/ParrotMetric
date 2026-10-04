@@ -170,6 +170,28 @@ void main() {
     colour = cornerColour;
 })";
 
+// Pictures on planes.
+const char* kCanvasVertex = R"(#version 300 es
+layout(location = 0) in vec3 position;
+layout(location = 1) in vec2 corner;
+uniform mat4 viewProjection;
+out vec2 coord;
+void main() {
+    coord = corner;
+    gl_Position = viewProjection * vec4(position, 1.0);
+})";
+
+const char* kCanvasFragment = R"(#version 300 es
+precision mediump float;
+in vec2 coord;
+uniform sampler2D picture;
+uniform float opacity;
+out vec4 colour;
+void main() {
+    vec4 c = texture(picture, coord);
+    colour = vec4(c.rgb, c.a * opacity);
+})";
+
 uint32_t compile(GLenum type, const char* source) {
     GLuint s = glCreateShader(type);
     // Desktop OpenGL takes the same shaders under its own version line.
@@ -236,6 +258,11 @@ void Renderer::surfaceCreated() {
     edgeIdProgram_ = link(kEdgeVertex, kIdFragment);
     cornerProgram_ = link(kCornerVertex, kCornerFragment);
     cornerIdProgram_ = link(kCornerVertex, kIdFragment);
+    canvasProgram_ = link(kCanvasVertex, kCanvasFragment);
+    // The old context's textures went with it.
+    canvasTextures_.clear();
+    canvasVao_ = canvasVbo_ = 0;
+    canvasesDirty_ = true;
     // Desktop GL sizes points from the shader only when asked.
     if (desktopGl) glEnable(0x8642);  // GL_PROGRAM_POINT_SIZE
     glEnable(GL_DEPTH_TEST);
@@ -566,6 +593,7 @@ void Renderer::drawScene(bool ids, const float* vp, const float* normal) {
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     }
+    if (!ids) drawCanvases(vp);
     glUseProgram(edgeProgram);
     glUniformMatrix4fv(glGetUniformLocation(edgeProgram, "viewProjection"), 1, GL_FALSE, vp);
     glUniform4fv(glGetUniformLocation(edgeProgram, "clip"), 1, clip_);
@@ -705,6 +733,79 @@ std::vector<Pick> Renderer::pickBox(float x0, float y0, float x1, float y1, bool
     for (uint32_t v : inside)
         if (crossing || !std::binary_search(outside.begin(), outside.end(), v)) out.push_back(fromId(v));
     return out;
+}
+
+void Renderer::setCanvases(std::vector<Canvas> canvases) {
+    canvases_ = std::move(canvases);
+    canvasesDirty_ = true;
+    // With nothing else to show, the view frames the pictures.
+    bool bodies = false;
+    for (const auto& b : bodies_) bodies = bodies || !b.positions.empty();
+    if (bodies || canvases_.empty()) return;
+    float lo[3] = {1e30f, 1e30f, 1e30f}, hi[3] = {-1e30f, -1e30f, -1e30f};
+    for (const auto& c : canvases_)
+        for (int k = 0; k < 12; ++k) {
+            lo[k % 3] = std::min(lo[k % 3], c.corners[k]);
+            hi[k % 3] = std::max(hi[k % 3], c.corners[k]);
+        }
+    float d2 = 0;
+    for (int k = 0; k < 3; ++k) {
+        centre_[k] = (lo[k] + hi[k]) * 0.5f;
+        d2 += (hi[k] - lo[k]) * (hi[k] - lo[k]);
+    }
+    radius_ = std::max(std::sqrt(d2) * 0.5f, 0.1f);
+}
+
+void Renderer::drawCanvases(const float* vp) {
+    if (canvasesDirty_) {
+        if (!canvasTextures_.empty()) glDeleteTextures(GLsizei(canvasTextures_.size()), canvasTextures_.data());
+        canvasTextures_.assign(canvases_.size(), 0);
+        if (!canvasTextures_.empty()) glGenTextures(GLsizei(canvasTextures_.size()), canvasTextures_.data());
+        for (size_t i = 0; i < canvases_.size(); ++i) {
+            const Canvas& c = canvases_[i];
+            glBindTexture(GL_TEXTURE_2D, canvasTextures_[i]);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, c.width, c.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, c.rgba->data());
+            glGenerateMipmap(GL_TEXTURE_2D);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        }
+        if (canvasVao_ == 0) {
+            glGenVertexArrays(1, &canvasVao_);
+            glGenBuffers(1, &canvasVbo_);
+        }
+        canvasesDirty_ = false;
+    }
+    if (canvases_.empty()) return;
+    glUseProgram(canvasProgram_);
+    glUniformMatrix4fv(glGetUniformLocation(canvasProgram_, "viewProjection"), 1, GL_FALSE, vp);
+    glUniform1i(glGetUniformLocation(canvasProgram_, "picture"), 0);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDepthMask(GL_FALSE);
+    glBindVertexArray(canvasVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, canvasVbo_);
+    for (size_t i = 0; i < canvases_.size(); ++i) {
+        const float* k = canvases_[i].corners;
+        // Two triangles, position then where in the picture; its top row is v = 0.
+        const float quad[30] = {
+            k[0], k[1], k[2], 0, 1,  k[3], k[4], k[5], 1, 1,  k[6], k[7], k[8], 1, 0,
+            k[0], k[1], k[2], 0, 1,  k[6], k[7], k[8], 1, 0,  k[9], k[10], k[11], 0, 0,
+        };
+        glBufferData(GL_ARRAY_BUFFER, sizeof quad, quad, GL_DYNAMIC_DRAW);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 20, nullptr);
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 20, reinterpret_cast<void*>(12));
+        glUniform1f(glGetUniformLocation(canvasProgram_, "opacity"), canvases_[i].opacity);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, canvasTextures_[i]);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+    }
+    glBindVertexArray(0);
+    // Blending stays on: the edges drawn next blend too.
+    glDepthMask(GL_TRUE);
 }
 
 Pick Renderer::fromId(uint32_t v) {

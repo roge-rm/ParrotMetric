@@ -24,8 +24,42 @@ data class ProfileCurve(
     enum class Kind { Line, Circle, Arc, Bezier }
 }
 
-/** The sketch's curves that make up profiles: all but construction curves. A spline gives one Bezier per piece. */
-fun Sketch.profileCurves(): List<ProfileCurve> = curves.filter { !it.construction }.flatMap { c ->
+/**
+ * Text in a sketch: [outline] is the text at (0, 0) on its baseline, put at
+ * [anchor] and turned [angle] radians round it.
+ */
+class SketchText(
+    val id: Int,
+    val anchor: Point,
+    val text: String,
+    val height: Double,
+    val bold: Boolean,
+    val angle: Double,
+    val outline: List<ProfileCurve>,
+)
+
+/** A text's outline where it is in the sketch. Its curves are numbered apart from the sketch's own. */
+fun Sketch.placedOutline(t: SketchText): List<ProfileCurve> {
+    val ax = x(t.anchor); val ay = y(t.anchor)
+    val c = kotlin.math.cos(t.angle); val s = kotlin.math.sin(t.angle)
+    fun px(x: Double, y: Double) = ax + x * c - y * s
+    fun py(x: Double, y: Double) = ay + x * s + y * c
+    return t.outline.mapIndexed { k, p ->
+        p.copy(
+            id = textCurveBase + t.id * 10_000 + k,
+            x1 = px(p.x1, p.y1), y1 = py(p.x1, p.y1), x2 = px(p.x2, p.y2), y2 = py(p.x2, p.y2),
+            cx1 = px(p.cx1, p.cy1), cy1 = py(p.cx1, p.cy1), cx2 = px(p.cx2, p.cy2), cy2 = py(p.cx2, p.cy2),
+        )
+    }
+}
+
+/** Where text curves' numbers start, above any sketch curve's. */
+const val textCurveBase = 1_000_000
+
+/** The sketch's curves that make up profiles: all but construction curves, and its text. A spline gives one Bezier per piece. */
+fun Sketch.profileCurves(): List<ProfileCurve> = ownProfileCurves() + texts.flatMap { placedOutline(it) }
+
+private fun Sketch.ownProfileCurves(): List<ProfileCurve> = curves.filter { !it.construction }.flatMap { c ->
     if (c is Spline) return@flatMap bezierPieces(c).map { b ->
         ProfileCurve(ProfileCurve.Kind.Bezier, c.id, b[0], b[1], b[6], b[7], cx1 = b[2], cy1 = b[3], cx2 = b[4], cy2 = b[5])
     }

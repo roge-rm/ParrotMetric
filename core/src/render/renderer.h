@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <memory>
 #include <vector>
 
 #include "display/display_mesh.h"
@@ -16,6 +17,18 @@ struct Pick {
     uint32_t index = 0;  // The face, edge or corner number in that body's DisplayMesh.
 
     bool operator==(const Pick& o) const { return kind == o.kind && body == o.body && index == o.index; }
+};
+
+/**
+ * A picture laid on a plane, to trace over: its pixels, RGBA from the top
+ * row down, and its corners in order round from the bottom left (x, y, z
+ * each), drawn [opacity] see-through.
+ */
+struct Canvas {
+    std::shared_ptr<const std::vector<uint8_t>> rgba;
+    int width = 0, height = 0;
+    float corners[12] = {};
+    float opacity = 0.5f;
 };
 
 /**
@@ -41,6 +54,8 @@ public:
     void setDensity(float density) { density_ = density; }
 
     /** Replaces what's shown. Uploaded on the next draw. */
+    /** The pictures to show on planes, in place of any before. Any thread, under the caller's lock. */
+    void setCanvases(std::vector<Canvas> canvases);
     void setBodies(std::vector<DisplayMesh> bodies, bool refit);
     void setSelection(const std::vector<Pick>& selection);
     Pick pick(float x, float y);
@@ -102,7 +117,12 @@ private:
 
     // GL objects.
     uint32_t faceProgram_ = 0, edgeProgram_ = 0, faceIdProgram_ = 0, edgeIdProgram_ = 0;
-    uint32_t cornerProgram_ = 0, cornerIdProgram_ = 0;
+    uint32_t cornerProgram_ = 0, cornerIdProgram_ = 0, canvasProgram_ = 0;
+    std::vector<Canvas> canvases_;
+    std::vector<uint32_t> canvasTextures_;
+    uint32_t canvasVao_ = 0, canvasVbo_ = 0;
+    bool canvasesDirty_ = false;
+    void drawCanvases(const float* vp);
     uint32_t pickFbo_ = 0, pickColour_ = 0, pickDepth_ = 0;
     int pickWidth_ = 0, pickHeight_ = 0;
     std::vector<Gpu> gpu_;

@@ -39,6 +39,8 @@ object Core : NativeCore {
     override external fun pipe(id: Int, pathPlane: DoubleArray, pathKinds: IntArray, pathIds: IntArray, pathNums: DoubleArray, pathBody: Long, pathEdges: Array<String>, diameter: Double, inner: Double): Long
     override external fun coil(id: Int, plane: DoubleArray, u: Double, v: Double, diameter: Double, pitch: Double, turns: Double, section: Double, square: Boolean): Long
     override external fun thread(id: Int, body: Long, face: String, pitch: Double): Long
+    override external fun textOutline(text: String, height: Double, bold: Boolean): DoubleArray
+    override external fun canvasImage(key: Int, bytes: ByteArray): IntArray?
     override external fun loft(id: Int, planes: DoubleArray, curveCounts: IntArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, pickCounts: IntArray, pickIds: IntArray, pickPoints: DoubleArray, ruled: Boolean): Long
     override external fun primitive(id: Int, plane: DoubleArray, kind: Int, u: Double, v: Double, a: Double, b: Double, c: Double): Long
     override external fun bounds(body: Long): DoubleArray
@@ -61,7 +63,7 @@ object Core : NativeCore {
 
     // What's shown and selected.
     /** Bodies, then sketches (a plane each and their curves), then construction planes (nine numbers each), axes (six each) and points (three each). */
-    override external fun show(bodies: LongArray, planes: DoubleArray, curveCounts: IntArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, constructionPlanes: DoubleArray, axes: DoubleArray, points: DoubleArray, colours: IntArray, refit: Boolean)
+    override external fun show(bodies: LongArray, planes: DoubleArray, curveCounts: IntArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, constructionPlanes: DoubleArray, axes: DoubleArray, points: DoubleArray, colours: IntArray, canvases: DoubleArray, refit: Boolean)
     override external fun selectedPlanes(): IntArray
     /** Lines describing what's selected: lengths, areas, gaps, angles, the body's volume and size. */
     override external fun measure(): Array<String>

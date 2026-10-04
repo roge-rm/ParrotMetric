@@ -95,6 +95,7 @@ fun FeaturePanel(editor: DesignEditor) {
                 is DesignEditor.CoilDraft -> CoilSettings(editor, d)
                 is DesignEditor.ThreadDraft -> ThreadSettings(editor, d)
                 is DesignEditor.LoftDraft -> LoftSettings(editor, d)
+                is DesignEditor.CanvasDraft -> CanvasSettings(editor, d)
                 else -> {}
             }
             }
@@ -295,6 +296,18 @@ private fun LoftSettings(editor: DesignEditor, d: DesignEditor.LoftDraft) {
         d.operation = it
         editor.draftChanged()
     }
+}
+
+@Composable
+private fun CanvasSettings(editor: DesignEditor, d: DesignEditor.CanvasDraft) {
+    Header("Canvas", Icons.canvas, Palette.construct, null)
+    Text("On", fontSize = 13.sp, color = Palette.muted)
+    Segmented(d.planes.map { it.first }, d.planes.indexOfFirst { it.second == d.plane }.coerceAtLeast(0)) { d.plane = d.planes[it].second; editor.draftChanged() }
+    Field(editor, d, "width", "Width", d.width, "mm", allowNegative = false) { d.width = it; editor.draftChanged() }
+    Field(editor, d, "u", "Centre x", d.u, "mm", allowNegative = true) { d.u = it; editor.draftChanged() }
+    Field(editor, d, "v", "Centre y", d.v, "mm", allowNegative = true) { d.v = it; editor.draftChanged() }
+    Field(editor, d, "angle", "Turned", d.degrees, "°", allowNegative = true) { d.degrees = it; editor.draftChanged() }
+    NumberRow("Shown", d.opacityPercent, "%", allowNegative = false) { d.opacityPercent = it.coerceIn(5.0, 100.0); editor.draftChanged() }
 }
 
 internal fun primitiveIcon(kind: PrimitiveKind) = when (kind) {

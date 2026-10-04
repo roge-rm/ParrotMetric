@@ -1,5 +1,7 @@
 package com.rm.parrotmetric.ui.sketch
 
+import com.rm.parrotmetric.sketch.placedOutline
+
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -220,6 +222,21 @@ private fun DrawScope.drawSketch(editor: SketchEditor, proj: PlaneProjection, de
         }
         val effect = if (c.construction) PathEffect.dashPathEffect(floatArrayOf(6 * dp, 5 * dp)) else null
         drawCurve(c, editor, proj, colour, line * (if (SketchItem.C(c) in selected) 1.4f else 1f), effect)
+    }
+    // Text, coloured by whether its anchor can still move.
+    for (t in sketch.texts) {
+        val picked = SketchItem.T(t) in selected
+        val colour = if (picked) chosen else if (t.anchor in freedom.freePoints) free else pinned
+        for (p in sketch.placedOutline(t)) {
+            if (p.kind == com.rm.parrotmetric.sketch.ProfileCurve.Kind.Line) drawLine(colour, proj.toScreen(p.x1, p.y1), proj.toScreen(p.x2, p.y2), line, StrokeCap.Round)
+            else drawPolyline((0..10).map { i ->
+                val u = i / 10.0; val w = 1 - u
+                proj.toScreen(
+                    w * w * w * p.x1 + 3 * w * w * u * p.cx1 + 3 * w * u * u * p.cx2 + u * u * u * p.x2,
+                    w * w * w * p.y1 + 3 * w * w * u * p.cy1 + 3 * w * u * u * p.cy2 + u * u * u * p.y2,
+                )
+            }, colour, line)
+        }
     }
 
     // A spline being drawn, through the points placed so far.

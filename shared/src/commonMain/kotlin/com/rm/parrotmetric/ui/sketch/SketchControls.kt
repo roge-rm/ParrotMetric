@@ -115,6 +115,7 @@ fun SketchBottom(editor: SketchEditor, expanded: Boolean = false) {
     Column(Modifier.imePadding().padding(start = 10.dp, end = 10.dp, bottom = 10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         when {
             editing != null -> DimensionEntry(editor, editing)
+            editor.textEdit != null -> TextEntry(editor, editor.textEdit!!)
             constraining -> ConstrainSheet(editor) { constraining = false }
             else -> {
                 ChipRow(editor, expanded) { constraining = true }
@@ -142,6 +143,8 @@ private fun ChipRow(editor: SketchEditor, expanded: Boolean, onConstrain: () -> 
         }
         if (editor.selectedCurves.isNotEmpty()) Chip("Offset", Icons.offset) { editor.startOffset() }
         if (editor.outline != null) Chip("Project", Icons.project) { editor.projectOutline() }
+        if (editor.canAddDrawing) Chip("Add drawing", Icons.open) { editor.addDrawing() }
+        (editor.selection.singleOrNull() as? SketchItem.T)?.let { t -> Chip("Change text", Icons.text) { editor.editText(t.text) } }
         if (editor.selectedCorner != null) Chip("Round corner", Icons.fillet) { editor.startCornerFillet() }
         Chip("Construction", Icons.construction, active = editor.construction && !hasSelection) { editor.toggleConstruction() }
         if (hasSelection) Chip("Delete", Icons.delete, tint = Palette.orange) { editor.deleteSelection() }
@@ -179,6 +182,7 @@ private fun ToolGrid(editor: SketchEditor, expanded: Boolean) {
         Triple(SketchTool.Spline, "Spline", Icons.spline),
         Triple(SketchTool.Polygon, "Polygon", Icons.polygon),
         Triple(SketchTool.Slot, "Slot", Icons.slot),
+        Triple(SketchTool.Text, "Text", Icons.text),
     )
     var showMore by remember { mutableStateOf(editor.tool in more.map { it.first }) }
     if (expanded) showMore = false
@@ -265,6 +269,7 @@ private fun ChoiceRow(options: List<String>, chosen: Int, onPick: (Int) -> Unit)
 
 /** The drawing tools' keys, as the sketch shortcuts have them. */
 private val toolKeys = mapOf(
+    SketchTool.Text to "Shift+T",
     SketchTool.Line to "L", SketchTool.Rectangle to "R", SketchTool.Circle to "C", SketchTool.Arc to "A",
     SketchTool.Point to "Shift+P", SketchTool.Spline to "Shift+S", SketchTool.Polygon to "G", SketchTool.Slot to "Shift+L",
 )
@@ -341,6 +346,48 @@ private fun DimensionEntry(editor: SketchEditor, edit: DimensionEdit) {
                     shape = RoundedCornerShape(18.dp),
                     color = Palette.mint,
                     contentColor = Palette.ink,
+                ) {
+                    Box(contentAlignment = Alignment.Center) { Text("Set", fontSize = 15.sp, fontWeight = FontWeight.Bold) }
+                }
+            }
+        }
+    }
+}
+
+/** Typing text: what it says, how tall its capitals are, bold, and its angle. */
+@Composable
+private fun TextEntry(editor: SketchEditor, edit: TextEdit) {
+    val old = edit.existing
+    var text by remember(edit) { mutableStateOf(TextFieldValue(old?.text ?: "", TextRange(0, old?.text?.length ?: 0))) }
+    var height by remember(edit) { mutableStateOf(old?.height ?: 10.0) }
+    var bold by remember(edit) { mutableStateOf(old?.bold ?: false) }
+    var degrees by remember(edit) { mutableStateOf((old?.angle ?: 0.0) * 180 / kotlin.math.PI) }
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(edit) { focus.requestFocus() }
+    Surface(color = Palette.surface, shape = RoundedCornerShape(26.dp)) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            BasicTextField(
+                text,
+                onValueChange = { text = it },
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Palette.ground)
+                    .padding(horizontal = 14.dp, vertical = 12.dp).focusRequester(focus),
+                textStyle = TextStyle(color = Palette.text, fontSize = 20.sp),
+                cursorBrush = SolidColor(Palette.mint),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { editor.commitText(text.text, height, bold, degrees) }),
+                decorationBox = { inner -> if (text.text.isEmpty()) Text("Text", color = Palette.faint, fontSize = 20.sp); inner() },
+            )
+            com.rm.parrotmetric.ui.design.NumberRow("Height", height, "mm", allowNegative = false) { height = it }
+            com.rm.parrotmetric.ui.design.NumberRow("Angle", degrees, "°", allowNegative = true) { degrees = it }
+            com.rm.parrotmetric.ui.design.Toggle("Bold", bold) { bold = it }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Surface(onClick = editor::cancelText, modifier = Modifier.weight(1f).height(50.dp), shape = RoundedCornerShape(18.dp), color = Palette.raised, contentColor = Palette.text) {
+                    Box(contentAlignment = Alignment.Center) { Text("Cancel", fontSize = 15.sp, fontWeight = FontWeight.SemiBold) }
+                }
+                Surface(
+                    onClick = { editor.commitText(text.text, height, bold, degrees) },
+                    modifier = Modifier.weight(1f).height(50.dp), shape = RoundedCornerShape(18.dp), color = Palette.mint, contentColor = Palette.ink,
                 ) {
                     Box(contentAlignment = Alignment.Center) { Text("Set", fontSize = 15.sp, fontWeight = FontWeight.Bold) }
                 }

@@ -50,6 +50,8 @@ object Icons {
     val pipe = stroke("pipe", "M4 20V12a6 6 0 0 1 6-6h10", "M8 20v-8a2 2 0 0 1 2-2h10")
     val coil = stroke("coil", "M6 5c0-2 12-2 12 0s-12 2-12 4 12 2 12 4-12 2-12 4 12 2 12 4")
     val thread = stroke("thread", "M8 3v18M16 3v18", "M8 5l8 2M8 9l8 2M8 13l8 2M8 17l8 2")
+    val text = stroke("text", "M5 6V4h14v2", "M12 4v16", "M9 20h6")
+    val canvas = stroke("canvas", "M4 5h16v14H4z", "M4 16l5-5 4 4 2-2 5 5", circle(15f, 9f, 1.5f))
     /** The Shift key, for key badges. */
     val shiftKey = stroke("shiftKey", "M12 4l8 9h-4.5v7h-7v-7H4z", width = 2.4f)
 

@@ -17,6 +17,7 @@ class Sketch {
     private val pointMap = LinkedHashMap<Int, Point>()
     private val curveMap = LinkedHashMap<Int, Curve>()
     private val constraintList = mutableListOf<Constraint>()
+    private val textMap = LinkedHashMap<Int, SketchText>()
 
     /** The plane's origin. It never moves. */
     val origin: Point = Point(0, slot(0.0), slot(0.0)).also { pointMap[0] = it }
@@ -24,6 +25,24 @@ class Sketch {
     val points: Collection<Point> get() = pointMap.values
     val curves: Collection<Curve> get() = curveMap.values
     val constraints: List<Constraint> get() = constraintList
+    val texts: Collection<SketchText> get() = textMap.values
+
+    /**
+     * Adds text at [anchor]. Its [outline] (from the font, at (0, 0)) is
+     * worked out by whoever sets the text, as the sketch has no fonts.
+     */
+    fun addText(anchor: Point, text: String, height: Double, bold: Boolean, angle: Double, outline: List<ProfileCurve>): SketchText =
+        SketchText(nextId++, anchor, text, height, bold, angle, outline).also { textMap[it.id] = it }
+
+    /** Puts [new] in place of the text with its id. */
+    fun replaceText(new: SketchText) { if (textMap.containsKey(new.id)) textMap[new.id] = new }
+
+    fun removeText(t: SketchText) { textMap.remove(t.id) }
+
+    internal fun loadText(t: SketchText) {
+        textMap[t.id] = t
+        if (t.id >= nextId) nextId = t.id + 1
+    }
 
     private fun slot(v: Double): Int {
         values += v
@@ -132,6 +151,7 @@ class Sketch {
         for (c in curves.filter { p in it.points() }) remove(c)
         pointMap.remove(p.id)
         constraintList.removeAll { p in it.points() }
+        textMap.values.removeAll { it.anchor === p }
     }
 
     fun remove(constraint: Constraint) {
@@ -249,6 +269,7 @@ class Sketch {
         internal val dimensions: Map<Constraint.Dimension, Double>,
         internal val construction: Map<Curve, Boolean>,
         internal val nextId: Int,
+        internal val texts: Map<Int, SketchText> = emptyMap(),
     )
 
     fun snapshot() = Snapshot(
@@ -256,6 +277,7 @@ class Sketch {
         constraintList.filterIsInstance<Constraint.Dimension>().associateWith { it.value },
         curveMap.values.associateWith { it.construction },
         nextId,
+        LinkedHashMap(textMap),
     )
 
     fun restore(s: Snapshot) {
@@ -265,6 +287,7 @@ class Sketch {
         constraintList.clear(); constraintList += s.constraints
         for ((d, v) in s.dimensions) d.value = v
         for ((c, b) in s.construction) c.construction = b
+        textMap.clear(); textMap.putAll(s.texts)
         nextId = s.nextId
     }
 

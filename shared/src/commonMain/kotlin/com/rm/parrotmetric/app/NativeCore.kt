@@ -40,6 +40,10 @@ interface NativeCore {
     fun pipe(id: Int, pathPlane: DoubleArray, pathKinds: IntArray, pathIds: IntArray, pathNums: DoubleArray, pathBody: Long, pathEdges: Array<String>, diameter: Double, inner: Double): Long
     fun coil(id: Int, plane: DoubleArray, u: Double, v: Double, diameter: Double, pitch: Double, turns: Double, section: Double, square: Boolean): Long
     fun thread(id: Int, body: Long, face: String, pitch: Double): Long
+    /** Text as outline curves, nine numbers each: kind (0 line, 3 Bézier), start, end, then the two controls. */
+    fun textOutline(text: String, height: Double, bold: Boolean): DoubleArray
+    /** Reads a picture (PNG or JPEG) and keeps it under key for canvases; its width and height, or null if it can't be read. */
+    fun canvasImage(key: Int, bytes: ByteArray): IntArray?
     /** A loft through one area of each sketch: nine plane numbers and a curve count per sketch, then one pick per sketch. */
     fun loft(id: Int, planes: DoubleArray, curveCounts: IntArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, pickCounts: IntArray, pickIds: IntArray, pickPoints: DoubleArray, ruled: Boolean): Long
     /** kind: 0 box, 1 cylinder, 2 sphere, 3 torus, 4 cone; sizes as Kernel.primitive. */
@@ -72,7 +76,7 @@ interface NativeCore {
 
     // What's shown and selected.
     /** Bodies, then sketches (a plane each and their curves), then construction planes (nine numbers each), axes (six each) and points (three each). */
-    fun show(bodies: LongArray, planes: DoubleArray, curveCounts: IntArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, constructionPlanes: DoubleArray, axes: DoubleArray, points: DoubleArray, colours: IntArray, refit: Boolean)
+    fun show(bodies: LongArray, planes: DoubleArray, curveCounts: IntArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, constructionPlanes: DoubleArray, axes: DoubleArray, points: DoubleArray, colours: IntArray, canvases: DoubleArray, refit: Boolean)
     fun selectedPlanes(): IntArray
     /** Lines describing what's selected: lengths, areas, gaps, angles, the body's volume and size. */
     fun measure(): Array<String>

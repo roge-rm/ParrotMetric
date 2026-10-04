@@ -141,6 +141,8 @@ interface ModelActions {
     /** Back from settings to the screen before. */
     fun closeSettings()
     fun setDetail(detail: DisplayDetail)
+    /** Asks for a picture to lay on a plane. */
+    fun insertCanvas()
     fun quit()
 }
 
@@ -202,6 +204,7 @@ fun ModelScreen(
             state.screen != AppScreen.Model -> return false
             sketch != null -> when {
                 sketch.editing != null -> sketch.cancelDimension()
+                sketch.textEdit != null -> sketch.cancelText()
                 sketch.dropTyped() -> {}
                 sketch.pending.isNotEmpty() -> sketch.endDrawing()
                 sketch.selection.isNotEmpty() -> sketch.clearSelection()
@@ -224,8 +227,8 @@ fun ModelScreen(
         }
     }
     // Keys come here when no field is focused, so the screen's own focus has to come back after fields and dialogs close.
-    LaunchedEffect(state.screen, sketch, design.panel, sketch?.editing, finder, keyList, sheet) {
-        if (!finder && sketch?.editing == null && !chain.focused) focus.requestFocus()
+    LaunchedEffect(state.screen, sketch, design.panel, sketch?.editing, sketch?.textEdit, finder, keyList, sheet) {
+        if (!finder && sketch?.editing == null && sketch?.textEdit == null && !chain.focused) focus.requestFocus()
     }
     val keys = Modifier
         .onPreviewKeyEvent { e ->
@@ -243,7 +246,7 @@ fun ModelScreen(
             when {
                 name == "Ctrl+Enter" && sketch != null -> { actions.finishSketch(); true }
                 name == "Enter" && sketch != null -> when {
-                    sketch.editing != null -> false
+                    sketch.editing != null || sketch.textEdit != null -> false
                     sketch.applyTyped() -> true
                     sketch.pending.isNotEmpty() -> { sketch.endDrawing(); true }
                     else -> { actions.finishSketch(); true }
@@ -269,7 +272,7 @@ fun ModelScreen(
             if (e.type != KeyEventType.KeyDown || !screenFocused || finder || keyList || state.screen != AppScreen.Model) return@onKeyEvent false
             val name = keyName(e)
             val c = typedChar(e)
-            if (sketch != null && sketch.editing == null) {
+            if (sketch != null && sketch.editing == null && sketch.textEdit == null) {
                 if (c != null && sketch.typeKey(c)) return@onKeyEvent true
                 if (name == "Backspace") return@onKeyEvent when {
                     sketch.typedBackspace() -> true

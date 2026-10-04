@@ -43,6 +43,23 @@ set(MANIFOLD_JSBIND OFF CACHE BOOL "" FORCE)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 add_subdirectory(${third_party}/manifold ${CMAKE_BINARY_DIR}/manifold EXCLUDE_FROM_ALL)
 
+# The fonts for text, built in as bytes.
+set(pm_fonts ${CMAKE_CURRENT_LIST_DIR}/../third_party/fonts)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${pm_fonts}/NotoSans-Regular.ttf ${pm_fonts}/NotoSans-Bold.ttf)
+set(pm_fonts_cpp "// Made by CMake from third_party/fonts.\n")
+foreach(symbol IN ITEMS regular bold)
+    if(symbol STREQUAL "regular")
+        set(file NotoSans-Regular)
+    else()
+        set(file NotoSans-Bold)
+    endif()
+    file(READ ${pm_fonts}/${file}.ttf hex HEX)
+    string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," bytes "${hex}")
+    string(APPEND pm_fonts_cpp "extern const unsigned char pm_font_${symbol}[] = {${bytes}};\n")
+endforeach()
+file(WRITE ${CMAKE_BINARY_DIR}/fonts.cpp.new "${pm_fonts_cpp}")
+file(COPY_FILE ${CMAKE_BINARY_DIR}/fonts.cpp.new ${CMAKE_BINARY_DIR}/fonts.cpp ONLY_IF_DIFFERENT)
+
 add_library(pmcore STATIC
         src/display/display_mesh.cpp
         src/mesh/mesh.cpp
@@ -52,6 +69,8 @@ add_library(pmcore STATIC
         src/io/exchange.cpp
         src/io/mesh_formats.cpp
         src/sketch/regions.cpp
+        src/sketch/text.cpp
+        ${CMAKE_BINARY_DIR}/fonts.cpp
         src/model/named_shape.cpp
         src/model/operations.cpp
         src/model/store.cpp
@@ -59,7 +78,7 @@ add_library(pmcore STATIC
         src/solid/speed.cpp)
 # The renderer: OpenGL ES 3 on Android, WebGL 2 in the browser, and on desktop
 # whatever GL the machine has, loaded at run time (render/gl.h).
-target_sources(pmcore PRIVATE src/render/renderer.cpp src/render/gl_loader.cpp)
+target_sources(pmcore PRIVATE src/render/renderer.cpp src/render/gl_loader.cpp src/render/picture.cpp)
 if(ANDROID)
     target_link_libraries(pmcore PUBLIC GLESv3)
 elseif(NOT EMSCRIPTEN)
@@ -80,6 +99,7 @@ else()
     set(PM_ZLIB pm_zlib)
 endif()
 target_include_directories(pmcore PUBLIC src)
+target_include_directories(pmcore PRIVATE ${third_party}/stb)
 target_include_directories(pmcore SYSTEM PUBLIC ${OpenCASCADE_INCLUDE_DIR} ${third_party}/eigen)
 target_link_libraries(pmcore PUBLIC manifold ${PM_ZLIB}
         TKDESTEP TKDEIGES TKXSBase TKDE

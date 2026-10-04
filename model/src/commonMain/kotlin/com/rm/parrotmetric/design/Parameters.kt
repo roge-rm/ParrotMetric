@@ -129,6 +129,13 @@ object Parametrics {
                 else -> f
             }
             is ThreadFeature -> if (field == "pitch") f.copy(pitch = v) else f
+            is CanvasFeature -> when (field) {
+                "width" -> f.copy(width = v)
+                "u" -> f.copy(u = v)
+                "v" -> f.copy(v = v)
+                "angle" -> f.copy(angle = rad)
+                else -> f
+            }
             is PointFeature -> when (field) {
                 "x" -> f.copy(x = v)
                 "y" -> f.copy(y = v)

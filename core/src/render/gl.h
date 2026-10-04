@@ -38,6 +38,7 @@
     X(PFNGLDISABLEPROC, glDisable) \
     X(PFNGLDRAWELEMENTSPROC, glDrawElements) \
     X(PFNGLDRAWARRAYSPROC, glDrawArrays) \
+    X(PFNGLGENERATEMIPMAPPROC, glGenerateMipmap) \
     X(PFNGLDEPTHFUNCPROC, glDepthFunc) \
     X(PFNGLENABLEPROC, glEnable) \
     X(PFNGLENABLEVERTEXATTRIBARRAYPROC, glEnableVertexAttribArray) \
@@ -104,6 +105,7 @@ PM_GL_CALLS(PM_GL_DECLARE)
 #define glDisable pm_glDisable
 #define glDrawElements pm_glDrawElements
 #define glDrawArrays pm_glDrawArrays
+#define glGenerateMipmap pm_glGenerateMipmap
 #define glDepthFunc pm_glDepthFunc
 #define glEnable pm_glEnable
 #define glEnableVertexAttribArray pm_glEnableVertexAttribArray

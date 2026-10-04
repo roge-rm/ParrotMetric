@@ -39,9 +39,11 @@
 #include "mesh/stl.h"
 #include "model/operations.h"
 #include "model/store.h"
+#include "render/picture.h"
 #include "render/renderer.h"
 #include "sketch/region_faces.h"
 #include "sketch/regions.h"
+#include "sketch/text.h"
 #include "solid/solid.h"
 #include "solid/speed.h"
 
@@ -63,6 +65,7 @@ struct Shown {
 std::vector<Shown> shown;
 std::vector<pm::Body> shownBodies;  // The bodies of the last show(), in order, for measuring.
 std::vector<pm::Pick> selection;
+std::unordered_map<int, pm::Picture> pictures;  // Canvas pictures by key, under lock.
 size_t shownTriangles = 0;
 
 // Kernel arguments.
@@ -976,6 +979,24 @@ JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_loft(JNIEnv* env, jobject,
     }
 }
 
+/** Text as outline curves, nine numbers each: kind (0 line, 3 Bézier), start, end, then the two controls. See pm::textOutline. */
+JNIEXPORT jdoubleArray JNICALL Java_com_rm_parrotmetric_Core_textOutline(JNIEnv* env, jobject, jstring text, jdouble height, jboolean bold) {
+    try {
+        const char* c = env->GetStringUTFChars(text, nullptr);
+        std::string s(c);
+        env->ReleaseStringUTFChars(text, c);
+        std::vector<double> out;
+        for (const auto& k : pm::textOutline(s, height, bold, 0))
+            out.insert(out.end(), {double(k.kind), k.x1, k.y1, k.x2, k.y2, k.cx1, k.cy1, k.cx2, k.cy2});
+        jdoubleArray a = env->NewDoubleArray(jsize(out.size()));
+        env->SetDoubleArrayRegion(a, 0, jsize(out.size()), out.data());
+        return a;
+    } catch (const std::exception& e) {
+        fail(env, e.what());
+        return nullptr;
+    }
+}
+
 /** kind is pm::Primitive's order; sizes as pm::primitive takes them. */
 JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_primitive(JNIEnv* env, jobject, jint id, jdoubleArray plane, jint kind, jdouble u,
                                                                jdouble v, jdouble a, jdouble b, jdouble c) {
@@ -1209,7 +1230,8 @@ JNIEXPORT jbyteArray JNICALL Java_com_rm_parrotmetric_Core_exportBodies(JNIEnv* 
 JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_show(JNIEnv* env, jobject, jlongArray handles, jdoubleArray planes,
                                                          jintArray curveCounts, jintArray kinds, jintArray ids, jdoubleArray nums,
                                                          jdoubleArray constructionPlanes, jdoubleArray axes, jdoubleArray points, jintArray colours,
-                                                         jboolean refit) {
+                                                         jdoubleArray canvasNumbers, jboolean refit) {
+    auto cv = doubles(env, canvasNumbers);
     auto cp = doubles(env, constructionPlanes);
     auto ax = doubles(env, axes);
     auto pts = doubles(env, points);
@@ -1289,6 +1311,35 @@ JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_show(JNIEnv* env, jobject, 
     shownTriangles = triangles;
     selection.clear();
     renderer.setBodies(std::move(meshes), refit);
+    // Pictures: their key, four corners and opacity.
+    std::vector<pm::Canvas> canvases;
+    for (size_t i = 0; i + 13 < cv.size(); i += 14) {
+        auto found = pictures.find(int(cv[i]));
+        if (found == pictures.end() || !found->second.rgba) continue;
+        pm::Canvas c;
+        c.rgba = found->second.rgba;
+        c.width = found->second.width;
+        c.height = found->second.height;
+        for (int k = 0; k < 12; ++k) c.corners[k] = float(cv[i + 1 + size_t(k)]);
+        c.opacity = float(cv[i + 13]);
+        canvases.push_back(std::move(c));
+    }
+    renderer.setCanvases(std::move(canvases));
+}
+
+/** Reads a picture (PNG or JPEG) and keeps it under [key] for canvases. Returns its width and height, or null if it can't be read. */
+JNIEXPORT jintArray JNICALL Java_com_rm_parrotmetric_Core_canvasImage(JNIEnv* env, jobject, jint key, jbyteArray bytes) {
+    auto data = bytesOf(env, bytes);
+    pm::Picture p = pm::decodePicture(std::vector<uint8_t>(data.begin(), data.end()));
+    if (!p.rgba) return nullptr;
+    {
+        std::lock_guard<std::mutex> g(lock);
+        pictures[key] = p;
+    }
+    jint size[2] = {p.width, p.height};
+    jintArray out = env->NewIntArray(2);
+    env->SetIntArrayRegion(out, 0, 2, size);
+    return out;
 }
 
 /** How finely solids are meshed for display, 0 low to 2 high; takes effect at the next show(). */
