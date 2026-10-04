@@ -221,7 +221,7 @@ private fun DrawScope.drawSketch(editor: SketchEditor, proj: PlaneProjection, de
             }
             else -> {}
         }
-        drawCircle(free, 4.5f * dp, end)
+        drawCircle(free, 4.5f * dp * (if (magnified) 0.4f else 1f), end)
     }
 
     // Points: the origin, line ends and centres.
