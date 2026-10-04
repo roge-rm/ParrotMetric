@@ -5,15 +5,16 @@ It also runs on Linux, on Windows and in a web browser.
 
 You draw sketches with constraints and dimensions, turn them into solids with extrude, revolve, sweep, loft and the rest, then round, cut, shell, pattern and join them into parts. Every step stays in the history, so you can go back and change an early one and everything after it rebuilds.
 
-It's made for designing things to 3D print. It works by touch first, but it also has proper mouse and keyboard controls for when you're at a desk. Everything runs on the device, with no account and nothing sent anywhere.
+It's made for designing things to 3D print. It works by touch first, but it also has proper mouse and keyboard controls for when you're at a desk. Everything runs on the device.
 
 It's at 0.2.0. It's usable for real parts, but it isn't finished and there will be rough edges. Let me know what works, what doesn't, and what you'd like it to do.
 
 Please join me in the #parrotmetric channel **[on my discord](https://discord.gg/9Wun47jGC6)** to share what you've made, ask questions, report bugs or problems with different devices, or ask for new features. Or feel free to open an issue here.
 
-Made with Claude Opus 5.5.
+Disclaimer: I am not a great programmer so this was made using Claude Opus 5.5
 
-Dan (rm)
+Enjoy!
+Dan
 
 ---
 
