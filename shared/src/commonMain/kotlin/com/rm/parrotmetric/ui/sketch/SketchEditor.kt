@@ -28,7 +28,23 @@ import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.sin
 
-enum class SketchTool { Select, Line, Rectangle, Circle, Arc, Point, Spline, Polygon, Slot, Dimension, Trim, Extend, Text }
+enum class SketchTool { Select, Line, Rectangle, Circle, Arc, Point, Spline, Polygon, Slot, Ellipse, Conic, Dimension, Trim, Extend, Break, Text }
+
+/**
+ * Moving, scaling or patterning the selected curves, with what's typed so
+ * far. Turning and scaling are about the selected point, or the sketch's
+ * origin if no point is selected.
+ */
+class SketchTransform(val kind: Kind) {
+    enum class Kind(val title: String) { Move("Move"), Scale("Scale"), Row("Pattern in a row"), Round("Pattern round") }
+
+    var dx by mutableStateOf(10.0)
+    var dy by mutableStateOf(0.0)
+    var degrees by mutableStateOf(if (kind == Kind.Round) 360.0 else 0.0)
+    var factor by mutableStateOf(2.0)
+    var count by mutableStateOf(3.0)
+    var copy by mutableStateOf(false)
+}
 
 /** Something in a sketch that can be tapped and selected. */
 sealed class SketchItem {
@@ -144,7 +160,7 @@ class SketchEditor(
     fun endDrawing() {
         typed = null
         if (tool == SketchTool.Spline && pending.size >= 2) {
-            sketch.addSpline(pending.toList(), construction)
+            sketch.addSpline(pending.toList(), construction, splineShape())
             placedForPending.clear()
         }
         for (p in placedForPending) if (sketch.curves.none { p in it.points() } && sketch.constraints.none { p in it.points() }) sketch.removePoint(p)
@@ -275,11 +291,15 @@ class SketchEditor(
 
     /** Something was tapped: from [release], or a dimension or glyph the overlay found on screen. */
     fun tap(item: SketchItem?, u: Double = 0.0, v: Double = 0.0) {
-        if (tool == SketchTool.Trim || tool == SketchTool.Extend) {
+        if (tool == SketchTool.Trim || tool == SketchTool.Extend || tool == SketchTool.Break) {
             val c = (item as? SketchItem.C)?.curve ?: return
             checkpoint()
-            val why = if (tool == SketchTool.Trim) SketchOps.trim(sketch, c, u, v)
-            else if (c is Line) SketchOps.extend(sketch, c, u, v) else "Only lines can be extended"
+            val why = when {
+                tool == SketchTool.Trim -> SketchOps.trim(sketch, c, u, v)
+                tool == SketchTool.Break -> SketchOps.breakAt(sketch, c, u, v)
+                c is Line -> SketchOps.extend(sketch, c, u, v)
+                else -> "Only lines can be extended"
+            }
             if (why != null) {
                 undoStack.removeLastOrNull()
                 message = why
@@ -307,7 +327,7 @@ class SketchEditor(
 
     private fun isDrawing() = tool in setOf(
         SketchTool.Line, SketchTool.Rectangle, SketchTool.Circle, SketchTool.Arc, SketchTool.Point,
-        SketchTool.Spline, SketchTool.Polygon, SketchTool.Slot,
+        SketchTool.Spline, SketchTool.Polygon, SketchTool.Slot, SketchTool.Ellipse, SketchTool.Conic,
     )
 
     /** How many sides the Polygon tool draws. */
@@ -319,6 +339,11 @@ class SketchEditor(
     var arcStyle by mutableStateOf(ArcStyle.CentreEnds)
     var polygonStyle by mutableStateOf(PolygonStyle.Inside)
     var slotStyle by mutableStateOf(SlotStyle.Centres)
+    var splineStyle by mutableStateOf(SplineStyle.Through)
+    /** How full new conics are; see Spline.rho. */
+    var conicRho by mutableStateOf(0.5)
+
+    private fun splineShape() = if (splineStyle == SplineStyle.Control) Spline.Shape.Control else Spline.Shape.Through
 
 
     // Sizes typed while drawing.
@@ -742,7 +767,7 @@ class SketchEditor(
                 val p = placeForPending(s)
                 // Tapping the first point again closes the loop and finishes it.
                 if (p === first && pending.size >= 3) {
-                    sketch.addSpline(pending.toList() + p, construction)
+                    sketch.addSpline(pending.toList() + p, construction, splineShape())
                     finishShape()
                 } else pending += p
             }
@@ -756,6 +781,25 @@ class SketchEditor(
                     if (r < 1e-6) return
                     checkpoint()
                     polygon(centre, r, atan2(s.v - sketch.y(centre), s.u - sketch.x(centre)))
+                    finishShape()
+                }
+            }
+            SketchTool.Ellipse -> when (pending.size) {
+                0 -> { checkpoint(); pending += placeForPending(s) }
+                1 -> { if (s.point !== pending[0]) pending += placeForPending(s) }
+                else -> {
+                    val c = pending[0]; val a = pending[1]
+                    val (mx, my) = ellipseMinor(sketch.x(c), sketch.y(c), sketch.x(a), sketch.y(a), s.u, s.v) ?: return
+                    sketch.addSpline(listOf(c, a, sketch.addPoint(mx, my)), construction, Spline.Shape.Ellipse)
+                    finishShape()
+                }
+            }
+            SketchTool.Conic -> when (pending.size) {
+                0 -> { checkpoint(); pending += placeForPending(s) }
+                1 -> { if (s.point !== pending[0]) pending += placeForPending(s) }
+                else -> {
+                    val shoulder = place(s)
+                    sketch.addSpline(listOf(pending[0], shoulder, pending[1]), construction, Spline.Shape.Conic, conicRho)
                     finishShape()
                 }
             }
@@ -900,6 +944,12 @@ class SketchEditor(
                 outline(polygonCorners(x(0), y(0), r, atan2(v - y(0), u - x(0)), polygonSides.coerceIn(3, 64), polygonStyle == PolygonStyle.Outside)) +
                     Ghost.Ring(x(0), y(0), r, faint = true)
             }
+            SketchTool.Ellipse -> if (p.size == 1) toPointer
+            else ellipseMinor(x(0), y(0), x(1), y(1), u, v)?.let { (mx, my) ->
+                listOf(Ghost.Path(ellipsePoints(x(0), y(0), x(1) - x(0), y(1) - y(0), mx - x(0), my - y(0))))
+            } ?: between()
+            SketchTool.Conic -> if (p.size == 1) toPointer
+            else listOf(Ghost.Path(conicPoints(x(0) to y(0), u to v, x(1) to y(1), conicRho)), Ghost.Seg(x(0), y(0), u, v), Ghost.Seg(u, v, x(1), y(1)))
             SketchTool.Slot -> if (p.size == 1) toPointer
             else slotCentres(slotStyle, x(0), y(0), x(1), y(1), u, v)?.let { (a, b, half) -> slotGhost(a, b, half) } ?: (between() + Ghost.Seg(x(1), y(1), u, v))
             else -> emptyList()
@@ -1189,6 +1239,19 @@ class SketchEditor(
             )
             ProfileCurve.Kind.Bezier -> {}
         }
+        // Curved pieces of the same curve become one spline through points along them.
+        for ((_, pieces) in curves.filter { it.kind == ProfileCurve.Kind.Bezier }.groupBy { it.id }) {
+            val along = mutableListOf<Pair<Double, Double>>()
+            for (b in pieces) for (k in 0..3) {
+                if (k == 0 && along.isNotEmpty()) continue
+                val t = k / 3.0; val w = 1 - t
+                along += (w * w * w * b.x1 + 3 * w * w * t * b.cx1 + 3 * w * t * t * b.cx2 + t * t * t * b.x2) to
+                    (w * w * w * b.y1 + 3 * w * w * t * b.cy1 + 3 * w * t * t * b.cy2 + t * t * t * b.y2)
+            }
+            val ps = along.map { (u, v) -> fixedPoint(u, v) }
+            val closed = ps.size > 3 && ps.first() === ps.last()
+            if (ps.distinct().size >= 2) sketch.addSpline(if (closed) ps else ps.distinct(), construction = false)
+        }
         for ((u, v) in lone) fixedPoint(u, v)
         changed()
     }
@@ -1204,6 +1267,108 @@ class SketchEditor(
         val curves = selectedCurves
         if (curves.isEmpty()) return
         editing = DimensionEdit(null, null, 2.0, false, "Offset", action = { d -> SketchOps.offset(sketch, curves, d).also { if (it == null) selection.clear() } })
+    }
+
+    fun startCornerChamfer() {
+        val p = selectedCorner ?: return
+        editing = DimensionEdit(null, null, 1.0, false, "Distance", action = { d -> SketchOps.chamferCorner(sketch, p, d).also { if (it == null) selection.clear() } })
+    }
+
+    /** Mirrors the selected curves across the line selected last. */
+    fun mirrorSelection() {
+        val axis = selection.lastOrNull { it is SketchItem.C && it.curve is Line }?.let { (it as SketchItem.C).curve as Line }
+        if (axis == null) {
+            message = "Select what to mirror, then the line to mirror it across"
+            return
+        }
+        checkpoint()
+        val why = SketchOps.mirror(sketch, selectedCurves.filter { it !== axis }, axis)
+        if (why != null) {
+            undoStack.removeLastOrNull()
+            message = why
+        } else selection.clear()
+        changed()
+    }
+
+    var transform by mutableStateOf<SketchTransform?>(null)
+        private set
+
+    fun startTransform(kind: SketchTransform.Kind) {
+        if (selectedCurves.isEmpty()) {
+            message = "Select the curves first"
+            return
+        }
+        transform = SketchTransform(kind)
+    }
+
+    fun cancelTransform() {
+        transform = null
+    }
+
+    fun commitTransform() {
+        val t = transform ?: return
+        val curves = selectedCurves
+        val pivot = selection.filterIsInstance<SketchItem.P>().firstOrNull()?.point
+        val px = pivot?.let { sketch.x(it) } ?: 0.0
+        val py = pivot?.let { sketch.y(it) } ?: 0.0
+        fun turned(angle: Double, dx: Double, dy: Double): (Double, Double) -> Pair<Double, Double> {
+            val c = cos(angle); val s = sin(angle)
+            return { x, y -> (px + (x - px) * c - (y - py) * s + dx) to (py + (x - px) * s + (y - py) * c + dy) }
+        }
+        val n = t.count.toInt()
+        if ((t.kind == SketchTransform.Kind.Row || t.kind == SketchTransform.Kind.Round) && n !in 2..200) {
+            message = "Use between 2 and 200"
+            return
+        }
+        if (t.kind == SketchTransform.Kind.Scale && t.factor <= 0) {
+            message = "Scale by more than 0"
+            return
+        }
+        checkpoint()
+        val why: String? = when (t.kind) {
+            SketchTransform.Kind.Move -> {
+                val f = turned(t.degrees * PI / 180, t.dx, t.dy)
+                if (t.copy) { SketchOps.copy(sketch, curves, 1.0, false, f); null } else SketchOps.move(sketch, curves, 1.0, f)
+            }
+            SketchTransform.Kind.Scale -> {
+                val k = t.factor
+                val f: (Double, Double) -> Pair<Double, Double> = { x, y -> (px + (x - px) * k) to (py + (y - py) * k) }
+                if (t.copy) { SketchOps.copy(sketch, curves, k, false, f); null } else SketchOps.move(sketch, curves, k, f)
+            }
+            SketchTransform.Kind.Row -> {
+                for (i in 1 until n) SketchOps.copy(sketch, curves, 1.0, false, turned(0.0, t.dx * i, t.dy * i))
+                null
+            }
+            SketchTransform.Kind.Round -> {
+                // A full turn spaces them evenly; less spreads them from the first to the last.
+                val total = t.degrees * PI / 180
+                val step = if (abs(abs(t.degrees) - 360) < 1e-9) total / n else total / (n - 1)
+                for (i in 1 until n) SketchOps.copy(sketch, curves, 1.0, false, turned(step * i, 0.0, 0.0))
+                null
+            }
+        }
+        if (why != null) {
+            undoStack.removeLastOrNull()
+            message = why
+        } else {
+            transform = null
+            selection.clear()
+        }
+        changed()
+    }
+
+    /** The one conic selected, to change how full it is. */
+    val selectedConic get() = ((selection.singleOrNull() as? SketchItem.C)?.curve as? Spline)?.takeIf { it.shape == Spline.Shape.Conic }
+
+    fun startConicFullness() {
+        val c = selectedConic ?: return
+        editing = DimensionEdit(null, null, c.rho, false, "Fullness", action = { r ->
+            if (r <= 0 || r >= 1) "Use a number between 0 and 1" else {
+                c.rho = r
+                conicRho = r
+                null
+            }
+        })
     }
 
     fun startCornerFillet() {

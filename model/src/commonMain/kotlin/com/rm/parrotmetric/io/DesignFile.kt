@@ -359,7 +359,10 @@ object DesignFile {
                 is Line -> mapOf("type" to "line", "id" to c.id, "a" to c.a.id, "b" to c.b.id, "construction" to c.construction)
                 is Circle -> mapOf("type" to "circle", "id" to c.id, "centre" to c.centre.id, "r" to s.radius(c), "construction" to c.construction)
                 is Arc -> mapOf("type" to "arc", "id" to c.id, "centre" to c.centre.id, "start" to c.start.id, "end" to c.end.id, "construction" to c.construction)
-                is Spline -> mapOf("type" to "spline", "id" to c.id, "through" to c.through.map { it.id }, "construction" to c.construction)
+                is Spline -> mapOf(
+                    "type" to "spline", "id" to c.id, "through" to c.through.map { it.id }, "construction" to c.construction,
+                    "shape" to c.shape.name, "rho" to c.rho,
+                )
             }
         },
         "constraints" to s.constraints.mapNotNull { constraint(it) },
@@ -373,6 +376,7 @@ object DesignFile {
 
     private fun constraint(c: Constraint): Map<String, Any?>? = when (c) {
         is Constraint.ArcRadius -> null
+        is Constraint.EllipseAxes -> null
         is Constraint.Coincident -> mapOf("type" to "coincident", "p" to c.p.id, "q" to c.q.id)
         is Constraint.Horizontal -> mapOf("type" to "horizontal", "line" to c.line.id)
         is Constraint.Vertical -> mapOf("type" to "vertical", "line" to c.line.id)
@@ -413,7 +417,10 @@ object DesignFile {
                 "line" -> s.loadLine(id, pt(c, "a"), pt(c, "b"), cons)
                 "circle" -> s.loadCircle(id, pt(c, "centre"), c.num("r"), cons)
                 "arc" -> s.loadArc(id, pt(c, "centre"), pt(c, "start"), pt(c, "end"), cons)
-                "spline" -> s.loadSpline(id, c.arr("through").map { s.point((it as Json.Num).value.toInt()) ?: throw IllegalArgumentException("A sketch refers to a missing point") }, cons)
+                "spline" -> s.loadSpline(
+                    id, c.arr("through").map { s.point((it as Json.Num).value.toInt()) ?: throw IllegalArgumentException("A sketch refers to a missing point") }, cons,
+                    (c["shape"] as? Json.Str)?.let { Spline.Shape.valueOf(it.value) } ?: Spline.Shape.Through, (c["rho"] as? Json.Num)?.value ?: 0.5,
+                )
             }
         }
         for (j in o.arr("texts")) {

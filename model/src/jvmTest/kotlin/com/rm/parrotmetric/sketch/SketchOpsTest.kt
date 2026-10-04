@@ -119,4 +119,71 @@ class SketchOpsTest {
         near(PI / 2, a1 - a0)
         assertNotNull(SketchOps.filletCorner(s, s.addPoint(100.0, 100.0), 1.0))
     }
+
+    /** A square corner at the origin: one line along x and one up y, 10 long. */
+    private fun corner(s: Sketch): Point {
+        val p = s.addPoint(0.0, 0.0)
+        val a = s.addLine(p, s.addPoint(10.0, 0.0))
+        s.add(Constraint.Horizontal(a))
+        s.addLine(p, s.addPoint(0.0, 10.0))
+        return p
+    }
+
+    @Test
+    fun cuttingACornerLeavesThreeLines() {
+        val s = Sketch()
+        val p = corner(s)
+        assertNull(SketchOps.chamferCorner(s, p, 2.0))
+        val lines = s.curves.filterIsInstance<Line>()
+        assertEquals(3, lines.size)
+        near(2 * kotlin.math.sqrt(2.0), lines.minOf { s.length(it) })
+        assertTrue(p !in s.points)
+        // The level line stays level.
+        assertTrue(s.constraints.any { it is Constraint.Horizontal })
+        val other = Sketch()
+        assertNotNull(SketchOps.chamferCorner(other, corner(other), 20.0))
+    }
+
+    @Test
+    fun breakingALineMakesTwoInLine() {
+        val s = Sketch()
+        val l = s.addLine(s.addPoint(0.0, 0.0), s.addPoint(10.0, 0.0))
+        assertNull(SketchOps.breakAt(s, l, 4.0, 0.3))
+        val lines = s.curves.filterIsInstance<Line>()
+        assertEquals(2, lines.size)
+        near(10.0, lines.sumOf { s.length(it) })
+        near(4.0, lines.minOf { s.length(it) })
+        assertNotNull(SketchOps.breakAt(s, lines[0], 0.0, 0.0))
+    }
+
+    @Test
+    fun mirroringCopiesAcrossALineAndKeepsItThere() {
+        val s = Sketch()
+        val axis = s.addLine(s.addPoint(0.0, -10.0), s.addPoint(0.0, 10.0))
+        s.add(Constraint.Vertical(axis))
+        s.add(Constraint.Fixed(axis.a, 0.0, -10.0))
+        val c = s.addCircle(s.addPoint(5.0, 2.0), 3.0)
+        val l = s.addLine(s.addPoint(2.0, 0.0), s.addPoint(6.0, 6.0))
+        assertNull(SketchOps.mirror(s, listOf(c, l), axis))
+        val circles = s.curves.filterIsInstance<Circle>()
+        assertEquals(2, circles.size)
+        val copy = circles.first { it !== c }
+        near(-5.0, s.x(copy.centre))
+        near(3.0, s.radius(copy))
+        // Moving the original moves the copy with it.
+        s.drag(c.centre, 7.0, 2.0)
+        near(-s.x(c.centre), s.x(copy.centre))
+    }
+
+    @Test
+    fun movingScalesSizesWithIt() {
+        val s = Sketch()
+        val l = s.addLine(s.addPoint(0.0, 0.0), s.addPoint(10.0, 0.0))
+        s.add(Constraint.Length(l, 10.0))
+        assertNull(SketchOps.move(s, listOf(l), 2.0) { x, y -> x * 2 to y * 2 })
+        near(20.0, s.length(l))
+        val copies = SketchOps.copy(s, listOf(l), 1.0, false) { x, y -> x to y + 5 }
+        assertEquals(2, copies.size)
+        assertEquals(2, s.curves.size)
+    }
 }

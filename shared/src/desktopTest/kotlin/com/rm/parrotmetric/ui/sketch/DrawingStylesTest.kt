@@ -136,4 +136,32 @@ class DrawingStylesTest {
         near(0.0, e.sketch.y(b.a), "start on the line")
         near(0.0, e.sketch.y(b.b), "end on the line")
     }
+
+    @Test
+    fun ellipseFromCentreAxisAndWidth() {
+        val e = editor()
+        e.selectTool(SketchTool.Ellipse)
+        e.tap(0.0, 0.0); e.tap(10.0, 0.0); e.tap(3.0, 4.0)
+        val sp = e.sketch.curves.filterIsInstance<com.rm.parrotmetric.sketch.Spline>().single()
+        assertEquals(com.rm.parrotmetric.sketch.Spline.Shape.Ellipse, sp.shape)
+        near(4.0, e.sketch.y(sp.through[2]), "second axis")
+        near(0.0, e.sketch.x(sp.through[2]), "square to the first")
+    }
+
+    @Test
+    fun conicAndPatternRound() {
+        val e = editor()
+        e.selectTool(SketchTool.Conic)
+        e.tap(0.0, 0.0); e.tap(10.0, 10.0); e.tap(10.0, 0.0)
+        val sp = e.sketch.curves.filterIsInstance<com.rm.parrotmetric.sketch.Spline>().single()
+        assertEquals(listOf(0.0 to 0.0, 10.0 to 0.0, 10.0 to 10.0), sp.through.map { e.sketch.x(it) to e.sketch.y(it) })
+        e.selectTool(SketchTool.Select)
+        e.selection += SketchItem.C(sp)
+        e.startTransform(SketchTransform.Kind.Round)
+        e.transform!!.count = 4.0
+        e.commitTransform()
+        assertEquals(4, e.sketch.curves.size)
+        // A quarter turn round the origin takes the end (10, 10) to (-10, 10).
+        assertTrue(e.sketch.points.any { kotlin.math.abs(e.sketch.x(it) + 10) < 1e-9 && kotlin.math.abs(e.sketch.y(it) - 10) < 1e-9 })
+    }
 }

@@ -199,6 +199,16 @@ sealed class Constraint {
         }
     }
 
+    /** An ellipse's two axes square to each other. Added with every ellipse. */
+    class EllipseAxes internal constructor(val ellipse: Spline) : Constraint() {
+        override fun points() = ellipse.points()
+        override fun curves() = listOf(ellipse)
+        override fun residuals(v: (Int) -> Double): DoubleArray {
+            val (c, a, b) = ellipse.through
+            return doubleArrayOf((a.px(v) - c.px(v)) * (b.px(v) - c.px(v)) + (a.py(v) - c.py(v)) * (b.py(v) - c.py(v)))
+        }
+    }
+
     /** The straight distance between two points. */
     class Distance(val p: Point, val q: Point, override var value: Double) : Dimension() {
         override fun points() = listOf(p, q)

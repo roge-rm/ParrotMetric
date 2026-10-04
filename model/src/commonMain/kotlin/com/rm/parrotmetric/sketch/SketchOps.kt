@@ -331,4 +331,132 @@ object SketchOps {
         s.solve()
         return null
     }
+
+    /** Cuts the corner where two lines meet at p with a straight line, d back along each. */
+    fun chamferCorner(s: Sketch, p: Point, d: Double): String? {
+        if (d <= 0) return "The distance has to be more than 0"
+        val lines = s.curves.filter { p in it.points() }
+        if (lines.size != 2 || lines.any { it !is Line }) return "Tap a corner where two lines meet"
+        val (l1, l2) = lines.map { it as Line }
+        val far1 = if (l1.a === p) l1.b else l1.a
+        val far2 = if (l2.a === p) l2.b else l2.a
+        if (d >= s.distance(p, far1) || d >= s.distance(p, far2)) return "The distance is too big for those lines"
+        val px = s.x(p); val py = s.y(p)
+        fun back(q: Point): Point {
+            val len = s.distance(p, q)
+            return s.addPoint(px + (s.x(q) - px) / len * d, py + (s.y(q) - py) / len * d)
+        }
+        val t1 = back(far1)
+        val t2 = back(far2)
+        val n1 = s.addLine(far1, t1, l1.construction)
+        val n2 = s.addLine(far2, t2, l2.construction)
+        s.addLine(t1, t2, l1.construction && l2.construction)
+        s.carry(l1, n1)
+        s.carry(l2, n2)
+        s.removeCurveOnly(l1)
+        s.removeCurveOnly(l2)
+        s.removePoint(p)
+        s.solve()
+        return null
+    }
+
+    /** Splits a line or arc in two at the place nearest (u, v), without taking anything away. */
+    fun breakAt(s: Sketch, c: Curve, u: Double, v: Double): String? {
+        when (c) {
+            is Line -> {
+                val t = s.placeOf(c, u, v)
+                if (t <= EPS || t >= 1 - EPS) return "Tap away from the ends"
+                val (mx, my) = s.pointAt(c, t)
+                val m = s.addPoint(mx, my)
+                val first = s.addLine(c.a, m, c.construction)
+                val second = s.addLine(m, c.b, c.construction)
+                s.carry(c, first)
+                s.carry(c, second)
+                s.add(Constraint.Collinear(first, second))
+                removeKeeping(s, c, listOf(c.a, c.b, m))
+            }
+            is Arc -> {
+                val t = s.placeOf(c, u, v)
+                val span = s.span(c)
+                if (t <= EPS * span || t >= span * (1 - EPS)) return "Tap away from the ends"
+                val (mx, my) = s.pointAt(c, t)
+                val m = s.addPoint(mx, my)
+                s.addArc(c.centre, c.start, m, c.construction)
+                s.addArc(c.centre, m, c.end, c.construction)
+                removeKeeping(s, c, listOf(c.centre, c.start, c.end, m))
+            }
+            is Circle -> return "Break a circle with Trim, where other curves cross it"
+            is Spline -> return "Splines can't be broken yet"
+        }
+        s.solve()
+        return null
+    }
+
+    /**
+     * Copies curves with every point moved by [to]. Radii scale by [scale];
+     * [flip] for a mirror image, which turns arcs the other way. Points the
+     * curves share stay shared in the copy. Returns each old point's copy.
+     */
+    fun copy(s: Sketch, curves: List<Curve>, scale: Double, flip: Boolean, to: (Double, Double) -> Pair<Double, Double>): Map<Point, Point> {
+        val made = LinkedHashMap<Point, Point>()
+        fun of(p: Point) = made.getOrPut(p) { to(s.x(p), s.y(p)).let { (x, y) -> s.addPoint(x, y) } }
+        for (c in curves) when (c) {
+            is Line -> s.addLine(of(c.a), of(c.b), c.construction)
+            is Circle -> s.addCircle(of(c.centre), s.radius(c) * scale, c.construction)
+            is Arc -> if (flip) s.addArc(of(c.centre), of(c.end), of(c.start), c.construction) else s.addArc(of(c.centre), of(c.start), of(c.end), c.construction)
+            is Spline -> s.addSpline(c.through.map(::of), c.construction, c.shape, c.rho)
+        }
+        return made
+    }
+
+    /**
+     * Copies curves mirrored across [axis], each copied point held
+     * symmetric to its original; points on the axis are shared.
+     */
+    fun mirror(s: Sketch, curves: List<Curve>, axis: Line): String? {
+        val list = curves.filter { it !== axis }
+        if (list.isEmpty()) return "Select what to mirror, then the line to mirror it across"
+        val ax = s.x(axis.a); val ay = s.y(axis.a)
+        val len = s.length(axis)
+        if (len < 1e-9) return "The line to mirror across has no length"
+        val dx = (s.x(axis.b) - ax) / len; val dy = (s.y(axis.b) - ay) / len
+        fun across(x: Double, y: Double): Pair<Double, Double> {
+            val along = (x - ax) * dx + (y - ay) * dy
+            val fx = ax + dx * along; val fy = ay + dy * along
+            return (2 * fx - x) to (2 * fy - y)
+        }
+        val pairs = copy(s, list, 1.0, true, ::across)
+        for ((p, q) in pairs) {
+            val off = abs((s.x(p) - ax) * dy - (s.y(p) - ay) * dx)
+            if (off < 1e-9) s.add(Constraint.Coincident(p, q)) else s.add(Constraint.Symmetric(p, q, axis))
+        }
+        for (c in list) if (c is Circle) {
+            val copyOfCentre = pairs[c.centre]
+            s.curves.lastOrNull { it is Circle && it.centre === copyOfCentre }?.let { s.add(Constraint.Equal(c, it)) }
+        }
+        s.solve()
+        return null
+    }
+
+    /** Moves curves' points by [to], radii scaled by [scale], then solves. */
+    fun move(s: Sketch, curves: List<Curve>, scale: Double, to: (Double, Double) -> Pair<Double, Double>): String? {
+        val points = curves.flatMap { it.points() }.distinct().filter { it !== s.origin }
+        if (points.isEmpty()) return "Select what to move"
+        val at = points.associateWith { to(s.x(it), s.y(it)) }
+        for ((p, xy) in at) s.move(p, xy.first, xy.second)
+        if (scale != 1.0) {
+            for (c in curves) if (c is Circle) s.setRadius(c, s.radius(c) * scale)
+            // Sizes wholly within what's scaled scale with it.
+            val inside = points.toSet() + curves.flatMap { it.points() }
+            for (k in s.constraints) when (k) {
+                is Constraint.Length -> if (k.line in curves) k.value *= scale
+                is Constraint.Radius -> if (k.curve in curves) k.value *= scale
+                is Constraint.Distance -> if (k.p in inside && k.q in inside) k.value *= scale
+                is Constraint.AxisDistance -> if (k.p in inside && k.q in inside) k.value *= scale
+                else -> {}
+            }
+        }
+        if (!s.solve()) return "It can't move that way: something holds it"
+        return null
+    }
 }

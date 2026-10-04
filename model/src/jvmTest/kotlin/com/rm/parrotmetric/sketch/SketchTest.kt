@@ -181,4 +181,34 @@ class SketchTest {
         assertEquals(4, s.points.size)
         assertTrue(r.p4 !in s.points)
     }
+
+    @Test
+    fun ellipsesConicsAndControlSplinesComeOutAsCurves() {
+        val s = Sketch()
+        val c = s.addPoint(1.0, 2.0)
+        val e = s.addSpline(listOf(c, s.addPoint(11.0, 2.0), s.addPoint(1.0, 6.0)), shape = Spline.Shape.Ellipse)
+        assertTrue(e.closed)
+        // Every point along it is on the ellipse with half-axes 10 and 4.
+        for ((x, y) in s.sampleSpline(e)) {
+            val q = ((x - 1) / 10).let { it * it } + ((y - 2) / 4).let { it * it }
+            assertTrue(kotlin.math.abs(q - 1) < 1e-4, "off the ellipse by $q")
+        }
+        // Its axes stay square when one is dragged round.
+        s.drag(e.through[1], 9.0, 8.0)
+        val (cc, a, b) = e.through
+        assertTrue(kotlin.math.abs((s.x(a) - s.x(cc)) * (s.x(b) - s.x(cc)) + (s.y(a) - s.y(cc)) * (s.y(b) - s.y(cc))) < 1e-6)
+
+        val conic = s.addSpline(listOf(s.addPoint(0.0, 0.0), s.addPoint(10.0, 0.0), s.addPoint(10.0, 10.0)), shape = Spline.Shape.Conic, rho = 0.5)
+        val pts = s.sampleSpline(conic)
+        assertTrue(kotlin.math.abs(pts.first().first) < 1e-9 && kotlin.math.abs(pts.last().second - 10) < 1e-9)
+        // A parabola's middle is halfway from the chord's middle to the shoulder.
+        val mid = s.bezierPieces(conic)[4]
+        assertTrue(kotlin.math.abs(mid[0] - 7.5) < 1e-9 && kotlin.math.abs(mid[1] - 2.5) < 1e-9)
+
+        val ctrl = s.addSpline(listOf(s.addPoint(0.0, 0.0), s.addPoint(5.0, 10.0), s.addPoint(10.0, 0.0)), shape = Spline.Shape.Control)
+        val cp = s.sampleSpline(ctrl)
+        assertTrue(kotlin.math.abs(cp.first().first) < 1e-9 && kotlin.math.abs(cp.last().first - 10) < 1e-9)
+        // It doesn't reach the middle control point.
+        assertTrue(cp.maxOf { it.second } < 9.0)
+    }
 }

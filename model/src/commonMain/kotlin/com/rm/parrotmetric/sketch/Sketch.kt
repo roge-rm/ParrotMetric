@@ -1,7 +1,11 @@
 package com.rm.parrotmetric.sketch
 
+import kotlin.math.PI
 import kotlin.math.atan2
+import kotlin.math.cos
 import kotlin.math.hypot
+import kotlin.math.sin
+import kotlin.math.tan
 
 /**
  * A 2D sketch on a plane: points, lines, circles and arcs held in place by
@@ -73,17 +77,109 @@ class Sketch {
         return arc
     }
 
-    fun addSpline(through: List<Point>, construction: Boolean = false): Spline =
-        Spline(nextId++, through, construction).also { curveMap[it.id] = it }
+    /** A curve shaped by its points; see [Spline.Shape] for what each shape takes. An ellipse keeps its axes square. */
+    fun addSpline(through: List<Point>, construction: Boolean = false, shape: Spline.Shape = Spline.Shape.Through, rho: Double = 0.5): Spline {
+        val sp = Spline(nextId++, through, construction, shape)
+        sp.rho = rho
+        curveMap[sp.id] = sp
+        if (shape == Spline.Shape.Ellipse) constraintList += Constraint.EllipseAxes(sp)
+        return sp
+    }
 
-    internal fun loadSpline(id: Int, through: List<Point>, construction: Boolean) = loadCurve(Spline(id, through, construction))
+    internal fun loadSpline(id: Int, through: List<Point>, construction: Boolean, shape: Spline.Shape = Spline.Shape.Through, rho: Double = 0.5) {
+        val sp = Spline(id, through, construction, shape)
+        sp.rho = rho
+        loadCurve(sp)
+        if (shape == Spline.Shape.Ellipse) constraintList += Constraint.EllipseAxes(sp)
+    }
 
     /**
      * A spline's pieces as cubic Bezier curves: start, first control,
-     * second control, end, as x y pairs. Catmull-Rom through its points, so
-     * the curve passes through each of them.
+     * second control, end, as x y pairs. Through points it's Catmull-Rom, so
+     * the curve passes through each of them; the other shapes are in
+     * [Spline.Shape].
      */
-    fun bezierPieces(sp: Spline): List<DoubleArray> {
+    fun bezierPieces(sp: Spline): List<DoubleArray> = when (sp.shape) {
+        Spline.Shape.Through -> throughPieces(sp)
+        Spline.Shape.Control -> controlPieces(sp)
+        Spline.Shape.Ellipse -> ellipsePieces(sp)
+        Spline.Shape.Conic -> conicPieces(sp)
+    }
+
+    /**
+     * A cubic B-spline on the control points, uniform, passing through the
+     * first and last. Closed, it goes round with no ends.
+     */
+    private fun controlPieces(sp: Spline): List<DoubleArray> {
+        val pts = sp.through.map { x(it) to y(it) }
+        val ring = if (sp.closed) pts.dropLast(1) else pts
+        if (ring.size < 2) return emptyList()
+        // Open: the end points three times over, so the curve starts and ends on them.
+        val run = if (sp.closed) ring + ring.take(3) else listOf(ring.first(), ring.first()) + ring + listOf(ring.last(), ring.last())
+        return (0..run.size - 4).map { i ->
+            val (p0, p1, p2, p3) = run.subList(i, i + 4)
+            doubleArrayOf(
+                (p0.first + 4 * p1.first + p2.first) / 6, (p0.second + 4 * p1.second + p2.second) / 6,
+                (2 * p1.first + p2.first) / 3, (2 * p1.second + p2.second) / 3,
+                (p1.first + 2 * p2.first) / 3, (p1.second + 2 * p2.second) / 3,
+                (p1.first + 4 * p2.first + p3.first) / 6, (p1.second + 4 * p2.second + p3.second) / 6,
+            )
+        }.filter { b -> hypot(b[6] - b[0], b[7] - b[1]) + hypot(b[2] - b[0], b[3] - b[1]) > 1e-12 }
+    }
+
+    /** An ellipse round its first point through the other two, the ends of its axes, in eight pieces. */
+    private fun ellipsePieces(sp: Spline): List<DoubleArray> {
+        if (sp.through.size < 3) return emptyList()
+        val cx = x(sp.through[0]); val cy = y(sp.through[0])
+        val ax = x(sp.through[1]) - cx; val ay = y(sp.through[1]) - cy
+        val bx = x(sp.through[2]) - cx; val by = y(sp.through[2]) - cy
+        // A circle's eighth, laid on the axes.
+        val step = PI / 4
+        val k = 4.0 / 3 * tan(step / 4)
+        fun at(u: Double, v: Double) = doubleArrayOf(cx + ax * u + bx * v, cy + ay * u + by * v)
+        return (0 until 8).map { i ->
+            val t0 = i * step; val t1 = t0 + step
+            val p0 = at(cos(t0), sin(t0))
+            val p1 = at(cos(t0) - k * sin(t0), sin(t0) + k * cos(t0))
+            val p2 = at(cos(t1) + k * sin(t1), sin(t1) - k * cos(t1))
+            val p3 = at(cos(t1), sin(t1))
+            doubleArrayOf(p0[0], p0[1], p1[0], p1[1], p2[0], p2[1], p3[0], p3[1])
+        }
+    }
+
+    /**
+     * A conic from the first point to the third, pulled towards the second
+     * by [Spline.rho]: in eight pieces, each a cubic matching the conic's
+     * ends and directions.
+     */
+    private fun conicPieces(sp: Spline): List<DoubleArray> {
+        if (sp.through.size < 3) return emptyList()
+        val (a, s, b) = sp.through.take(3).map { x(it) to y(it) }
+        val rho = sp.rho.coerceIn(0.01, 0.99)
+        val w = rho / (1 - rho)
+        fun point(t: Double): DoubleArray {
+            val u = 1 - t
+            val d = u * u + 2 * t * u * w + t * t
+            return doubleArrayOf((u * u * a.first + 2 * t * u * w * s.first + t * t * b.first) / d, (u * u * a.second + 2 * t * u * w * s.second + t * t * b.second) / d)
+        }
+        fun slope(t: Double): DoubleArray {
+            val u = 1 - t
+            val d = u * u + 2 * t * u * w + t * t
+            val dd = -2 * u + 2 * w * (1 - 2 * t) + 2 * t
+            val p = point(t)
+            val nx = -2 * u * a.first + 2 * w * (1 - 2 * t) * s.first + 2 * t * b.first
+            val ny = -2 * u * a.second + 2 * w * (1 - 2 * t) * s.second + 2 * t * b.second
+            return doubleArrayOf((nx - p[0] * dd) / d, (ny - p[1] * dd) / d)
+        }
+        val n = 8
+        return (0 until n).map { i ->
+            val t0 = i.toDouble() / n; val t1 = (i + 1.0) / n; val h = (t1 - t0) / 3
+            val p0 = point(t0); val p3 = point(t1); val d0 = slope(t0); val d1 = slope(t1)
+            doubleArrayOf(p0[0], p0[1], p0[0] + d0[0] * h, p0[1] + d0[1] * h, p3[0] - d1[0] * h, p3[1] - d1[1] * h, p3[0], p3[1])
+        }
+    }
+
+    private fun throughPieces(sp: Spline): List<DoubleArray> {
         val pts = sp.through.map { x(it) to y(it) }
         val closed = sp.closed
         val ring = if (closed) pts.dropLast(1) else pts
@@ -155,7 +251,7 @@ class Sketch {
     }
 
     fun remove(constraint: Constraint) {
-        if (constraint !is Constraint.ArcRadius) constraintList.remove(constraint)
+        if (constraint !is Constraint.ArcRadius && constraint !is Constraint.EllipseAxes) constraintList.remove(constraint)
     }
 
     /** What happened to a constraint offered to [add]. */
@@ -270,6 +366,7 @@ class Sketch {
         internal val construction: Map<Curve, Boolean>,
         internal val nextId: Int,
         internal val texts: Map<Int, SketchText> = emptyMap(),
+        internal val rhos: Map<Spline, Double> = emptyMap(),
     )
 
     fun snapshot() = Snapshot(
@@ -278,6 +375,7 @@ class Sketch {
         curveMap.values.associateWith { it.construction },
         nextId,
         LinkedHashMap(textMap),
+        curveMap.values.filterIsInstance<Spline>().associateWith { it.rho },
     )
 
     fun restore(s: Snapshot) {
@@ -287,6 +385,7 @@ class Sketch {
         constraintList.clear(); constraintList += s.constraints
         for ((d, v) in s.dimensions) d.value = v
         for ((c, b) in s.construction) c.construction = b
+        for ((c, r) in s.rhos) c.rho = r
         textMap.clear(); textMap.putAll(s.texts)
         nextId = s.nextId
     }
@@ -319,10 +418,24 @@ class Arc internal constructor(id: Int, val centre: Point, val start: Point, val
 }
 
 /**
- * A smooth curve through its points, in order. It closes into a loop when
- * the last point is the first.
+ * A smooth curve shaped by its points, as [shape] says. Through and Control
+ * close into a loop when the last point is the first.
  */
-class Spline internal constructor(id: Int, val through: List<Point>, construction: Boolean) : Curve(id, construction) {
+class Spline internal constructor(id: Int, val through: List<Point>, construction: Boolean, val shape: Shape = Shape.Through) : Curve(id, construction) {
+    enum class Shape {
+        /** Through each point in order. */
+        Through,
+        /** Pulled towards each point in turn, through only the first and last. */
+        Control,
+        /** The centre, then the ends of its two axes. */
+        Ellipse,
+        /** From the first point to the third, bent towards the second by [rho]. */
+        Conic,
+    }
+
+    /** A conic's fullness: towards 0 it flattens to a straight line, 0.5 is a parabola, towards 1 it reaches into the corner. */
+    var rho = 0.5
+
     override fun points() = through.distinct()
-    val closed get() = through.size > 2 && through.first() === through.last()
+    val closed get() = shape == Shape.Ellipse || shape != Shape.Conic && through.size > 2 && through.first() === through.last()
 }

@@ -115,6 +115,7 @@ fun SketchBottom(editor: SketchEditor, expanded: Boolean = false) {
     Column(Modifier.imePadding().padding(start = 10.dp, end = 10.dp, bottom = 10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         when {
             editing != null -> DimensionEntry(editor, editing)
+            editor.transform != null -> TransformEntry(editor, editor.transform!!)
             editor.textEdit != null -> TextEntry(editor, editor.textEdit!!)
             constraining -> ConstrainSheet(editor) { constraining = false }
             else -> {
@@ -145,7 +146,19 @@ private fun ChipRow(editor: SketchEditor, expanded: Boolean, onConstrain: () -> 
         if (editor.outline != null) Chip("Project", Icons.project) { editor.projectOutline() }
         if (editor.canAddDrawing) Chip("Add drawing", Icons.open) { editor.addDrawing() }
         (editor.selection.singleOrNull() as? SketchItem.T)?.let { t -> Chip("Change text", Icons.text) { editor.editText(t.text) } }
+        Chip("Break", Icons.breakTool, active = editor.tool == SketchTool.Break) {
+            editor.selectTool(if (editor.tool == SketchTool.Break) SketchTool.Select else SketchTool.Break)
+        }
         if (editor.selectedCorner != null) Chip("Round corner", Icons.fillet) { editor.startCornerFillet() }
+        if (editor.selectedCorner != null) Chip("Cut corner", Icons.chamfer) { editor.startCornerChamfer() }
+        if (editor.selectedCurves.size >= 2 && editor.selectedCurves.any { it is com.rm.parrotmetric.sketch.Line }) Chip("Mirror", Icons.mirror) { editor.mirrorSelection() }
+        if (editor.selectedCurves.isNotEmpty()) {
+            Chip("Move", Icons.move) { editor.startTransform(SketchTransform.Kind.Move) }
+            Chip("Scale", Icons.scale) { editor.startTransform(SketchTransform.Kind.Scale) }
+            Chip("Pattern", Icons.pattern) { editor.startTransform(SketchTransform.Kind.Row) }
+            Chip("Pattern round", Icons.pattern) { editor.startTransform(SketchTransform.Kind.Round) }
+        }
+        editor.selectedConic?.let { c -> Chip("Fullness ${kotlin.math.round(c.rho * 100) / 100}", Icons.conic) { editor.startConicFullness() } }
         Chip("Construction", Icons.construction, active = editor.construction && !hasSelection) { editor.toggleConstruction() }
         if (hasSelection) Chip("Delete", Icons.delete, tint = Palette.orange) { editor.deleteSelection() }
     }
@@ -182,6 +195,8 @@ private fun ToolGrid(editor: SketchEditor, expanded: Boolean) {
         Triple(SketchTool.Spline, "Spline", Icons.spline),
         Triple(SketchTool.Polygon, "Polygon", Icons.polygon),
         Triple(SketchTool.Slot, "Slot", Icons.slot),
+        Triple(SketchTool.Ellipse, "Ellipse", Icons.ellipse),
+        Triple(SketchTool.Conic, "Conic", Icons.conic),
         Triple(SketchTool.Text, "Text", Icons.text),
     )
     var showMore by remember { mutableStateOf(editor.tool in more.map { it.first }) }
@@ -233,6 +248,9 @@ private fun StyleRow(editor: SketchEditor) {
         SketchTool.Slot -> ChoiceRow(SlotStyle.entries.map { it.label }, editor.slotStyle.ordinal) {
             editor.endDrawing(); editor.slotStyle = SlotStyle.entries[it]
         }
+        SketchTool.Spline -> ChoiceRow(SplineStyle.entries.map { it.label }, editor.splineStyle.ordinal) {
+            editor.endDrawing(); editor.splineStyle = SplineStyle.entries[it]
+        }
         else -> {}
     }
 }
@@ -272,6 +290,7 @@ private val toolKeys = mapOf(
     SketchTool.Text to "Shift+T",
     SketchTool.Line to "L", SketchTool.Rectangle to "R", SketchTool.Circle to "C", SketchTool.Arc to "A",
     SketchTool.Point to "Shift+P", SketchTool.Spline to "Shift+S", SketchTool.Polygon to "G", SketchTool.Slot to "Shift+L",
+    SketchTool.Ellipse to "Shift+C",
 )
 
 @Composable
@@ -390,6 +409,44 @@ private fun TextEntry(editor: SketchEditor, edit: TextEdit) {
                     modifier = Modifier.weight(1f).height(50.dp), shape = RoundedCornerShape(18.dp), color = Palette.mint, contentColor = Palette.ink,
                 ) {
                     Box(contentAlignment = Alignment.Center) { Text("Set", fontSize = 15.sp, fontWeight = FontWeight.Bold) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TransformEntry(editor: SketchEditor, t: SketchTransform) {
+    Surface(color = Palette.surface, shape = RoundedCornerShape(26.dp)) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(t.kind.title, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = Palette.text)
+            when (t.kind) {
+                SketchTransform.Kind.Move -> {
+                    com.rm.parrotmetric.ui.design.NumberRow("X", t.dx, "mm", true) { t.dx = it }
+                    com.rm.parrotmetric.ui.design.NumberRow("Y", t.dy, "mm", true) { t.dy = it }
+                    com.rm.parrotmetric.ui.design.NumberRow("Turn", t.degrees, "°", true) { t.degrees = it }
+                    com.rm.parrotmetric.ui.design.Toggle("Copy", t.copy) { t.copy = it }
+                }
+                SketchTransform.Kind.Scale -> {
+                    com.rm.parrotmetric.ui.design.NumberRow("Scale", t.factor, "×", false) { t.factor = it }
+                    com.rm.parrotmetric.ui.design.Toggle("Copy", t.copy) { t.copy = it }
+                }
+                SketchTransform.Kind.Row -> {
+                    com.rm.parrotmetric.ui.design.NumberRow("Count", t.count, "", false) { t.count = it }
+                    com.rm.parrotmetric.ui.design.NumberRow("X apart", t.dx, "mm", true) { t.dx = it }
+                    com.rm.parrotmetric.ui.design.NumberRow("Y apart", t.dy, "mm", true) { t.dy = it }
+                }
+                SketchTransform.Kind.Round -> {
+                    com.rm.parrotmetric.ui.design.NumberRow("Count", t.count, "", false) { t.count = it }
+                    com.rm.parrotmetric.ui.design.NumberRow("Angle", t.degrees, "°", true) { t.degrees = it }
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Surface(onClick = editor::cancelTransform, modifier = Modifier.weight(1f).height(50.dp), shape = RoundedCornerShape(18.dp), color = Palette.raised, contentColor = Palette.text) {
+                    Box(contentAlignment = Alignment.Center) { Text("Cancel", fontSize = 15.sp, fontWeight = FontWeight.SemiBold) }
+                }
+                Surface(onClick = editor::commitTransform, modifier = Modifier.weight(1f).height(50.dp), shape = RoundedCornerShape(18.dp), color = Palette.mint, contentColor = Palette.ink) {
+                    Box(contentAlignment = Alignment.Center) { Text("Done", fontSize = 15.sp, fontWeight = FontWeight.Bold) }
                 }
             }
         }

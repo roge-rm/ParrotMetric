@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rm.parrotmetric.ui.sketch.SketchEditor
 import com.rm.parrotmetric.ui.sketch.SketchTool
+import com.rm.parrotmetric.ui.sketch.SketchTransform
 import com.rm.parrotmetric.ui.sketch.next
 import kotlin.math.PI
 
@@ -101,9 +102,11 @@ fun sketchShortcuts(e: SketchEditor, actions: ModelActions, openFinder: () -> Un
         tool("Circle", keys("C"), SketchTool.Circle) { e.circleStyle = e.circleStyle.next() },
         tool("Arc", keys("A"), SketchTool.Arc) { e.arcStyle = e.arcStyle.next() },
         tool("Point", keys("Shift+P"), SketchTool.Point),
-        tool("Spline", keys("Shift+S"), SketchTool.Spline),
+        tool("Spline", keys("Shift+S"), SketchTool.Spline) { e.splineStyle = e.splineStyle.next() },
         tool("Polygon", keys("G"), SketchTool.Polygon) { e.polygonStyle = e.polygonStyle.next() },
         tool("Slot", keys("Shift+L"), SketchTool.Slot) { e.slotStyle = e.slotStyle.next() },
+        tool("Ellipse", keys("Shift+C"), SketchTool.Ellipse),
+        tool("Conic", keys(), SketchTool.Conic),
         tool("Text", keys("Shift+T"), SketchTool.Text),
         tool("Select", keys(), SketchTool.Select),
         Shortcut("Dimension", keys("D"), "Edit") { e.selectTool(if (e.tool == SketchTool.Dimension) SketchTool.Select else SketchTool.Dimension) },
@@ -112,6 +115,13 @@ fun sketchShortcuts(e: SketchEditor, actions: ModelActions, openFinder: () -> Un
         Shortcut("Offset", keys("O"), "Edit", e.selectedCurves.isNotEmpty()) { e.startOffset() },
         Shortcut("Project", keys("P"), "Edit", e.outline != null) { e.projectOutline() },
         Shortcut("Round corner", keys("F"), "Edit", e.selectedCorner != null) { e.startCornerFillet() },
+        Shortcut("Cut corner", keys("Shift+F"), "Edit", e.selectedCorner != null) { e.startCornerChamfer() },
+        Shortcut("Break", keys("B"), "Edit") { e.selectTool(if (e.tool == SketchTool.Break) SketchTool.Select else SketchTool.Break) },
+        Shortcut("Mirror", keys("Shift+M"), "Edit", e.selectedCurves.size >= 2) { e.mirrorSelection() },
+        Shortcut("Move", keys("M"), "Edit", e.selectedCurves.isNotEmpty()) { e.startTransform(SketchTransform.Kind.Move) },
+        Shortcut("Scale", keys(), "Edit", e.selectedCurves.isNotEmpty()) { e.startTransform(SketchTransform.Kind.Scale) },
+        Shortcut("Pattern", keys(), "Edit", e.selectedCurves.isNotEmpty()) { e.startTransform(SketchTransform.Kind.Row) },
+        Shortcut("Pattern round", keys(), "Edit", e.selectedCurves.isNotEmpty()) { e.startTransform(SketchTransform.Kind.Round) },
         Shortcut("Construction", keys("X"), "Edit") { e.toggleConstruction() },
         Shortcut("Add a drawing (SVG or DXF)", keys("Shift+I"), "Edit", e.canAddDrawing) { e.addDrawing() },
         Shortcut("Delete", keys("Delete"), "Edit", hasSelection) { e.deleteSelection() },

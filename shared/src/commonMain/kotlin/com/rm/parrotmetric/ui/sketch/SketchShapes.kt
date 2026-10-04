@@ -15,6 +15,7 @@ enum class CircleStyle(val label: String) { Centre("Centre"), TwoPoints("Two poi
 enum class ArcStyle(val label: String) { CentreEnds("Centre, then ends"), ThreePoints("Three points"), Tangent("Tangent") }
 enum class PolygonStyle(val label: String) { Inside("Corners on the circle"), Outside("Sides on the circle") }
 enum class SlotStyle(val label: String) { Centres("Centre to centre"), Overall("End to end"), Middle("From the middle") }
+enum class SplineStyle(val label: String) { Through("Through points"), Control("Control points") }
 
 /** The next of an enum's values, round to the first. */
 internal inline fun <reified T : Enum<T>> T.next(): T = enumValues<T>().let { it[(ordinal + 1) % it.size] }
@@ -26,6 +27,32 @@ sealed class Ghost {
     data class Ring(val cx: Double, val cy: Double, val r: Double, val faint: Boolean = false) : Ghost()
     /** An arc, anticlockwise from angle [a0] to [a1], radians. */
     data class Bow(val cx: Double, val cy: Double, val r: Double, val a0: Double, val a1: Double) : Ghost()
+    /** Any other curve, as points along it. */
+    data class Path(val points: List<Pair<Double, Double>>) : Ghost()
+}
+
+/** An ellipse round (cx, cy) with axis ends at (cx + ax, cy + ay) and (cx + bx, cy + by), as points round it. */
+internal fun ellipsePoints(cx: Double, cy: Double, ax: Double, ay: Double, bx: Double, by: Double): List<Pair<Double, Double>> =
+    (0..96).map { i -> val t = 2 * PI * i / 96; (cx + ax * cos(t) + bx * sin(t)) to (cy + ay * cos(t) + by * sin(t)) }
+
+/** A conic from a to b bent towards the shoulder s by rho, as points along it. */
+internal fun conicPoints(a: Pair<Double, Double>, s: Pair<Double, Double>, b: Pair<Double, Double>, rho: Double): List<Pair<Double, Double>> {
+    val w = rho.coerceIn(0.01, 0.99).let { it / (1 - it) }
+    return (0..48).map { i ->
+        val t = i / 48.0; val u = 1 - t
+        val d = u * u + 2 * t * u * w + t * t
+        ((u * u * a.first + 2 * t * u * w * s.first + t * t * b.first) / d) to ((u * u * a.second + 2 * t * u * w * s.second + t * t * b.second) / d)
+    }
+}
+
+/** The end of an ellipse's second axis: square to the first (centre to (ax, ay)), as far out as (u, v) is from the first axis. */
+internal fun ellipseMinor(cx: Double, cy: Double, ax: Double, ay: Double, u: Double, v: Double): Pair<Double, Double>? {
+    val len = hypot(ax - cx, ay - cy)
+    if (len < 1e-9) return null
+    val nx = -(ay - cy) / len; val ny = (ax - cx) / len
+    val d = (u - cx) * nx + (v - cy) * ny
+    if (abs(d) < 1e-6) return null
+    return (cx + nx * d) to (cy + ny * d)
 }
 
 /** A closed polygon as segments. */

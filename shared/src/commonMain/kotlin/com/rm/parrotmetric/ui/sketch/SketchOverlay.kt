@@ -240,7 +240,7 @@ private fun DrawScope.drawSketch(editor: SketchEditor, proj: PlaneProjection, de
     }
 
     // A spline being drawn, through the points placed so far.
-    if (editor.tool == SketchTool.Spline && editor.pending.size >= 2 && editor.preview == null) {
+    if (editor.tool == SketchTool.Spline && editor.pending.size >= 2 && editor.preview == null && editor.splineStyle == SplineStyle.Through) {
         drawPolyline(editor.pending.map { screen(it, editor, proj) }, free.copy(alpha = 0.9f), line, PathEffect.dashPathEffect(floatArrayOf(7 * dp, 6 * dp)))
     }
 
@@ -257,6 +257,7 @@ private fun DrawScope.drawSketch(editor: SketchEditor, proj: PlaneProjection, de
                 if (g.faint) rubber.copy(alpha = 0.4f) else rubber, line, dash,
             )
             is Ghost.Bow -> drawPolyline(arcPoints(g.cx, g.cy, g.r, g.a0, g.a1).map { proj.toScreen(it.first, it.second) }, rubber, line, dash)
+            is Ghost.Path -> drawPolyline(g.points.map { proj.toScreen(it.first, it.second) }, rubber, line, dash)
         }
         drawCircle(free, 4.5f * dp * (if (magnified) 0.4f else 1f), end)
         // Its size as it's drawn, beside the pointer.
@@ -423,7 +424,13 @@ private fun DrawScope.drawCurve(c: Curve, editor: SketchEditor, proj: PlaneProje
             while (a1 <= a0) a1 += 2 * PI
             drawPolyline(arcPoints(cx, cy, s.radius(c), a0, a1).map { proj.toScreen(it.first, it.second) }, colour, width, effect)
         }
-        is Spline -> drawPolyline(s.sampleSpline(c).map { proj.toScreen(it.first, it.second) }, colour, width, effect)
+        is Spline -> {
+            drawPolyline(s.sampleSpline(c).map { proj.toScreen(it.first, it.second) }, colour, width, effect)
+            // What pulls a control spline or conic, faintly.
+            if (c.shape == Spline.Shape.Control || c.shape == Spline.Shape.Conic) {
+                drawPolyline(c.through.map { screen(it, editor, proj) }, colour.copy(alpha = colour.alpha * 0.35f), width * 0.6f, PathEffect.dashPathEffect(floatArrayOf(width * 3, width * 3)))
+            }
+        }
     }
 }
 
@@ -460,7 +467,7 @@ private fun annotations(editor: SketchEditor, proj: PlaneProjection, dp: Float):
     for (c in s.constraints) {
         val item = SketchItem.K(c)
         when (c) {
-            is Constraint.ArcRadius -> {}
+            is Constraint.ArcRadius, is Constraint.EllipseAxes -> {}
             is Constraint.Length -> {
                 val a = screen(c.line.a, editor, proj); val b = screen(c.line.b, editor, proj)
                 out += Annotation(item, (a + b) / 2f + outward(a, b) * (22 * dp), c.expression ?: format(c.value), c)

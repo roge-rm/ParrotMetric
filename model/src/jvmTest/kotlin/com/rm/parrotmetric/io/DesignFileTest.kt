@@ -27,6 +27,8 @@ class DesignFileTest {
         val a = s.addPoint(0.0, 0.0); val b = s.addPoint(40.0, 0.0); val c = s.addPoint(40.0, 20.0)
         val l1 = s.addLine(a, b); val l2 = s.addLine(b, c); val l3 = s.addLine(c, a, construction = true)
         s.addArc(s.addPoint(10.0, 10.0), s.addPoint(15.0, 10.0), s.addPoint(10.0, 15.0))
+        val el = s.addSpline(listOf(s.addPoint(30.0, 30.0), s.addPoint(40.0, 30.0), s.addPoint(30.0, 35.0)), shape = com.rm.parrotmetric.sketch.Spline.Shape.Ellipse)
+        val co = s.addSpline(listOf(a, s.addPoint(5.0, 5.0), b), shape = com.rm.parrotmetric.sketch.Spline.Shape.Conic, rho = 0.7)
         s.add(Constraint.Horizontal(l1))
         s.add(Constraint.Length(l2, 20.0))
         val sketch = SketchFeature(d.newId(), "Sketch \"1\"", PlaneRef.Fixed(SketchPlane.Front), s)
@@ -47,8 +49,10 @@ class DesignFileTest {
         for (i in 0 until 4) assertEquals(d.features[i].key(), back.features[i].key(), "feature $i")
         assertContentEquals(byteArrayOf(1, 2, 3, -1), (back.features[4] as ImportFeature).data)
         val s2 = (back.features[0] as SketchFeature).sketch
-        // Two saved, and the arc's own.
-        assertEquals(3, s2.constraints.size)
+        // Two saved, and the arc's and ellipse's own.
+        assertEquals(4, s2.constraints.size)
+        assertEquals(com.rm.parrotmetric.sketch.Spline.Shape.Ellipse, (s2.curve(el.id) as com.rm.parrotmetric.sketch.Spline).shape)
+        assertEquals(0.7, (s2.curve(co.id) as com.rm.parrotmetric.sketch.Spline).rho)
         assertTrue(s2.curve(l3.id)!!.construction)
         // New things in a loaded design get fresh ids.
         assertEquals(6, back.newId())
