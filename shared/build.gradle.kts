@@ -1,5 +1,6 @@
-// The screens and the input, shared by every platform. Android only for now;
-// desktop and browser targets come later.
+// The screens and the input, shared by every platform, and the app around
+// them (app/). Android and desktop reach the core through the same JNI object,
+// whose source is in src/jvmShared and compiled into both.
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.android.kotlin.multiplatform.library)
@@ -14,7 +15,11 @@ kotlin {
         minSdk = 27
     }
 
+    jvm("desktop")
+
     sourceSets {
+        androidMain { kotlin.srcDir("src/jvmShared/kotlin") }
+        getByName("desktopMain") { kotlin.srcDir("src/jvmShared/kotlin") }
         commonMain.dependencies {
             api(project(":model"))
             api(libs.jb.compose.runtime)

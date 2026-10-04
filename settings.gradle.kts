@@ -29,3 +29,5 @@ include(":model")
 include(":shared")
 // The Android app, with the C++ core (core/) in its JNI library.
 include(":app")
+// The desktop app for Linux and Windows, with the same core built for each.
+include(":desktop")

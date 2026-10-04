@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(parrotmetric_core CXX)
+project(parrotmetric_core C CXX)
 
 # The modelling core: no platform code. The app links it into its JNI library,
 # and the host build runs the tests:
@@ -11,9 +11,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 option(PM_TESTS "Build the host tests" OFF)
+# Which OCCT install: the Android ABI, or a name the desktop and browser builds pass in.
 if(ANDROID)
     set(PM_OCCT_TARGET ${ANDROID_ABI})
-else()
+elseif(NOT PM_OCCT_TARGET)
     set(PM_OCCT_TARGET host)
 endif()
 set(PM_OCCT_DIR ${CMAKE_CURRENT_LIST_DIR}/build/occt/${PM_OCCT_TARGET} CACHE PATH "OCCT install to link against")
@@ -46,14 +47,31 @@ add_library(pmcore STATIC
         src/model/operations.cpp
         src/model/store.cpp
         src/solid/solid.cpp)
-# The renderer needs OpenGL ES 3, which only the Android build has for now.
+# The renderer: OpenGL ES 3 on Android, WebGL 2 in the browser, and on desktop
+# whatever GL the machine has, loaded at run time (render/gl.h).
+target_sources(pmcore PRIVATE src/render/renderer.cpp src/render/gl_loader.cpp)
 if(ANDROID)
-    target_sources(pmcore PRIVATE src/render/renderer.cpp)
     target_link_libraries(pmcore PUBLIC GLESv3)
+elseif(NOT EMSCRIPTEN)
+    target_compile_definitions(pmcore PUBLIC PM_GL_LOADED EGL_NO_X11)
+    target_include_directories(pmcore SYSTEM PUBLIC ${third_party}/khronos)
+endif()
+
+# zlib: Android's own, otherwise built in from third_party/zlib.
+if(ANDROID)
+    set(PM_ZLIB z)
+else()
+    file(GLOB zlib_sources ${third_party}/zlib/*.c)
+    add_library(pm_zlib STATIC ${zlib_sources})
+    target_include_directories(pm_zlib PUBLIC ${third_party}/zlib)
+    if(NOT WIN32)
+        target_compile_definitions(pm_zlib PRIVATE HAVE_UNISTD_H)
+    endif()
+    set(PM_ZLIB pm_zlib)
 endif()
 target_include_directories(pmcore PUBLIC src)
 target_include_directories(pmcore SYSTEM PUBLIC ${OpenCASCADE_INCLUDE_DIR} ${third_party}/eigen)
-target_link_libraries(pmcore PUBLIC manifold z
+target_link_libraries(pmcore PUBLIC manifold ${PM_ZLIB}
         TKDESTEP TKDEIGES TKXSBase TKDE
         TKOffset TKFillet TKBool TKBO TKPrim TKMesh TKShHealing TKTopAlgo TKGeomAlgo
         TKBRep TKGeomBase TKG3d TKG2d TKMath TKernel)

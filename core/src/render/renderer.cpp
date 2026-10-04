@@ -1,12 +1,17 @@
 #include "render/renderer.h"
 
-#include <GLES3/gl3.h>
+#include "render/gl.h"
 
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <string>
 
 namespace pm {
+
+uint32_t targetFramebuffer = 0;
+bool desktopGl = false;
+
 namespace {
 
 constexpr float kMoveSeconds = 0.35f;
@@ -134,7 +139,11 @@ void main() {
 
 uint32_t compile(GLenum type, const char* source) {
     GLuint s = glCreateShader(type);
-    glShaderSource(s, 1, &source, nullptr);
+    // Desktop OpenGL takes the same shaders under its own version line.
+    std::string text = source;
+    if (desktopGl) text.replace(0, text.find('\n'), "#version 330 core");
+    const char* p = text.c_str();
+    glShaderSource(s, 1, &p, nullptr);
     glCompileShader(s);
     return s;
 }
@@ -498,7 +507,7 @@ bool Renderer::draw() {
     if (bodiesDirty_) upload();
     if (selectionDirty_) uploadSelection();
     animate();
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glBindFramebuffer(GL_FRAMEBUFFER, targetFramebuffer);
     glViewport(0, 0, width_, height_);
     glClearColor(0.102f, 0.125f, 0.122f, 1);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -544,7 +553,7 @@ Pick Renderer::pick(float x, float y) {
     uint8_t px[4] = {0, 0, 0, 0};
     int ix = std::clamp(int(x), 0, width_ - 1), iy = std::clamp(height_ - 1 - int(y), 0, height_ - 1);
     glReadPixels(ix, iy, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, px);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glBindFramebuffer(GL_FRAMEBUFFER, targetFramebuffer);
 
     uint32_t v = uint32_t(px[0]) | uint32_t(px[1]) << 8 | uint32_t(px[2]) << 16;
     if (v == 0) return {};

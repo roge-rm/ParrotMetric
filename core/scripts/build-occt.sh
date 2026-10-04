@@ -1,15 +1,17 @@
 #!/bin/sh
 # Builds the parts of OpenCASCADE we use as static libraries and installs them
-# in core/build/occt/<target>. Target is "host" or an Android ABI (arm64-v8a,
-# x86_64, armeabi-v7a). Does nothing if that install is already there and the
-# submodule hasn't moved.
+# in core/build/occt/<target>. Target is "host", an Android ABI (arm64-v8a,
+# x86_64, armeabi-v7a, x86) with the NDK's path, or any other name with a
+# CMake toolchain file, for the desktop and browser builds. Does nothing if
+# that install is already there and the submodule hasn't moved.
 #   core/scripts/build-occt.sh host
 #   core/scripts/build-occt.sh arm64-v8a /path/to/ndk
+#   core/scripts/build-occt.sh windows-x64 /path/to/toolchain.cmake
 set -eu
 # The SDK's CMake and Ninja, the same ones the app build uses.
 PATH=${ANDROID_HOME:-$HOME/Android/Sdk}/cmake/4.1.2/bin:$PATH
 target=$1
-ndk=${2:-}
+second=${2:-}
 here=$(cd "$(dirname "$0")/.." && pwd)
 src=$here/../third_party/occt
 out=$here/build/occt/$target
@@ -18,7 +20,7 @@ work=$here/build/occt-work/$target
 # The file formats pull in its viewer toolkits too, built here without FreeType or
 # OpenGL, and the linker drops what we don't call.
 toolkits="TKMesh TKFillet TKOffset TKBool TKPrim TKShHealing TKHLR TKDESTEP TKDEIGES TKDEOBJ TKDEPLY TKDEVRML"
-rev="$(git -C "$src" rev-parse HEAD) $toolkits"
+rev="$(git -C "$src" rev-parse HEAD 2>/dev/null || cat "$src/.occt-rev" 2>/dev/null || echo unknown) $toolkits"
 
 if [ -f "$out/.rev" ] && [ "$(cat "$out/.rev")" = "$rev" ]; then
     exit 0
@@ -45,12 +47,19 @@ set -- -G Ninja -S "$src" -B "$work" \
     -DCMAKE_CXX_FLAGS=-ffunction-sections\ -fdata-sections \
     -DCMAKE_POSITION_INDEPENDENT_CODE=ON
 
-if [ "$target" != host ]; then
-    set -- "$@" \
-        -DCMAKE_TOOLCHAIN_FILE="$ndk/build/cmake/android.toolchain.cmake" \
+case "$second" in
+    "") ;;
+    *.cmake) set -- "$@" -DCMAKE_TOOLCHAIN_FILE="$second" ;;
+    *) set -- "$@" \
+        -DCMAKE_TOOLCHAIN_FILE="$second/build/cmake/android.toolchain.cmake" \
         -DANDROID_ABI="$target" \
         -DANDROID_PLATFORM=android-27 \
-        -DANDROID_STL=c++_shared
+        -DANDROID_STL=c++_shared ;;
+esac
+# Extra settings for a target, such as the AppImage's static C++ runtime.
+if [ -n "${OCCT_CMAKE_ARGS:-}" ]; then
+    # shellcheck disable=SC2086
+    set -- "$@" $OCCT_CMAKE_ARGS
 fi
 
 rm -rf "$work" "$out"

@@ -14,3 +14,7 @@
 	path = third_party/manifold
 	url = https://github.com/elalish/manifold.git
 	shallow = true
+[submodule "third_party/zlib"]
+	path = third_party/zlib
+	url = https://github.com/madler/zlib.git
+	shallow = true

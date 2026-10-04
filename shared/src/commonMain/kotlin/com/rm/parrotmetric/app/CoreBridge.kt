@@ -1,4 +1,4 @@
-package com.rm.parrotmetric
+package com.rm.parrotmetric.app
 
 import com.rm.parrotmetric.design.Kernel
 import com.rm.parrotmetric.design.KernelException
@@ -23,9 +23,9 @@ private class Curves(curves: List<ProfileCurve>) {
 private fun SketchPlane.numbers() = doubleArrayOf(origin.x, origin.y, origin.z, x.x, x.y, x.z, y.x, y.y, y.z)
 
 /** Finds regions with the C++ core. */
-val coreRegionFinder = RegionFinder { curves ->
+fun coreRegionFinder(core: NativeCore) = RegionFinder { curves ->
     val c = Curves(curves)
-    val d = Core.findRegions(c.kinds, c.ids, c.nums)
+    val d = core.findRegions(c.kinds, c.ids, c.nums)
     var i = 0
     fun next() = d[i++]
     List(next().toInt()) {
@@ -42,7 +42,7 @@ val coreRegionFinder = RegionFinder { curves ->
 }
 
 /** The design's geometry, done by the C++ core. */
-object CoreKernel : Kernel {
+class CoreKernel(private val core: NativeCore) : Kernel {
     private inline fun <T> call(block: () -> T): T = try {
         block()
     } catch (e: RuntimeException) {
@@ -58,39 +58,39 @@ object CoreKernel : Kernel {
     override fun extrude(id: Int, plane: SketchPlane, curves: List<ProfileCurve>, regions: List<RegionRef>, forward: Double, back: Double): Long {
         val c = Curves(curves)
         val p = Picks(regions)
-        return call { Core.extrude(id, plane.numbers(), c.kinds, c.ids, c.nums, p.counts, p.ids, p.points, forward, back) }
+        return call { core.extrude(id, plane.numbers(), c.kinds, c.ids, c.nums, p.counts, p.ids, p.points, forward, back) }
     }
 
     override fun revolve(id: Int, plane: SketchPlane, curves: List<ProfileCurve>, regions: List<RegionRef>, ax: Double, ay: Double, dx: Double, dy: Double, angle: Double): Long {
         val c = Curves(curves)
         val p = Picks(regions)
-        return call { Core.revolve(id, plane.numbers(), c.kinds, c.ids, c.nums, p.counts, p.ids, p.points, ax, ay, dx, dy, angle) }
+        return call { core.revolve(id, plane.numbers(), c.kinds, c.ids, c.nums, p.counts, p.ids, p.points, ax, ay, dx, dy, angle) }
     }
 
     override fun combine(id: Int, target: Long, tool: Long, how: Operation): Long =
-        call { Core.combine(id, target, tool, when (how) { Operation.Cut -> 1; Operation.Intersect -> 2; else -> 0 }) }
+        call { core.combine(id, target, tool, when (how) { Operation.Cut -> 1; Operation.Intersect -> 2; else -> 0 }) }
 
-    override fun fillet(id: Int, body: Long, edges: List<String>, radius: Double) = call { Core.fillet(id, body, edges.toTypedArray(), radius) }
-    override fun chamfer(id: Int, body: Long, edges: List<String>, distance: Double) = call { Core.chamfer(id, body, edges.toTypedArray(), distance) }
-    override fun overlaps(a: Long, b: Long) = call { Core.overlaps(a, b) }
-    override fun facePlane(body: Long, face: String): DoubleArray? = call { Core.facePlane(body, face) }
-    override fun faceNames(body: Long) = call { Core.faceNames(body).toList() }
-    override fun import(id: Int, data: ByteArray, format: Int) = call { Core.importBody(id, data, format) }
-    override fun shell(id: Int, body: Long, open: List<String>, thickness: Double) = call { Core.shell(id, body, open.toTypedArray(), thickness) }
-    override fun draft(id: Int, body: Long, faces: List<String>, neutral: String, angle: Double) = call { Core.draft(id, body, faces.toTypedArray(), neutral, angle) }
-    override fun transform(id: Int, body: Long, m: DoubleArray, tag: String) = call { Core.transform(id, body, m, tag) }
+    override fun fillet(id: Int, body: Long, edges: List<String>, radius: Double) = call { core.fillet(id, body, edges.toTypedArray(), radius) }
+    override fun chamfer(id: Int, body: Long, edges: List<String>, distance: Double) = call { core.chamfer(id, body, edges.toTypedArray(), distance) }
+    override fun overlaps(a: Long, b: Long) = call { core.overlaps(a, b) }
+    override fun facePlane(body: Long, face: String): DoubleArray? = call { core.facePlane(body, face) }
+    override fun faceNames(body: Long) = call { core.faceNames(body).toList() }
+    override fun import(id: Int, data: ByteArray, format: Int) = call { core.importBody(id, data, format) }
+    override fun shell(id: Int, body: Long, open: List<String>, thickness: Double) = call { core.shell(id, body, open.toTypedArray(), thickness) }
+    override fun draft(id: Int, body: Long, faces: List<String>, neutral: String, angle: Double) = call { core.draft(id, body, faces.toTypedArray(), neutral, angle) }
+    override fun transform(id: Int, body: Long, m: DoubleArray, tag: String) = call { core.transform(id, body, m, tag) }
     override fun split(id: Int, body: Long, origin: com.rm.parrotmetric.sketch.Vec3, normal: com.rm.parrotmetric.sketch.Vec3) =
-        call { Core.split(id, body, doubleArrayOf(origin.x, origin.y, origin.z, normal.x, normal.y, normal.z)).toList() }
+        call { core.split(id, body, doubleArrayOf(origin.x, origin.y, origin.z, normal.x, normal.y, normal.z)).toList() }
     override fun holeTool(id: Int, plane: SketchPlane, at: List<Pair<Double, Double>>, diameter: Double, depth: Double, kind: Int, topDiameter: Double, topDepth: Double) =
-        call { Core.holeTool(id, plane.numbers(), at.flatMap { listOf(it.first, it.second) }.toDoubleArray(), diameter, depth, kind, topDiameter, topDepth) }
-    override fun convertToSolid(id: Int, body: Long) = call { Core.convertToSolid(id, body) }
-    override fun centre(body: Long) = call { Core.bodyCentre(body).let { Vec3(it[0], it[1], it[2]) } }
-    override fun retain(body: Long) = Core.retain(body)
-    override fun release(body: Long) = Core.release(body)
+        call { core.holeTool(id, plane.numbers(), at.flatMap { listOf(it.first, it.second) }.toDoubleArray(), diameter, depth, kind, topDiameter, topDepth) }
+    override fun convertToSolid(id: Int, body: Long) = call { core.convertToSolid(id, body) }
+    override fun centre(body: Long) = call { core.bodyCentre(body).let { Vec3(it[0], it[1], it[2]) } }
+    override fun retain(body: Long) = core.retain(body)
+    override fun release(body: Long) = core.release(body)
 }
 
 /** The 3D view's side of the design editor. [gl] runs a call on the GL thread. */
-class CoreViewport(private val gl: (() -> Unit) -> Unit) : Viewport {
+class CoreViewport(private val core: NativeCore, private val gl: (() -> Unit) -> Unit) : Viewport {
     override fun show(
         bodies: List<Long>, sketches: List<Pair<SketchPlane, List<ProfileCurve>>>,
         planes: List<SketchPlane>, axes: List<Pair<Vec3, Vec3>>, refit: Boolean,
@@ -100,22 +100,22 @@ class CoreViewport(private val gl: (() -> Unit) -> Unit) : Viewport {
         val sketchPlanes = sketches.flatMap { it.first.numbers().asList() }.toDoubleArray()
         val construction = planes.flatMap { it.numbers().asList() }.toDoubleArray()
         val axisNumbers = axes.flatMap { (p, d) -> listOf(p.x, p.y, p.z, d.x, d.y, d.z) }.toDoubleArray()
-        Core.show(bodies.toLongArray(), sketchPlanes, IntArray(sketches.size) { sketches[it].second.size }, c.kinds, c.ids, c.nums, construction, axisNumbers, refit)
+        core.show(bodies.toLongArray(), sketchPlanes, IntArray(sketches.size) { sketches[it].second.size }, c.kinds, c.ids, c.nums, construction, axisNumbers, refit)
         gl {}
     }
 
-    override fun selectedPlanes() = Core.selectedPlanes().toList()
-    override fun measure() = Core.measure().toList()
+    override fun selectedPlanes() = core.selectedPlanes().toList()
+    override fun measure() = core.measure().toList()
     override fun setSection(on: Boolean, origin: Vec3, normal: Vec3) {
-        Core.setSection(on, origin.x, origin.y, origin.z, normal.x, normal.y, normal.z)
+        core.setSection(on, origin.x, origin.y, origin.z, normal.x, normal.y, normal.z)
         gl {}
     }
 
-    override fun selectedMeshPlane() = Core.selectedMeshPlane()?.let { Vec3(it[0], it[1], it[2]) to Vec3(it[3], it[4], it[5]) }
+    override fun selectedMeshPlane() = core.selectedMeshPlane()?.let { Vec3(it[0], it[1], it[2]) to Vec3(it[3], it[4], it[5]) }
 
-    override fun section(bodies: List<Long>, plane: SketchPlane): List<ProfileCurve> = unpack(Core.section(bodies.toLongArray(), plane.numbers()))
+    override fun section(bodies: List<Long>, plane: SketchPlane): List<ProfileCurve> = unpack(core.section(bodies.toLongArray(), plane.numbers()))
 
-    override fun faceOutline(body: Long, face: String, plane: SketchPlane): List<ProfileCurve> = unpack(Core.faceOutline(body, face, plane.numbers()))
+    override fun faceOutline(body: Long, face: String, plane: SketchPlane): List<ProfileCurve> = unpack(core.faceOutline(body, face, plane.numbers()))
 
     private fun unpack(d: DoubleArray): List<ProfileCurve> {
         return List(d[0].toInt()) { i ->
@@ -126,24 +126,24 @@ class CoreViewport(private val gl: (() -> Unit) -> Unit) : Viewport {
         }
     }
 
-    override fun selectedEdges() = Core.selectedEdges().toList()
-    override fun selectedFaces() = Core.selectedFaces().map { s -> s.substringBefore('\t').toInt() to s.substringAfter('\t') }
-    override fun selectedRegions() = Core.selectedRegions().let { r -> List(r.size / 2) { r[2 * it] to r[2 * it + 1] } }
+    override fun selectedEdges() = core.selectedEdges().toList()
+    override fun selectedFaces() = core.selectedFaces().map { s -> s.substringBefore('\t').toInt() to s.substringAfter('\t') }
+    override fun selectedRegions() = core.selectedRegions().let { r -> List(r.size / 2) { r[2 * it] to r[2 * it + 1] } }
 
     override fun select(edges: List<String>, regions: List<Pair<Int, Int>>, faces: List<String>) {
-        Core.select(edges.toTypedArray(), regions.flatMap { listOf(it.first, it.second) }.toIntArray(), faces.toTypedArray())
+        core.select(edges.toTypedArray(), regions.flatMap { listOf(it.first, it.second) }.toIntArray(), faces.toTypedArray())
         gl {}
     }
 
     override fun clearSelection() {
-        Core.clearSelection()
+        core.clearSelection()
         gl {}
     }
 
-    override fun viewFrom(yaw: Float, pitch: Float) = gl { Core.viewFrom(yaw, pitch) }
-    override fun fit() = gl { Core.fit() }
-    override fun isMesh(body: Long) = Core.isMesh(body)
-    override fun triangles() = Core.shownTriangles()
+    override fun viewFrom(yaw: Float, pitch: Float) = gl { core.viewFrom(yaw, pitch) }
+    override fun fit() = gl { core.fit() }
+    override fun isMesh(body: Long) = core.isMesh(body)
+    override fun triangles() = core.shownTriangles()
 }
 
 /** The camera's yaw and pitch for looking straight at a plane, with its x to the right where the plane allows. */

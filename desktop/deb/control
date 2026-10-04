@@ -1,0 +1,16 @@
+Package: parrotmetric
+Version: @VERSION@
+Architecture: @ARCH@
+Maintainer: dan <14335001+roge-rm@users.noreply.github.com>
+Installed-Size: @SIZE@
+Depends: openjdk-21-jre | java21-runtime, libegl1, libgles2
+Section: graphics
+Priority: optional
+Homepage: https://github.com/roge-rm/ParrotMetric
+Description: parametric 3D modeller for 3D printing
+ Draw sketches with constraints and dimensions, then extrude, revolve,
+ fillet, chamfer, shell and cut them into parts. Every step stays in the
+ history, so changing an early one updates everything after it.
+ .
+ Exports STL, 3MF, OBJ, STEP and IGES, and imports and repairs STL, 3MF and
+ OBJ meshes as well as STEP and IGES solids.

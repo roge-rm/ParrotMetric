@@ -1,9 +1,14 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
 }
 
-val abis = listOf("arm64-v8a", "x86_64")
+/** The 32-bit build, for tablets like the Fire HD 8: see `release` below. */
+val arm32 = project.hasProperty("arm32")
+// The 32-bit build includes x86 so it runs on an x86 emulator.
+val abis = if (arm32) listOf("armeabi-v7a", "x86") else listOf("arm64-v8a", "x86_64")
 
 android {
     namespace = "com.rm.parrotmetric"
@@ -15,8 +20,14 @@ android {
         applicationId = "com.rm.parrotmetric"
         minSdk = 27
         targetSdk = 37
-        versionCode = 1
-        versionName = "0.0.1"
+        // Two APKs per release: 64-bit, and with -Parm32 a 32-bit one. A store
+        // installs the highest versionCode a device can run, and most 64-bit
+        // phones also run 32-bit code, so the 64-bit APK must be higher: the
+        // release number times ten, plus 2 for 64-bit and 1 for 32-bit.
+        // Bump [release], not the code.
+        val release = 1
+        versionCode = release * 10 + if (arm32) 1 else 2
+        versionName = "0.1.0"
         ndk { abiFilters += abis }
         externalNativeBuild {
             cmake {
@@ -30,6 +41,43 @@ android {
         cmake {
             path = file("src/main/cpp/CMakeLists.txt")
             version = "4.1.2"
+        }
+    }
+    /**
+     * Release signing, from a properties file in the sibling Keys/ folder,
+     * outside the repository. Without it the release build comes out unsigned.
+     * Losing the keystore means installed copies can never be updated, so keep
+     * it backed up.
+     */
+    val keystoreProps = rootProject.file("../Keys/parrotmetric-keystore.properties")
+    val signing: Properties? = if (keystoreProps.exists()) {
+        Properties().also { p -> keystoreProps.inputStream().use { p.load(it) } }
+    } else {
+        null
+    }
+    signingConfigs {
+        if (signing != null) {
+            create("release") {
+                storeFile = file(signing.getProperty("storeFile"))
+                storePassword = signing.getProperty("storePassword")
+                keyAlias = signing.getProperty("keyAlias")
+                keyPassword = signing.getProperty("keyPassword")
+                enableV1Signing = true
+                enableV2Signing = true
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            // Shrunk and optimised. What must be kept is in proguard-rules.pro.
+            optimization {
+                enable = true
+                keepRules {
+                    files.add(file("proguard-rules.pro"))
+                }
+            }
+            if (signing != null) signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {

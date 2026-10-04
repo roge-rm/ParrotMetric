@@ -1,0 +1,8 @@
+#!/bin/sh
+# ParrotMetric, from its Debian package: the app's jars on the system's Java,
+# with the core's native library beside them.
+exec java \
+    -Djava.library.path=/usr/lib/parrotmetric/native \
+    --enable-native-access=ALL-UNNAMED \
+    -cp '/usr/lib/parrotmetric/lib/*' \
+    com.rm.parrotmetric.desktop.MainKt "$@"

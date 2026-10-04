@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=ParrotMetric
+GenericName=3D modeller
+Comment=Parametric 3D modelling for 3D printing
+Exec=parrotmetric %f
+Icon=parrotmetric
+Terminal=false
+Categories=Graphics;3DGraphics;Engineering;
+Keywords=CAD;3D printing;STL;STEP;modelling;sketch;
+StartupWMClass=com-rm-parrotmetric-desktop-MainKt

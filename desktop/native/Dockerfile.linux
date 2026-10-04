@@ -1,0 +1,10 @@
+# The toolchain for the Linux builds: Ubuntu 22.04, so the core links against
+# glibc 2.35 and runs on it and anything newer (Debian Trixie, Raspberry Pi OS,
+# Ubuntu 22.04 and 24.04, Fedora, Arch, the Steam Deck). The C++ runtime is
+# linked in, so glibc is the only system library it needs. One build per
+# architecture serves both the Debian package and the AppImage. Builds for
+# x86-64 natively and for 64-bit ARM with the cross compiler, running no ARM code.
+FROM ubuntu:22.04
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        g++ gcc g++-aarch64-linux-gnu gcc-aarch64-linux-gnu cmake ninja-build ccache openjdk-17-jdk-headless \
+    && rm -rf /var/lib/apt/lists/*
