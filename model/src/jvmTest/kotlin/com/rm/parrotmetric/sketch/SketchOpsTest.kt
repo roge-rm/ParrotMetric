@@ -106,6 +106,8 @@ class SketchOpsTest {
         val arc = s.curves.filterIsInstance<Arc>().single()
         near(5.0, s.radius(arc))
         near(5.0, s.x(arc.centre)); near(5.0, s.y(arc.centre))
+        // Both joins hold: they're kept, not dropped as already set.
+        assertEquals(2, s.constraints.count { it is Constraint.TangentJoin })
         // The lines now stop where the arc starts.
         val lines = s.curves.filterIsInstance<Line>()
         lines.forEach { near(15.0, s.length(it)) }

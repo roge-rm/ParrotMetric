@@ -104,6 +104,13 @@ sealed class Constraint {
         )
     }
 
+    /** Two lines on one straight line: both ends of the second on the first, carried on. */
+    class Collinear(val l1: Line, val l2: Line) : Constraint() {
+        override fun points() = l1.points() + l2.points()
+        override fun curves() = listOf(l1, l2)
+        override fun residuals(v: (Int) -> Double) = doubleArrayOf(signedDistance(l2.a, l1, v), signedDistance(l2.b, l1, v))
+    }
+
     /** A point on a line, or on the infinite line through it. */
     class OnLine(val p: Point, val line: Line) : Constraint() {
         override fun points() = listOf(p) + line.points()
@@ -137,6 +144,30 @@ sealed class Constraint {
             val d = hypot(a.px(v) - b.px(v), a.py(v) - b.py(v))
             val r1 = size(c1, v); val r2 = size(c2, v)
             return doubleArrayOf(if (inside) d - abs(r1 - r2) else d - (r1 + r2))
+        }
+    }
+
+    /**
+     * Two curves meeting smoothly at a point they share, as a rounded corner
+     * does: a line square to the radius there, or two arcs with their
+     * centres in line with it. The tangent constraints above can't hold
+     * this, as at the shared point they don't change to first order.
+     */
+    class TangentJoin(val c1: Curve, val c2: Curve, val at: Point) : Constraint() {
+        override fun points() = c1.points() + c2.points()
+        override fun curves() = listOf(c1, c2)
+        override fun residuals(v: (Int) -> Double): DoubleArray {
+            val line = c1 as? Line ?: c2 as? Line
+            if (line != null) {
+                val round = if (line === c1) c2 else c1
+                val c = centre(round)
+                val (dx, dy) = dir(line, v)
+                return doubleArrayOf((at.px(v) - c.px(v)) * dx + (at.py(v) - c.py(v)) * dy)
+            }
+            val a = centre(c1); val b = centre(c2)
+            val ax = at.px(v) - a.px(v); val ay = at.py(v) - a.py(v)
+            val bx = at.px(v) - b.px(v); val by = at.py(v) - b.py(v)
+            return doubleArrayOf((ax * by - ay * bx) / max(hypot(ax, ay), 1e-12))
         }
     }
 

@@ -188,14 +188,7 @@ private fun ToolGrid(editor: SketchEditor, expanded: Boolean) {
                 Row { ToolRow(editor, more) }
                 if (editor.tool == SketchTool.Polygon) PolygonSides(editor)
             }
-            if (editor.tool == SketchTool.Rectangle) ChoiceRow(listOf("Corner to corner", "From the centre"), if (editor.rectangleFromCentre) 1 else 0) {
-                editor.endDrawing()
-                editor.rectangleFromCentre = it == 1
-            }
-            if (editor.tool == SketchTool.Arc) ChoiceRow(listOf("Centre, then ends", "Through three points"), if (editor.arcThroughPoints) 1 else 0) {
-                editor.endDrawing()
-                editor.arcThroughPoints = it == 1
-            }
+            StyleRow(editor)
             if (expanded && editor.tool == SketchTool.Polygon) PolygonSides(editor)
             if (expanded) Row { ToolRow(editor, main + more) } else Row {
                 ToolRow(editor, main)
@@ -214,6 +207,29 @@ private fun ToolGrid(editor: SketchEditor, expanded: Boolean) {
                 }
             }
         }
+    }
+}
+
+/** How the tool in hand draws, as choices above the tools. Changing it drops a half-drawn shape. */
+@Composable
+private fun StyleRow(editor: SketchEditor) {
+    when (editor.tool) {
+        SketchTool.Rectangle -> ChoiceRow(RectangleStyle.entries.map { it.label }, editor.rectangleStyle.ordinal) {
+            editor.endDrawing(); editor.rectangleStyle = RectangleStyle.entries[it]
+        }
+        SketchTool.Circle -> ChoiceRow(CircleStyle.entries.map { it.label }, editor.circleStyle.ordinal) {
+            editor.endDrawing(); editor.circleStyle = CircleStyle.entries[it]
+        }
+        SketchTool.Arc -> ChoiceRow(ArcStyle.entries.map { it.label }, editor.arcStyle.ordinal) {
+            editor.endDrawing(); editor.arcStyle = ArcStyle.entries[it]
+        }
+        SketchTool.Polygon -> ChoiceRow(PolygonStyle.entries.map { it.label }, editor.polygonStyle.ordinal) {
+            editor.endDrawing(); editor.polygonStyle = PolygonStyle.entries[it]
+        }
+        SketchTool.Slot -> ChoiceRow(SlotStyle.entries.map { it.label }, editor.slotStyle.ordinal) {
+            editor.endDrawing(); editor.slotStyle = SlotStyle.entries[it]
+        }
+        else -> {}
     }
 }
 

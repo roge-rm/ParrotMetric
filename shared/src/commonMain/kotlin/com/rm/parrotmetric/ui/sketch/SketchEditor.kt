@@ -298,11 +298,12 @@ class SketchEditor(
     /** How many sides the Polygon tool draws. */
     var polygonSides by mutableIntStateOf(6)
 
-    /** Rectangle from its centre out to a corner, in place of corner to corner. */
-    var rectangleFromCentre by mutableStateOf(false)
-
-    /** Arc through three points (its ends, then one on it) in place of centre, start and end. */
-    var arcThroughPoints by mutableStateOf(false)
+    // How each tool draws; changing one drops a half-drawn shape.
+    var rectangleStyle by mutableStateOf(RectangleStyle.Corners)
+    var circleStyle by mutableStateOf(CircleStyle.Centre)
+    var arcStyle by mutableStateOf(ArcStyle.CentreEnds)
+    var polygonStyle by mutableStateOf(PolygonStyle.Inside)
+    var slotStyle by mutableStateOf(SlotStyle.Centres)
 
 
     // Sizes typed while drawing.
@@ -323,15 +324,23 @@ class SketchEditor(
         if (pending.isEmpty()) return null
         return when (tool) {
             SketchTool.Line -> listOf("Length" to false, "Angle" to true)
-            SketchTool.Rectangle -> listOf("Width" to false, "Height" to false)
-            SketchTool.Circle -> listOf("Diameter" to false)
-            SketchTool.Polygon -> listOf("Radius" to false)
-            SketchTool.Arc -> when {
-                arcThroughPoints -> if (pending.size == 1) listOf("Length" to false) else null
-                pending.size == 1 -> listOf("Radius" to false)
-                else -> listOf("Angle" to true)
+            SketchTool.Rectangle -> when {
+                rectangleStyle != RectangleStyle.ThreePoints -> listOf("Width" to false, "Height" to false)
+                pending.size == 1 -> listOf("Length" to false, "Angle" to true)
+                else -> listOf("Width" to false)
             }
-            SketchTool.Slot -> if (pending.size == 1) listOf("Length" to false) else listOf("Width" to false)
+            SketchTool.Circle -> if (circleStyle == CircleStyle.ThreePoints) null else listOf("Diameter" to false)
+            SketchTool.Polygon -> listOf("Radius" to false)
+            SketchTool.Arc -> when (arcStyle) {
+                ArcStyle.ThreePoints -> if (pending.size == 1) listOf("Length" to false) else null
+                ArcStyle.CentreEnds -> if (pending.size == 1) listOf("Radius" to false) else listOf("Angle" to true)
+                ArcStyle.Tangent -> null
+            }
+            SketchTool.Slot -> when {
+                pending.size >= 2 -> listOf("Width" to false)
+                slotStyle == SlotStyle.Middle -> null
+                else -> listOf("Length" to false)
+            }
             else -> null
         }
     }
@@ -402,15 +411,31 @@ class SketchEditor(
                 val angle = typedValue(1)?.let { it * PI / 180 } ?: atan2(v - ay, u - ax)
                 (ax + len * cos(angle)) to (ay + len * sin(angle))
             }
-            SketchTool.Rectangle -> {
-                val k = if (rectangleFromCentre) 0.5 else 1.0
-                val w = typedValue(0)?.let { sign(u - x0) * it * k } ?: (u - x0)
-                val h = typedValue(1)?.let { sign(v - y0) * it * k } ?: (v - y0)
-                (x0 + w) to (y0 + h)
+            SketchTool.Rectangle -> when {
+                rectangleStyle == RectangleStyle.ThreePoints && pending.size == 1 -> {
+                    val len = typedValue(0) ?: hypot(u - x0, v - y0)
+                    val angle = typedValue(1)?.let { it * PI / 180 } ?: atan2(v - y0, u - x0)
+                    (x0 + len * cos(angle)) to (y0 + len * sin(angle))
+                }
+                rectangleStyle == RectangleStyle.ThreePoints -> {
+                    // The far side, the typed width from the first side, on the pointer's side of it.
+                    val width = typedValue(0) ?: return u to v
+                    val b = pending[1]
+                    val dx = sketch.x(b) - x0; val dy = sketch.y(b) - y0
+                    val len = hypot(dx, dy).coerceAtLeast(1e-9)
+                    val side = sign(dx * (v - y0) - dy * (u - x0))
+                    (sketch.x(b) - dy / len * width * side) to (sketch.y(b) + dx / len * width * side)
+                }
+                else -> {
+                    val k = if (rectangleStyle == RectangleStyle.Centre) 0.5 else 1.0
+                    val w = typedValue(0)?.let { sign(u - x0) * it * k } ?: (u - x0)
+                    val h = typedValue(1)?.let { sign(v - y0) * it * k } ?: (v - y0)
+                    (x0 + w) to (y0 + h)
+                }
             }
-            SketchTool.Circle -> along(x0, y0, typedValue(0)?.let { it / 2 })
+            SketchTool.Circle -> if (circleStyle == CircleStyle.TwoPoints) along(x0, y0, typedValue(0)) else along(x0, y0, typedValue(0)?.let { it / 2 })
             SketchTool.Polygon -> along(x0, y0, typedValue(0))
-            SketchTool.Arc -> if (arcThroughPoints || pending.size == 1) along(x0, y0, typedValue(0)) else {
+            SketchTool.Arc -> if (arcStyle == ArcStyle.ThreePoints || pending.size == 1) along(x0, y0, typedValue(0)) else {
                 val sweep = typedValue(0) ?: return u to v
                 val p1 = pending[1]
                 val r = sketch.distance(p0, p1)
@@ -472,13 +497,19 @@ class SketchEditor(
                     if (m == 0.0) addQuietly(Constraint.Horizontal(l)) else if (m == 90.0) addQuietly(Constraint.Vertical(l))
                 }
             }
-            SketchTool.Rectangle -> made.filterIsInstance<Line>().take(4).takeIf { it.size == 4 }?.let { sides ->
-                values[0]?.let { hold(Constraint.Length(sides[0], it), 0) }
-                values[1]?.let { hold(Constraint.Length(sides[1], it), 1) }
+            SketchTool.Rectangle -> when {
+                rectangleStyle != RectangleStyle.ThreePoints -> made.filterIsInstance<Line>().take(4).takeIf { it.size == 4 }?.let { sides ->
+                    values[0]?.let { hold(Constraint.Length(sides[0], it), 0) }
+                    values[1]?.let { hold(Constraint.Length(sides[1], it), 1) }
+                }
+                // The first side, as two points so far.
+                started.size == 1 -> pending.getOrNull(1)?.let { p -> values[0]?.let { hold(Constraint.Distance(started[0], p, it), 0) } }
+                else -> made.filterIsInstance<Line>().getOrNull(1)?.let { side -> values[0]?.let { hold(Constraint.Length(side, it), 0) } }
             }
             SketchTool.Circle -> made.filterIsInstance<Circle>().firstOrNull()?.let { c -> values[0]?.let { hold(Constraint.Radius(c, true, it), 0) } }
             SketchTool.Polygon -> made.filterIsInstance<Circle>().firstOrNull()?.let { c -> values[0]?.let { hold(Constraint.Radius(c, false, it), 0) } }
-            SketchTool.Arc, SketchTool.Slot -> if (started.size == 1) {
+            // An overall slot's first two points are only guides, taken away once it's drawn.
+            SketchTool.Arc, SketchTool.Slot -> if (started.size == 1 && !(drawing == SketchTool.Slot && slotStyle == SlotStyle.Overall)) {
                 // The second point: its distance from the first (a radius, or a length).
                 val p = pending.getOrNull(1)
                 if (p != null) values[0]?.let { hold(Constraint.Distance(started[0], p, it), 0) }
@@ -521,66 +552,117 @@ class SketchEditor(
                     }
                 }
             }
-            SketchTool.Rectangle -> if (rectangleFromCentre) {
-                val centre = pending.firstOrNull()
-                if (centre == null) {
-                    checkpoint()
-                    pending += placeForPending(s)
-                } else {
-                    val cx = sketch.x(centre); val cy = sketch.y(centre)
-                    if (abs(s.u - cx) < 1e-6 || abs(s.v - cy) < 1e-6) return
-                    checkpoint()
-                    val p3 = place(s)
-                    val p1 = sketch.addPoint(2 * cx - sketch.x(p3), 2 * cy - sketch.y(p3))
-                    val p2 = sketch.addPoint(sketch.x(p3), sketch.y(p1))
-                    val p4 = sketch.addPoint(sketch.x(p1), sketch.y(p3))
-                    val sides = listOf(
-                        sketch.addLine(p1, p2, construction), sketch.addLine(p2, p3, construction),
-                        sketch.addLine(p3, p4, construction), sketch.addLine(p4, p1, construction),
-                    )
-                    sides.forEachIndexed { i, l -> addQuietly(if (i % 2 == 0) Constraint.Horizontal(l) else Constraint.Vertical(l)) }
-                    // A construction diagonal keeps the centre in the middle.
-                    addQuietly(Constraint.Midpoint(centre, sketch.addLine(p1, p3, construction = true)))
-                    placedForPending.clear()
-                    pending.clear()
+            SketchTool.Rectangle -> when (rectangleStyle) {
+                RectangleStyle.Centre -> {
+                    val centre = pending.firstOrNull()
+                    if (centre == null) {
+                        checkpoint()
+                        pending += placeForPending(s)
+                    } else {
+                        val cx = sketch.x(centre); val cy = sketch.y(centre)
+                        if (abs(s.u - cx) < 1e-6 || abs(s.v - cy) < 1e-6) return
+                        checkpoint()
+                        val p3 = place(s)
+                        val p1 = sketch.addPoint(2 * cx - sketch.x(p3), 2 * cy - sketch.y(p3))
+                        val p2 = sketch.addPoint(sketch.x(p3), sketch.y(p1))
+                        val p4 = sketch.addPoint(sketch.x(p1), sketch.y(p3))
+                        val sides = listOf(
+                            sketch.addLine(p1, p2, construction), sketch.addLine(p2, p3, construction),
+                            sketch.addLine(p3, p4, construction), sketch.addLine(p4, p1, construction),
+                        )
+                        sides.forEachIndexed { i, l -> addQuietly(if (i % 2 == 0) Constraint.Horizontal(l) else Constraint.Vertical(l)) }
+                        // A construction diagonal keeps the centre in the middle.
+                        addQuietly(Constraint.Midpoint(centre, sketch.addLine(p1, p3, construction = true)))
+                        finishShape()
+                    }
                 }
-            } else {
-                val first = pending.firstOrNull()
-                if (first == null) {
-                    checkpoint()
-                    pending += placeForPending(s)
-                } else {
-                    if (abs(s.u - sketch.x(first)) < 1e-6 || abs(s.v - sketch.y(first)) < 1e-6) return
-                    checkpoint()
-                    val p3 = place(s)
-                    val p2 = sketch.addPoint(sketch.x(p3), sketch.y(first))
-                    val p4 = sketch.addPoint(sketch.x(first), sketch.y(p3))
-                    val sides = listOf(
-                        sketch.addLine(first, p2, construction), sketch.addLine(p2, p3, construction),
-                        sketch.addLine(p3, p4, construction), sketch.addLine(p4, first, construction),
-                    )
-                    sides.forEachIndexed { i, l -> addQuietly(if (i % 2 == 0) Constraint.Horizontal(l) else Constraint.Vertical(l)) }
-                    placedForPending.clear()
-                    pending.clear()
+                RectangleStyle.Corners -> {
+                    val first = pending.firstOrNull()
+                    if (first == null) {
+                        checkpoint()
+                        pending += placeForPending(s)
+                    } else {
+                        if (abs(s.u - sketch.x(first)) < 1e-6 || abs(s.v - sketch.y(first)) < 1e-6) return
+                        checkpoint()
+                        val p3 = place(s)
+                        val p2 = sketch.addPoint(sketch.x(p3), sketch.y(first))
+                        val p4 = sketch.addPoint(sketch.x(first), sketch.y(p3))
+                        val sides = listOf(
+                            sketch.addLine(first, p2, construction), sketch.addLine(p2, p3, construction),
+                            sketch.addLine(p3, p4, construction), sketch.addLine(p4, first, construction),
+                        )
+                        sides.forEachIndexed { i, l -> addQuietly(if (i % 2 == 0) Constraint.Horizontal(l) else Constraint.Vertical(l)) }
+                        finishShape()
+                    }
+                }
+                RectangleStyle.ThreePoints -> when (pending.size) {
+                    0 -> { checkpoint(); pending += placeForPending(s) }
+                    1 -> { if (s.point !== pending[0]) pending += placeForPending(s) }
+                    else -> {
+                        val a = pending[0]; val b = pending[1]
+                        val corners = rectangleFromSide(sketch.x(a), sketch.y(a), sketch.x(b), sketch.y(b), s.u, s.v) ?: return
+                        val c = sketch.addPoint(corners[2].first, corners[2].second)
+                        val d = sketch.addPoint(corners[3].first, corners[3].second)
+                        val sides = listOf(
+                            sketch.addLine(a, b, construction), sketch.addLine(b, c, construction),
+                            sketch.addLine(c, d, construction), sketch.addLine(d, a, construction),
+                        )
+                        addQuietly(Constraint.Perpendicular(sides[0], sides[1]))
+                        addQuietly(Constraint.Parallel(sides[0], sides[2]))
+                        addQuietly(Constraint.Parallel(sides[1], sides[3]))
+                        finishShape()
+                    }
                 }
             }
-            SketchTool.Circle -> {
-                val centre = pending.firstOrNull()
-                if (centre == null) {
-                    checkpoint()
-                    pending += placeForPending(s)
-                } else {
-                    val r = hypot(s.u - sketch.x(centre), s.v - sketch.y(centre))
-                    if (r < 1e-6) return
-                    checkpoint()
-                    val c = sketch.addCircle(centre, r, construction)
-                    s.point?.let { addQuietly(Constraint.OnCircle(it, c)) }
-                    placedForPending.clear()
-                    pending.clear()
+            SketchTool.Circle -> when (circleStyle) {
+                CircleStyle.Centre -> {
+                    val centre = pending.firstOrNull()
+                    if (centre == null) {
+                        checkpoint()
+                        pending += placeForPending(s)
+                    } else {
+                        val r = hypot(s.u - sketch.x(centre), s.v - sketch.y(centre))
+                        if (r < 1e-6) return
+                        checkpoint()
+                        val c = sketch.addCircle(centre, r, construction)
+                        s.point?.let { addQuietly(Constraint.OnCircle(it, c)) }
+                        finishShape()
+                    }
+                }
+                CircleStyle.TwoPoints -> {
+                    val first = pending.firstOrNull()
+                    if (first == null) {
+                        checkpoint()
+                        pending += placeForPending(s)
+                    } else {
+                        val across = hypot(s.u - sketch.x(first), s.v - sketch.y(first))
+                        if (s.point === first || across < 1e-6) return
+                        val p = place(s)
+                        val centre = sketch.addPoint((sketch.x(first) + sketch.x(p)) / 2, (sketch.y(first) + sketch.y(p)) / 2)
+                        val c = sketch.addCircle(centre, across / 2, construction)
+                        // The two points are ends of a diameter.
+                        addQuietly(Constraint.Midpoint(centre, sketch.addLine(first, p, construction = true)))
+                        addQuietly(Constraint.OnCircle(first, c))
+                        addQuietly(Constraint.OnCircle(p, c))
+                        finishShape()
+                    }
+                }
+                CircleStyle.ThreePoints -> when (pending.size) {
+                    0 -> { checkpoint(); pending += placeForPending(s) }
+                    1 -> { if (s.point !== pending[0]) pending += placeForPending(s) }
+                    else -> {
+                        val a = pending[0]; val b = pending[1]
+                        val c = circleThrough(sketch.x(a), sketch.y(a), sketch.x(b), sketch.y(b), s.u, s.v) ?: return
+                        val p = place(s)
+                        val centre = sketch.addPoint(c.first, c.second)
+                        val circle = sketch.addCircle(centre, hypot(sketch.x(a) - c.first, sketch.y(a) - c.second), construction)
+                        for (q in listOf(a, b, p)) addQuietly(Constraint.OnCircle(q, circle))
+                        finishShape()
+                    }
                 }
             }
-            SketchTool.Arc -> if (arcThroughPoints) {
-                when (pending.size) {
+            SketchTool.Arc -> when (arcStyle) {
+                ArcStyle.ThreePoints -> when (pending.size) {
                     0 -> { checkpoint(); pending += placeForPending(s) }
                     1 -> {
                         if (s.point === pending[0]) return
@@ -596,12 +678,10 @@ class SketchEditor(
                         // Arcs run anticlockwise from start to end, so pick the way that passes the third point.
                         val passes = anticlockwiseBetween(c, sketch.x(a), sketch.y(a), s.u, s.v, sketch.x(b), sketch.y(b))
                         if (passes) sketch.addArc(centre, a, b, construction) else sketch.addArc(centre, b, a, construction)
-                        placedForPending.clear()
-                        pending.clear()
+                        finishShape()
                     }
                 }
-            } else {
-                when (pending.size) {
+                ArcStyle.CentreEnds -> when (pending.size) {
                     0 -> { checkpoint(); pending += placeForPending(s) }
                     1 -> {
                         if (s.point === pending[0]) return
@@ -617,9 +697,27 @@ class SketchEditor(
                         val end = s.point ?: sketch.addPoint(sketch.x(centre) + r * cos(a), sketch.y(centre) + r * sin(a))
                         if (end === start) return
                         sketch.addArc(centre, start, end, construction)
-                        placedForPending.clear()
-                        pending.clear()
+                        finishShape()
                     }
+                }
+                ArcStyle.Tangent -> if (pending.isEmpty()) {
+                    val start = s.point
+                    if (start == null || tangentAt(start) == null) {
+                        message = "Start a tangent arc at the end of a line or arc"
+                        return
+                    }
+                    checkpoint()
+                    pending += start
+                } else {
+                    val start = pending[0]
+                    if (s.point === start) return
+                    val (dir, from) = tangentAt(start) ?: return
+                    val (c, r, left) = tangentArc(sketch.x(start), sketch.y(start), dir.first, dir.second, s.u, s.v) ?: return
+                    val end = place(s)
+                    val centre = sketch.addPoint(c.first, c.second)
+                    val arc = if (left) sketch.addArc(centre, start, end, construction) else sketch.addArc(centre, end, start, construction)
+                    addQuietly(Constraint.TangentJoin(from, arc, start))
+                    finishShape()
                 }
             }
             SketchTool.Spline -> {
@@ -630,8 +728,7 @@ class SketchEditor(
                 // Tapping the first point again closes the loop and finishes it.
                 if (p === first && pending.size >= 3) {
                     sketch.addSpline(pending.toList() + p, construction)
-                    placedForPending.clear()
-                    pending.clear()
+                    finishShape()
                 } else pending += p
             }
             SketchTool.Polygon -> {
@@ -644,28 +741,25 @@ class SketchEditor(
                     if (r < 1e-6) return
                     checkpoint()
                     polygon(centre, r, atan2(s.v - sketch.y(centre), s.u - sketch.x(centre)))
-                    placedForPending.clear()
-                    pending.clear()
+                    finishShape()
                 }
             }
-            SketchTool.Slot -> {
-                when (pending.size) {
-                    0 -> { checkpoint(); pending += placeForPending(s) }
-                    1 -> {
-                        if (s.point === pending[0]) return
-                        pending += placeForPending(s)
+            SketchTool.Slot -> when (pending.size) {
+                0 -> { checkpoint(); pending += placeForPending(s) }
+                1 -> { if (s.point !== pending[0]) pending += placeForPending(s) }
+                else -> {
+                    val p1 = pending[0]; val p2 = pending[1]
+                    val (a, b, half) = slotCentres(slotStyle, sketch.x(p1), sketch.y(p1), sketch.x(p2), sketch.y(p2), s.u, s.v) ?: return
+                    when (slotStyle) {
+                        SlotStyle.Centres -> slot(p1, p2, half)
+                        SlotStyle.Overall -> {
+                            // The ends placed were only to measure from.
+                            for (p in placedForPending) if (sketch.constraints.none { p in it.points() }) sketch.removePoint(p)
+                            slot(sketch.addPoint(a.first, a.second), sketch.addPoint(b.first, b.second), half)
+                        }
+                        SlotStyle.Middle -> addQuietly(Constraint.Midpoint(p1, slot(sketch.addPoint(a.first, a.second), p2, half)))
                     }
-                    else -> {
-                        val a = pending[0]; val b = pending[1]
-                        // Half the width: how far the third tap is from the line between the centres.
-                        val dx = sketch.x(b) - sketch.x(a); val dy = sketch.y(b) - sketch.y(a)
-                        val len = hypot(dx, dy)
-                        val half = kotlin.math.abs(dx * (s.v - sketch.y(a)) - dy * (s.u - sketch.x(a))) / len
-                        if (half < 1e-6) return
-                        slot(a, b, half)
-                        placedForPending.clear()
-                        pending.clear()
-                    }
+                    finishShape()
                 }
             }
             else -> {}
@@ -673,20 +767,31 @@ class SketchEditor(
         changed()
     }
 
-    /** A regular polygon round a construction circle, its corners on the circle and its sides equal. */
-    private fun polygon(centre: Point, r: Double, startAngle: Double) {
-        val n = polygonSides.coerceIn(3, 64)
-        val circle = sketch.addCircle(centre, r, construction = true)
-        val corners = (0 until n).map { i ->
-            val a = startAngle + 2 * PI * i / n
-            sketch.addPoint(sketch.x(centre) + r * cos(a), sketch.y(centre) + r * sin(a)).also { addQuietly(Constraint.OnCircle(it, circle)) }
-        }
-        val sides = (0 until n).map { i -> sketch.addLine(corners[i], corners[(i + 1) % n], construction) }
-        for (i in 1 until n) addQuietly(Constraint.Equal(sides[0], sides[i]))
+    /** A shape is done: the points placed for it stay, and the next starts afresh. */
+    private fun finishShape() {
+        placedForPending.clear()
+        pending.clear()
     }
 
-    /** A slot round two centres: an arc at each end joined by two straight sides. */
-    private fun slot(a: Point, b: Point, half: Double) {
+    /**
+     * A regular polygon: its corners on a construction circle, or with
+     * [PolygonStyle.Outside] its sides touching it, and its sides equal.
+     */
+    private fun polygon(centre: Point, r: Double, toward: Double) {
+        val n = polygonSides.coerceIn(3, 64)
+        val outside = polygonStyle == PolygonStyle.Outside
+        val circle = sketch.addCircle(centre, r, construction = true)
+        val cornerPoints = polygonCorners(sketch.x(centre), sketch.y(centre), r, toward, n, outside)
+        // Outside, the corners are on a bigger circle too, which with equal sides keeps it regular.
+        val around = if (outside) sketch.addCircle(centre, r / cos(PI / n), construction = true) else circle
+        val corners = cornerPoints.map { (x, y) -> sketch.addPoint(x, y).also { addQuietly(Constraint.OnCircle(it, around)) } }
+        val sides = (0 until n).map { i -> sketch.addLine(corners[i], corners[(i + 1) % n], construction) }
+        for (i in 1 until n) addQuietly(Constraint.Equal(sides[0], sides[i]))
+        if (outside) for (side in sides) addQuietly(Constraint.TangentLine(side, circle))
+    }
+
+    /** A slot round two centres: an arc at each end joined by two straight sides. Returns the construction line between the centres. */
+    private fun slot(a: Point, b: Point, half: Double): Line {
         val ax = sketch.x(a); val ay = sketch.y(a); val bx = sketch.x(b); val by = sketch.y(b)
         val len = hypot(bx - ax, by - ay)
         val nx = -(by - ay) / len * half; val ny = (bx - ax) / len * half
@@ -696,12 +801,94 @@ class SketchEditor(
         val endB = sketch.addArc(b, b2, b1, construction)
         val side1 = sketch.addLine(a1, b1, construction)
         val side2 = sketch.addLine(a2, b2, construction)
-        sketch.addLine(a, b, construction = true)
-        addQuietly(Constraint.TangentLine(side1, endA))
-        addQuietly(Constraint.TangentLine(side2, endA))
-        addQuietly(Constraint.TangentLine(side1, endB))
-        addQuietly(Constraint.TangentLine(side2, endB))
+        val middle = sketch.addLine(a, b, construction = true)
+        addQuietly(Constraint.TangentJoin(side1, endA, a1))
+        addQuietly(Constraint.TangentJoin(side2, endA, a2))
+        addQuietly(Constraint.TangentJoin(side1, endB, b1))
+        addQuietly(Constraint.TangentJoin(side2, endB, b2))
         addQuietly(Constraint.Equal(endA, endB))
+        return middle
+    }
+
+    /** Which way a line or arc ending at [p] heads as it leaves p, and which curve it is; for a tangent arc. The newest wins. */
+    internal fun tangentAt(p: Point): Pair<Pair<Double, Double>, Curve>? {
+        for (c in sketch.curves.toList().asReversed()) {
+            if (c is Line && (c.a === p || c.b === p)) {
+                val other = if (c.a === p) c.b else c.a
+                val dx = sketch.x(p) - sketch.x(other); val dy = sketch.y(p) - sketch.y(other)
+                val len = hypot(dx, dy)
+                if (len > 1e-9) return (dx / len to dy / len) to c
+            }
+            if (c is Arc && (c.start === p || c.end === p)) {
+                val rx = sketch.x(p) - sketch.x(c.centre); val ry = sketch.y(p) - sketch.y(c.centre)
+                val len = hypot(rx, ry)
+                if (len < 1e-9) continue
+                // Anticlockwise along the arc at p; leaving from its start goes the other way.
+                val tx = -ry / len; val ty = rx / len
+                return (if (c.end === p) tx to ty else -tx to -ty) to c
+            }
+        }
+        return null
+    }
+
+    /** What the tool in hand would draw with its next point at (u, v), to show before it's placed. */
+    fun ghosts(u: Double, v: Double): List<Ghost> {
+        val p = pending
+        if (p.isEmpty()) return emptyList()
+        fun x(i: Int) = sketch.x(p[i])
+        fun y(i: Int) = sketch.y(p[i])
+        val last = p.size - 1
+        val toPointer = listOf(Ghost.Seg(x(last), y(last), u, v))
+        fun between() = listOf(Ghost.Seg(x(0), y(0), x(1), y(1)))
+        fun bow(cx: Double, cy: Double, r: Double, ax: Double, ay: Double, bx: Double, by: Double): Ghost {
+            val (a0, a1) = arcAngles(cx, cy, ax, ay, bx, by)
+            return Ghost.Bow(cx, cy, r, a0, a1)
+        }
+        return when (tool) {
+            SketchTool.Line -> toPointer
+            SketchTool.Rectangle -> when (rectangleStyle) {
+                RectangleStyle.Corners -> outline(listOf(x(0) to y(0), u to y(0), u to v, x(0) to v))
+                RectangleStyle.Centre -> {
+                    val ou = 2 * x(0) - u; val ov = 2 * y(0) - v
+                    outline(listOf(u to v, ou to v, ou to ov, u to ov))
+                }
+                RectangleStyle.ThreePoints -> if (p.size == 1) toPointer
+                else rectangleFromSide(x(0), y(0), x(1), y(1), u, v)?.let(::outline) ?: between()
+            }
+            SketchTool.Circle -> when (circleStyle) {
+                CircleStyle.Centre -> listOf(Ghost.Ring(x(0), y(0), hypot(u - x(0), v - y(0))))
+                CircleStyle.TwoPoints -> listOf(Ghost.Ring((x(0) + u) / 2, (y(0) + v) / 2, hypot(u - x(0), v - y(0)) / 2))
+                CircleStyle.ThreePoints -> if (p.size == 1) toPointer
+                else circleThrough(x(0), y(0), x(1), y(1), u, v)?.let { c -> listOf(Ghost.Ring(c.first, c.second, hypot(x(0) - c.first, y(0) - c.second))) } ?: between()
+            }
+            SketchTool.Arc -> when (arcStyle) {
+                ArcStyle.CentreEnds -> if (p.size == 1) listOf(Ghost.Ring(x(0), y(0), hypot(u - x(0), v - y(0)), faint = true)) else {
+                    val r = hypot(x(1) - x(0), y(1) - y(0))
+                    val a = atan2(v - y(0), u - x(0))
+                    listOf(bow(x(0), y(0), r, x(1), y(1), x(0) + r * cos(a), y(0) + r * sin(a)))
+                }
+                ArcStyle.ThreePoints -> if (p.size == 1) toPointer else circleThrough(x(0), y(0), x(1), y(1), u, v)?.let { c ->
+                    val r = hypot(x(0) - c.first, y(0) - c.second)
+                    if (anticlockwiseBetween(c, x(0), y(0), u, v, x(1), y(1))) listOf(bow(c.first, c.second, r, x(0), y(0), x(1), y(1)))
+                    else listOf(bow(c.first, c.second, r, x(1), y(1), x(0), y(0)))
+                } ?: between()
+                ArcStyle.Tangent -> {
+                    val arc = tangentAt(p[0])?.let { (d, _) -> tangentArc(x(0), y(0), d.first, d.second, u, v) }
+                    if (arc == null) toPointer else {
+                        val (c, r, left) = arc
+                        listOf(if (left) bow(c.first, c.second, r, x(0), y(0), u, v) else bow(c.first, c.second, r, u, v, x(0), y(0)))
+                    }
+                }
+            }
+            SketchTool.Polygon -> {
+                val r = hypot(u - x(0), v - y(0))
+                outline(polygonCorners(x(0), y(0), r, atan2(v - y(0), u - x(0)), polygonSides.coerceIn(3, 64), polygonStyle == PolygonStyle.Outside)) +
+                    Ghost.Ring(x(0), y(0), r, faint = true)
+            }
+            SketchTool.Slot -> if (p.size == 1) toPointer
+            else slotCentres(slotStyle, x(0), y(0), x(1), y(1), u, v)?.let { (a, b, half) -> slotGhost(a, b, half) } ?: (between() + Ghost.Seg(x(1), y(1), u, v))
+            else -> emptyList()
+        }
     }
 
     private fun placeForPending(s: Snap): Point {
@@ -978,14 +1165,21 @@ class SketchEditor(
         if (n == 2 && lines.size == 2) {
             out += ConstraintChoice("Parallel") { Constraint.Parallel(lines[0], lines[1]) }
             out += ConstraintChoice("Perpendicular") { Constraint.Perpendicular(lines[0], lines[1]) }
+            out += ConstraintChoice("Collinear") { Constraint.Collinear(lines[0], lines[1]) }
             out += ConstraintChoice("Equal") { Constraint.Equal(lines[0], lines[1]) }
         }
-        if (n == 2 && lines.size == 1 && rounds.size == 1) out += ConstraintChoice("Tangent") { Constraint.TangentLine(lines[0], rounds[0]) }
+        // Curves that already meet at an end join smoothly there; others touch wherever they can.
+        fun shared(a: Curve, b: Curve) = a.points().firstOrNull { it in b.points() && (b !is Arc || it === b.start || it === b.end) }
+        if (n == 2 && lines.size == 1 && rounds.size == 1) {
+            val at = shared(lines[0], rounds[0])
+            out += ConstraintChoice("Tangent") { if (at != null) Constraint.TangentJoin(lines[0], rounds[0], at) else Constraint.TangentLine(lines[0], rounds[0]) }
+        }
         if (n == 2 && rounds.size == 2) {
             out += ConstraintChoice("Equal") { Constraint.Equal(rounds[0], rounds[1]) }
             out += ConstraintChoice("Concentric") { Constraint.Coincident(centreOf(rounds[0]), centreOf(rounds[1])) }
             val inside = sketch.distance(centreOf(rounds[0]), centreOf(rounds[1])) < maxOf(sizeOf(rounds[0]), sizeOf(rounds[1]))
-            out += ConstraintChoice("Tangent") { Constraint.TangentCircles(rounds[0], rounds[1], inside) }
+            val at = shared(rounds[0], rounds[1])
+            out += ConstraintChoice("Tangent") { if (at != null) Constraint.TangentJoin(rounds[0], rounds[1], at) else Constraint.TangentCircles(rounds[0], rounds[1], inside) }
         }
         if (n == 2 && points.size == 2) {
             out += ConstraintChoice("Coincident") { Constraint.Coincident(points[0], points[1]) }

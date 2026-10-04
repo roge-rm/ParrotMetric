@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rm.parrotmetric.ui.sketch.SketchEditor
 import com.rm.parrotmetric.ui.sketch.SketchTool
+import com.rm.parrotmetric.ui.sketch.next
 import kotlin.math.PI
 
 private fun keys(vararg k: String) = k.toList()
@@ -96,13 +97,13 @@ fun sketchShortcuts(e: SketchEditor, actions: ModelActions, openFinder: () -> Un
     val hasSelection = e.selection.isNotEmpty()
     return listOf(
         tool("Line", keys("L"), SketchTool.Line),
-        tool("Rectangle", keys("R"), SketchTool.Rectangle) { e.rectangleFromCentre = !e.rectangleFromCentre },
-        tool("Circle", keys("C"), SketchTool.Circle),
-        tool("Arc", keys("A"), SketchTool.Arc) { e.arcThroughPoints = !e.arcThroughPoints },
+        tool("Rectangle", keys("R"), SketchTool.Rectangle) { e.rectangleStyle = e.rectangleStyle.next() },
+        tool("Circle", keys("C"), SketchTool.Circle) { e.circleStyle = e.circleStyle.next() },
+        tool("Arc", keys("A"), SketchTool.Arc) { e.arcStyle = e.arcStyle.next() },
         tool("Point", keys("Shift+P"), SketchTool.Point),
         tool("Spline", keys("Shift+S"), SketchTool.Spline),
-        tool("Polygon", keys("G"), SketchTool.Polygon),
-        tool("Slot", keys("Shift+L"), SketchTool.Slot),
+        tool("Polygon", keys("G"), SketchTool.Polygon) { e.polygonStyle = e.polygonStyle.next() },
+        tool("Slot", keys("Shift+L"), SketchTool.Slot) { e.slotStyle = e.slotStyle.next() },
         tool("Select", keys(), SketchTool.Select),
         Shortcut("Dimension", keys("D"), "Edit") { e.selectTool(if (e.tool == SketchTool.Dimension) SketchTool.Select else SketchTool.Dimension) },
         Shortcut("Trim", keys("T"), "Edit") { e.selectTool(if (e.tool == SketchTool.Trim) SketchTool.Select else SketchTool.Trim) },
@@ -137,7 +138,7 @@ private val general = listOf(
     "Tab" to "Next field, or next size while drawing",
     "Digits" to "Type into the panel's first field, or a size while drawing",
     "Alt" to "Works as Ctrl",
-    "R or A again" to "Rectangle from the centre, arc through three points",
+    "A tool's key again" to "The next way of drawing it",
 )
 
 /** A key's name as a small label, beside a tool. Shift shows as an arrow, to keep it short. */

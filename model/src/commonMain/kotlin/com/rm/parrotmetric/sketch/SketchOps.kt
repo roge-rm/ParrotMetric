@@ -127,13 +127,14 @@ object SketchOps {
         return p
     }
 
-    /** Level, upright, parallel and perpendicular constraints of an old line, put on its replacement. */
+    /** Level, upright, parallel, perpendicular and collinear constraints of an old line, put on its replacement. */
     private fun Sketch.carry(old: Line, new: Line) {
         for (k in constraints.toList()) when (k) {
             is Constraint.Horizontal -> if (k.line === old) add(Constraint.Horizontal(new))
             is Constraint.Vertical -> if (k.line === old) add(Constraint.Vertical(new))
             is Constraint.Parallel -> if (k.l1 === old) add(Constraint.Parallel(new, k.l2)) else if (k.l2 === old) add(Constraint.Parallel(k.l1, new))
             is Constraint.Perpendicular -> if (k.l1 === old) add(Constraint.Perpendicular(new, k.l2)) else if (k.l2 === old) add(Constraint.Perpendicular(k.l1, new))
+            is Constraint.Collinear -> if (k.l1 === old) add(Constraint.Collinear(new, k.l2)) else if (k.l2 === old) add(Constraint.Collinear(k.l1, new))
             else -> {}
         }
     }
@@ -324,8 +325,8 @@ object SketchOps {
         s.removeCurveOnly(l1)
         s.removeCurveOnly(l2)
         s.removePoint(p)
-        s.add(Constraint.TangentLine(n1, arc))
-        s.add(Constraint.TangentLine(n2, arc))
+        s.add(Constraint.TangentJoin(n1, arc, t1))
+        s.add(Constraint.TangentJoin(n2, arc, t2))
         s.add(Constraint.Radius(arc, false, r))
         s.solve()
         return null

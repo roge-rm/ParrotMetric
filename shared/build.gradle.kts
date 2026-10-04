@@ -29,6 +29,7 @@ kotlin {
             implementation(libs.jb.compose.material3)
             implementation(libs.kotlinx.coroutines.core)
         }
+        getByName("desktopTest").dependencies { implementation(kotlin("test")) }
     }
 }
 

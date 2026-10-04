@@ -232,68 +232,14 @@ private fun DrawScope.drawSketch(editor: SketchEditor, proj: PlaneProjection, de
         val end = proj.toScreen(snap.u, snap.v)
         val rubber = free.copy(alpha = 0.9f)
         val dash = PathEffect.dashPathEffect(floatArrayOf(7 * dp, 6 * dp))
-        val pending = editor.pending
-        when (editor.tool) {
-            SketchTool.Line -> pending.lastOrNull()?.let { drawLine(rubber, screen(it, editor, proj), end, line, pathEffect = dash) }
-            SketchTool.Rectangle -> if (editor.rectangleFromCentre) pending.firstOrNull()?.let {
-                // Mirrored through the centre.
-                val cx = sketch.x(it); val cy = sketch.y(it)
-                val ou = 2 * cx - snap.u; val ov = 2 * cy - snap.v
-                val corners = listOf(snap.u to snap.v, ou to snap.v, ou to ov, snap.u to ov).map { (u, v) -> proj.toScreen(u, v) }
-                val path = Path().apply { moveTo(corners[0].x, corners[0].y); corners.drop(1).forEach { lineTo(it.x, it.y) }; close() }
-                drawPath(path, rubber, style = Stroke(line, pathEffect = dash))
-            } else pending.firstOrNull()?.let {
-                val a = screen(it, editor, proj)
-                val b = proj.toScreen(snap.u, sketch.y(it))
-                val d = proj.toScreen(sketch.x(it), snap.v)
-                val path = Path().apply { moveTo(a.x, a.y); lineTo(b.x, b.y); lineTo(end.x, end.y); lineTo(d.x, d.y); close() }
-                drawPath(path, rubber, style = Stroke(line, pathEffect = dash))
-            }
-            SketchTool.Circle -> pending.firstOrNull()?.let {
-                val c = screen(it, editor, proj)
-                drawCircle(rubber, (end - c).getDistance(), c, style = Stroke(line, pathEffect = dash))
-            }
-            SketchTool.Spline -> if (pending.isNotEmpty()) {
-                val pts = pending.map { screen(it, editor, proj) } + end
-                drawPolyline(pts, rubber, line, dash)
-            }
-            SketchTool.Polygon -> pending.firstOrNull()?.let {
-                val cx = sketch.x(it); val cy = sketch.y(it)
-                val r = hypot(snap.u - cx, snap.v - cy)
-                val a0 = atan2(snap.v - cy, snap.u - cx)
-                val n = editor.polygonSides
-                drawPolyline((0..n).map { i -> val a = a0 + 2 * PI * i / n; proj.toScreen(cx + r * cos(a), cy + r * sin(a)) }, rubber, line, dash)
-            }
-            SketchTool.Slot -> if (pending.size >= 1) {
-                drawLine(rubber, screen(pending[0], editor, proj), if (pending.size == 2) screen(pending[1], editor, proj) else end, line, pathEffect = dash)
-                if (pending.size == 2) drawLine(rubber, screen(pending[1], editor, proj), end, line, pathEffect = dash)
-            }
-            SketchTool.Arc -> if (editor.arcThroughPoints) {
-                if (pending.size == 1) drawLine(rubber, screen(pending[0], editor, proj), end, line, pathEffect = dash)
-                else if (pending.size == 2) {
-                    val ax = sketch.x(pending[0]); val ay = sketch.y(pending[0])
-                    val bx = sketch.x(pending[1]); val by = sketch.y(pending[1])
-                    circleThrough(ax, ay, bx, by, snap.u, snap.v)?.let { c ->
-                        val r = hypot(ax - c.first, ay - c.second)
-                        val (fromX, fromY, toX, toY) = if (anticlockwiseBetween(c, ax, ay, snap.u, snap.v, bx, by)) listOf(ax, ay, bx, by) else listOf(bx, by, ax, ay)
-                        val a0 = atan2(fromY - c.second, fromX - c.first)
-                        var a1 = atan2(toY - c.second, toX - c.first)
-                        while (a1 <= a0) a1 += 2 * PI
-                        drawPolyline(arcPoints(c.first, c.second, r, a0, a1).map { proj.toScreen(it.first, it.second) }, rubber, line, dash)
-                    } ?: drawLine(rubber, screen(pending[0], editor, proj), screen(pending[1], editor, proj), line, pathEffect = dash)
-                }
-            } else if (pending.size == 1) {
-                val c = screen(pending[0], editor, proj)
-                drawCircle(rubber.copy(alpha = 0.4f), (end - c).getDistance(), c, style = Stroke(line, pathEffect = dash))
-            } else if (pending.size == 2) {
-                val cx = sketch.x(pending[0]); val cy = sketch.y(pending[0])
-                val r = sketch.distance(pending[0], pending[1])
-                val a0 = atan2(sketch.y(pending[1]) - cy, sketch.x(pending[1]) - cx)
-                var a1 = atan2(snap.v - cy, snap.u - cx)
-                while (a1 <= a0) a1 += 2 * PI
-                drawPolyline(arcPoints(cx, cy, r, a0, a1).map { proj.toScreen(it.first, it.second) }, rubber, line, dash)
-            }
-            else -> {}
+        // The shape it would make, from the editor.
+        for (g in editor.ghosts(snap.u, snap.v)) when (g) {
+            is Ghost.Seg -> drawLine(rubber, proj.toScreen(g.x1, g.y1), proj.toScreen(g.x2, g.y2), line, pathEffect = dash)
+            is Ghost.Ring -> drawPolyline(
+                arcPoints(g.cx, g.cy, g.r, 0.0, 2 * PI).map { proj.toScreen(it.first, it.second) },
+                if (g.faint) rubber.copy(alpha = 0.4f) else rubber, line, dash,
+            )
+            is Ghost.Bow -> drawPolyline(arcPoints(g.cx, g.cy, g.r, g.a0, g.a1).map { proj.toScreen(it.first, it.second) }, rubber, line, dash)
         }
         drawCircle(free, 4.5f * dp * (if (magnified) 0.4f else 1f), end)
         // Its size as it's drawn, beside the pointer.
@@ -362,15 +308,28 @@ private fun liveSize(editor: SketchEditor, u: Double, v: Double): String? {
             val dx = u - s.x(a); val dy = v - s.y(a)
             mm(hypot(dx, dy)) + "  " + degrees(atan2(dy, dx))
         }
-        SketchTool.Rectangle -> {
-            val k = if (editor.rectangleFromCentre) 2 else 1
-            mm(kotlin.math.abs(u - x0) * k) + " × " + mm(kotlin.math.abs(v - y0) * k)
+        SketchTool.Rectangle -> when {
+            editor.rectangleStyle == RectangleStyle.ThreePoints && p.size == 1 -> mm(hypot(u - x0, v - y0)) + "  " + degrees(atan2(v - y0, u - x0))
+            editor.rectangleStyle == RectangleStyle.ThreePoints -> {
+                val dx = s.x(p[1]) - x0; val dy = s.y(p[1]) - y0
+                mm(kotlin.math.abs(dx * (v - y0) - dy * (u - x0)) / hypot(dx, dy).coerceAtLeast(1e-9))
+            }
+            else -> {
+                val k = if (editor.rectangleStyle == RectangleStyle.Centre) 2 else 1
+                mm(kotlin.math.abs(u - x0) * k) + " × " + mm(kotlin.math.abs(v - y0) * k)
+            }
         }
-        SketchTool.Circle -> "⌀ " + mm(2 * hypot(u - x0, v - y0))
+        SketchTool.Circle -> when (editor.circleStyle) {
+            CircleStyle.Centre -> "⌀ " + mm(2 * hypot(u - x0, v - y0))
+            CircleStyle.TwoPoints -> "⌀ " + mm(hypot(u - x0, v - y0))
+            CircleStyle.ThreePoints -> if (p.size == 1) mm(hypot(u - x0, v - y0))
+            else circleThrough(x0, y0, s.x(p[1]), s.y(p[1]), u, v)?.let { c -> "⌀ " + mm(2 * hypot(x0 - c.first, y0 - c.second)) }
+        }
         SketchTool.Polygon -> "R " + mm(hypot(u - x0, v - y0))
         SketchTool.Arc -> when {
-            editor.arcThroughPoints && p.size == 1 -> mm(hypot(u - x0, v - y0))
-            editor.arcThroughPoints -> circleThrough(x0, y0, s.x(p[1]), s.y(p[1]), u, v)?.let { c -> "R " + mm(hypot(x0 - c.first, y0 - c.second)) }
+            editor.arcStyle == ArcStyle.Tangent -> editor.tangentAt(p[0])?.let { (d, _) -> tangentArc(x0, y0, d.first, d.second, u, v) }?.let { "R " + mm(it.second) }
+            editor.arcStyle == ArcStyle.ThreePoints && p.size == 1 -> mm(hypot(u - x0, v - y0))
+            editor.arcStyle == ArcStyle.ThreePoints -> circleThrough(x0, y0, s.x(p[1]), s.y(p[1]), u, v)?.let { c -> "R " + mm(hypot(x0 - c.first, y0 - c.second)) }
             p.size == 1 -> "R " + mm(hypot(u - x0, v - y0))
             else -> {
                 var sweep = atan2(v - y0, u - x0) - atan2(s.y(p[1]) - y0, s.x(p[1]) - x0)
@@ -561,7 +520,7 @@ private fun DrawScope.drawGlyph(c: Constraint, at: Offset, dp: Float, colour: Co
         is Constraint.Parallel -> { l(-5f, 4f, -1f, -4f); l(1f, 4f, 5f, -4f) }
         is Constraint.Perpendicular -> { l(-5f, 5f, 5f, 5f); l(0f, 5f, 0f, -5f) }
         is Constraint.Equal -> { l(-5f, -2.5f, 5f, -2.5f); l(-5f, 2.5f, 5f, 2.5f) }
-        is Constraint.TangentLine, is Constraint.TangentCircles -> {
+        is Constraint.TangentLine, is Constraint.TangentCircles, is Constraint.TangentJoin -> {
             drawArc(colour, 180f, 180f, false, at + Offset(-5 * dp, -2 * dp), Size(10 * dp, 10 * dp), style = Stroke(w))
             l(-6f, -2f, 6f, -2f)
         }
@@ -571,6 +530,7 @@ private fun DrawScope.drawGlyph(c: Constraint, at: Offset, dp: Float, colour: Co
             drawRoundRect(colour, at + Offset(-5 * dp, -1 * dp), Size(10 * dp, 7 * dp), CornerRadius(1.5f * dp))
         }
         is Constraint.Midpoint -> { l(-6f, 0f, 6f, 0f); dot(0f, 0f) }
+        is Constraint.Collinear -> { l(-7f, 0f, -2f, 0f); l(2f, 0f, 7f, 0f) }
         is Constraint.OnLine -> { l(-6f, 3f, 6f, -3f); dot(0f, 0f) }
         is Constraint.OnCircle -> {
             drawCircle(colour, 5 * dp, at, style = Stroke(w))
