@@ -1,5 +1,6 @@
 package com.rm.parrotmetric.web
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -19,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
@@ -179,6 +181,8 @@ private fun WebApp() {
     ModelScreen(
         viewport = {
             Box(Modifier.fillMaxSize().onSizeChanged { view.resize(it.width, it.height) }.viewGestures(controls)) {
+                // A hole through the page's canvas to the 3D canvas under it.
+                Canvas(Modifier.fillMaxSize()) { drawRect(Color.Transparent, blendMode = BlendMode.Clear) }
                 view.problem?.let { Text("No 3D view: $it", Modifier.align(Alignment.Center).padding(24.dp), color = Color(0xFFE8DCC8)) }
             }
         },

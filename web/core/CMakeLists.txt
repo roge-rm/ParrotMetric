@@ -4,13 +4,16 @@ project(parrotmetric_web C CXX)
 # The core as WebAssembly for the browser app: jni.cpp as on Android and
 # desktop, run by bridge.cpp, drawing with WebGL 2. Built by build.sh with
 # Emscripten into parrotmetric-core.js and .wasm. Everything, OCCT included,
-# uses WebAssembly's own exceptions (-fwasm-exceptions).
+# catches exceptions the JavaScript way (-fexceptions): with WebAssembly's own
+# exceptions this Emscripten's compiler either crashes on OCCT or builds a
+# module browsers refuse.
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(flags "-fwasm-exceptions")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${flags}")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${flags}")
+set(flags -fexceptions)
+string(JOIN " " flag_text ${flags})
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${flag_text}")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${flag_text}")
 
 # jni.h, which is the same everywhere, from a JDK; jni/ has this build's jni_md.h.
 if(NOT JNI_HEADER_DIR)

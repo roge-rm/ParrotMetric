@@ -65,7 +65,7 @@ Solid readSolid(const std::vector<uint8_t>& data, SolidFormat format) {
             std::ofstream(file.path, std::ios::binary).write(reinterpret_cast<const char*>(data.data()), std::streamsize(data.size()));
             IGESControl_Controller::Init();
             IGESControl_Reader reader;
-            if (reader.ReadFile(file.path.c_str()) != IFSelect_RetDone) throw std::runtime_error("Not an IGES file OCCT can read");
+            if (reader.ReadFile(file.path.string().c_str()) != IFSelect_RetDone) throw std::runtime_error("Not an IGES file OCCT can read");
             reader.TransferRoots();
             shape = reader.OneShape();
         }

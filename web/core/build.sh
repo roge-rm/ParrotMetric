@@ -13,7 +13,7 @@ toolchain=$EMSDK/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake
 jdk=${JAVA_HOME:-$(dirname "$(dirname "$(readlink -f "$(command -v javac)")")")}
 launcher=
 command -v ccache >/dev/null && launcher="-DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache"
-OCCT_FLAGS=-fwasm-exceptions OCCT_CMAKE_ARGS="$launcher" "$root/core/scripts/build-occt.sh" wasm "$toolchain"
+OCCT_FLAGS=-fexceptions OCCT_CMAKE_ARGS="$launcher" "$root/core/scripts/build-occt.sh" wasm "$toolchain"
 B=$here/build
 cmake -S "$here" -B "$B" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE="$toolchain" \
     -DJNI_HEADER_DIR="$jdk/include" $launcher >/dev/null
