@@ -97,6 +97,8 @@ private object WebFiles : PlatformFiles {
     override fun create(suggested: String, then: (FileSink) -> Unit) = then(Download(suggested))
     override fun readAutosave() = storageGet("parrotmetric.autosave")
     override suspend fun writeAutosave(text: String) = storageSet("parrotmetric.autosave", text)
+    override fun readSettings() = storageGet("parrotmetric.settings")
+    override suspend fun writeSettings(text: String) = storageSet("parrotmetric.settings", text)
 }
 
 /**

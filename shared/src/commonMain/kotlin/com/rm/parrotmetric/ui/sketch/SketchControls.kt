@@ -101,9 +101,13 @@ fun SketchStatus(editor: SketchEditor, modifier: Modifier = Modifier) {
     }
 }
 
-/** The bottom of the screen while sketching: number entry, the Constrain sheet, or the tools. */
+/**
+ * The bottom of the screen while sketching: number entry, the Constrain
+ * sheet, or the tools. [expanded] (large screens) shows every tool in one row
+ * and the constraints for the selection as chips of their own.
+ */
 @Composable
-fun SketchBottom(editor: SketchEditor) {
+fun SketchBottom(editor: SketchEditor, expanded: Boolean = false) {
     editor.version
     var constraining by remember { mutableStateOf(false) }
     val editing = editor.editing
@@ -112,22 +116,23 @@ fun SketchBottom(editor: SketchEditor) {
             editing != null -> DimensionEntry(editor, editing)
             constraining -> ConstrainSheet(editor) { constraining = false }
             else -> {
-                ChipRow(editor) { constraining = true }
-                ToolGrid(editor)
+                ChipRow(editor, expanded) { constraining = true }
+                ToolGrid(editor, expanded)
             }
         }
     }
 }
 
 @Composable
-private fun ChipRow(editor: SketchEditor, onConstrain: () -> Unit) {
+private fun ChipRow(editor: SketchEditor, expanded: Boolean, onConstrain: () -> Unit) {
     val hasSelection = editor.selection.isNotEmpty()
     val choices = editor.constraintChoices()
     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         Chip("Dimension", Icons.dimension, active = editor.tool == SketchTool.Dimension) {
             editor.selectTool(if (editor.tool == SketchTool.Dimension) SketchTool.Select else SketchTool.Dimension)
         }
-        Chip("Constrain", Icons.constrain, enabled = choices.isNotEmpty(), onClick = onConstrain)
+        if (expanded) for (c in choices) Chip(c.label, Icons.constrain) { editor.apply(c) }
+        else Chip("Constrain", Icons.constrain, enabled = choices.isNotEmpty(), onClick = onConstrain)
         Chip("Trim", Icons.trim, active = editor.tool == SketchTool.Trim) {
             editor.selectTool(if (editor.tool == SketchTool.Trim) SketchTool.Select else SketchTool.Trim)
         }
@@ -160,7 +165,7 @@ private fun Chip(label: String, icon: ImageVector, active: Boolean = false, enab
 }
 
 @Composable
-private fun ToolGrid(editor: SketchEditor) {
+private fun ToolGrid(editor: SketchEditor, expanded: Boolean) {
     val main = listOf(
         Triple(SketchTool.Select, "Select", Icons.select),
         Triple(SketchTool.Line, "Line", Icons.line),
@@ -175,21 +180,12 @@ private fun ToolGrid(editor: SketchEditor) {
         Triple(SketchTool.Slot, "Slot", Icons.slot),
     )
     var showMore by remember { mutableStateOf(editor.tool in more.map { it.first }) }
+    if (expanded) showMore = false
     Surface(color = Palette.surface, shape = RoundedCornerShape(26.dp)) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 8.dp)) {
             if (showMore) {
                 Row { ToolRow(editor, more) }
-                if (editor.tool == SketchTool.Polygon) Row(Modifier.padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Sides", Modifier.weight(1f), fontSize = 13.sp, color = Palette.muted)
-                    for (n in listOf(3, 4, 5, 6, 8, 12)) {
-                        Surface(
-                            onClick = { editor.polygonSides = n },
-                            shape = RoundedCornerShape(12.dp),
-                            color = if (editor.polygonSides == n) Palette.line else Color.Transparent,
-                            contentColor = Palette.text,
-                        ) { Text("$n", Modifier.padding(horizontal = 10.dp, vertical = 6.dp), fontSize = 13.sp) }
-                    }
-                }
+                if (editor.tool == SketchTool.Polygon) PolygonSides(editor)
             }
             if (editor.tool == SketchTool.Rectangle) ChoiceRow(listOf("Corner to corner", "From the centre"), if (editor.rectangleFromCentre) 1 else 0) {
                 editor.endDrawing()
@@ -199,7 +195,8 @@ private fun ToolGrid(editor: SketchEditor) {
                 editor.endDrawing()
                 editor.arcThroughPoints = it == 1
             }
-            Row {
+            if (expanded && editor.tool == SketchTool.Polygon) PolygonSides(editor)
+            if (expanded) Row { ToolRow(editor, main + more) } else Row {
                 ToolRow(editor, main)
                 Surface(
                     onClick = { showMore = !showMore },
@@ -215,6 +212,21 @@ private fun ToolGrid(editor: SketchEditor) {
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun PolygonSides(editor: SketchEditor) {
+    Row(Modifier.padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text("Sides", Modifier.weight(1f), fontSize = 13.sp, color = Palette.muted)
+        for (n in listOf(3, 4, 5, 6, 8, 12)) {
+            Surface(
+                onClick = { editor.polygonSides = n },
+                shape = RoundedCornerShape(12.dp),
+                color = if (editor.polygonSides == n) Palette.line else Color.Transparent,
+                contentColor = Palette.text,
+            ) { Text("$n", Modifier.padding(horizontal = 10.dp, vertical = 6.dp), fontSize = 13.sp) }
         }
     }
 }

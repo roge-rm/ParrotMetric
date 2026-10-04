@@ -174,7 +174,7 @@ private fun EdgeSettings(editor: DesignEditor, d: DesignEditor.EdgeDraft) {
         Palette.modify,
         if (d.edges.isEmpty()) null else count(d.edges.size, "edge", "edges"),
     )
-    if (d.chamfer) Segmented(listOf("Equal", "Two distances", "Distance and angle"), d.kind.ordinal) {
+    if (d.chamfer) Segmented(listOf("Equal", "Two distances", "With angle"), d.kind.ordinal) {
         d.kind = com.rm.parrotmetric.design.ChamferKind.entries[it]
         d.second = if (d.kind == com.rm.parrotmetric.design.ChamferKind.DistanceAngle) 45.0 else d.size
         d.exprs.remove("second")

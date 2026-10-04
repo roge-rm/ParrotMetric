@@ -31,6 +31,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -41,6 +42,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.unit.DpOffset
@@ -81,7 +84,15 @@ data class ModelState(
     val sketch: SketchEditor? = null,
     /** Where the right-click menu is open, in pixels on the view, or null. */
     val menu: Offset? = null,
+    val layout: LayoutMode = LayoutMode.Automatic,
 )
+
+/** Which screen layout: by the window's width, or always the phone one or the large-screen one. */
+enum class LayoutMode(val label: String) {
+    Automatic("Automatic layout"),
+    Phone("Phone layout"),
+    Large("Large screen layout"),
+}
 
 /** What the model screen asks the platform to do. */
 interface ModelActions {
@@ -103,6 +114,7 @@ interface ModelActions {
     /** Opens a step of the history to change it. */
     fun openHistory(id: Int)
     fun closeMenu()
+    fun setLayout(mode: LayoutMode)
 }
 
 /**
@@ -127,7 +139,12 @@ fun ModelScreen(
     MaterialTheme(colorScheme = Palette.scheme) {
         val sketch = state.sketch
         // The view stays put while the controls over it change, so it keeps its GL context.
-        Box(if (seeThrough) Modifier.fillMaxSize() else Modifier.fillMaxSize().background(Palette.ground)) {
+        BoxWithConstraints(if (seeThrough) Modifier.fillMaxSize() else Modifier.fillMaxSize().background(Palette.ground)) {
+            val expanded = when (state.layout) {
+                LayoutMode.Automatic -> maxWidth >= 840.dp
+                LayoutMode.Phone -> false
+                LayoutMode.Large -> true
+            }
             viewport()
             state.menu?.let { at -> SelectionMenu(at, ToolContext(state, design, actions) { sheet = it }, actions::closeMenu) }
             if (sketch != null) {
@@ -137,8 +154,10 @@ fun ModelScreen(
                     Box(Modifier.weight(1f).fillMaxWidth()) {
                         SketchStatus(sketch, Modifier.align(Alignment.TopCenter).padding(top = 6.dp))
                     }
-                    SketchBottom(sketch)
+                    SketchBottom(sketch, expanded)
                 }
+            } else if (expanded) {
+                ExpandedModel(logo, state, design, actions, sheet) { sheet = it }
             } else Column(Modifier.fillMaxSize().safeDrawingPadding()) {
                 TopBar(logo, state, design, actions, onParts = { sheet = if (sheet == "parts") null else "parts" }, onExport = { sheet = "export" })
                 Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -203,6 +222,13 @@ private fun TopBar(logo: @Composable () -> Unit, state: ModelState, design: Desi
                 DropdownMenuItem({ Text("Save") }, onClick = { menu = false; actions.save() }, leadingIcon = { Icon(Icons.save, null, tint = Palette.mint) })
                 DropdownMenuItem({ Text("Save as…") }, onClick = { menu = false; actions.saveAs() }, leadingIcon = { Icon(Icons.save, null, tint = Palette.mint) })
                 DropdownMenuItem({ Text("Export…") }, onClick = { menu = false; onExport() }, leadingIcon = { Icon(Icons.export, null, tint = Palette.mint) })
+                androidx.compose.material3.HorizontalDivider(color = Palette.line)
+                for (mode in LayoutMode.entries) {
+                    DropdownMenuItem(
+                        { Text(mode.label, color = if (state.layout == mode) Palette.mint else Palette.text) },
+                        onClick = { menu = false; actions.setLayout(mode) },
+                    )
+                }
             }
         }
         Column(Modifier.weight(1f).padding(start = 2.dp)) {
@@ -429,6 +455,98 @@ private fun SelectionMenu(at: Offset, context: ToolContext, close: () -> Unit) {
         }
         DropdownMenu(true, onDismissRequest = close, containerColor = Palette.raised) {
             for ((label, action) in items) DropdownMenuItem({ Text(label) }, onClick = { close(); action() })
+        }
+    }
+}
+
+/**
+ * The large-screen layout: every tool in a toolbar along the top, the parts
+ * list docked on the left, feature panels and sheets docked on the right,
+ * and the history along the bottom, all over the model.
+ */
+@Composable
+private fun ExpandedModel(
+    logo: @Composable () -> Unit, state: ModelState, design: DesignEditor, actions: ModelActions,
+    sheet: String?, setSheet: (String?) -> Unit,
+) {
+    var partsOpen by remember { mutableStateOf(true) }
+    val context = ToolContext(state, design, actions) { setSheet(it) }
+    Column(Modifier.fillMaxSize().safeDrawingPadding()) {
+        TopBar(logo, state, design, actions, onParts = { partsOpen = !partsOpen }, onExport = { setSheet("export") })
+        Toolbar(context)
+        Row(Modifier.weight(1f).fillMaxWidth().padding(10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (partsOpen) Box(Modifier.width(300.dp)) { com.rm.parrotmetric.ui.design.PartsSheet(design) { partsOpen = false } }
+            Box(Modifier.weight(1f).fillMaxHeight()) {
+                Column(
+                    Modifier.align(Alignment.TopEnd),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Surface(color = Palette.surface.copy(alpha = 0.72f), shape = RoundedCornerShape(18.dp)) {
+                        OrientationCube(state.yaw, state.pitch, actions::viewFrom, size = 72.dp)
+                    }
+                    Surface(color = Palette.surface.copy(alpha = 0.72f), shape = RoundedCornerShape(14.dp)) {
+                        IconButton(onClick = actions::fit) { Icon(Icons.fit, "Fit the model in view", tint = Palette.text) }
+                    }
+                }
+                Column(Modifier.align(Alignment.TopCenter), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    SelectionChip(state, actions)
+                    Message(design)
+                }
+            }
+            val docked = design.panel != null || sheet in setOf("measure", "section", "parameters", "export")
+            if (docked) Box(Modifier.width(380.dp)) {
+                when {
+                    design.panel != null -> FeaturePanel(design)
+                    sheet == "measure" -> com.rm.parrotmetric.ui.design.MeasureSheet(design) { design.stopMeasuring(); setSheet(null) }
+                    sheet == "section" -> com.rm.parrotmetric.ui.design.SectionSheet(design) { design.stopSection(); setSheet(null) }
+                    sheet == "parameters" -> com.rm.parrotmetric.ui.design.ParametersSheet(design) { setSheet(null) }
+                    sheet == "export" -> com.rm.parrotmetric.ui.design.ExportSheet(design, { setSheet(null) }) { actions.export(it); setSheet(null) }
+                }
+            }
+        }
+        Box(Modifier.padding(start = 10.dp, end = 10.dp, bottom = 10.dp)) { HistoryBar(design, actions) }
+    }
+}
+
+/** Every tool at once, in sections by group that wrap onto more rows when the window is narrow, for the large-screen layout. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun Toolbar(context: ToolContext) {
+    Surface(color = Palette.surface, shape = RoundedCornerShape(22.dp), modifier = Modifier.padding(horizontal = 10.dp)) {
+        androidx.compose.foundation.layout.FlowRow(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            ToolGroup.entries.forEachIndexed { i, group ->
+                Column(Modifier.padding(end = 10.dp)) {
+                    Text(group.label, Modifier.padding(start = 8.dp, bottom = 2.dp), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = group.colour)
+                    Row { for (t in Tools.all.filter { it.group == group }) ToolbarButton(t, context) }
+                }
+            }
+        }
+    }
+}
+
+/** A tool as an icon, its name in a tooltip on hover or a long press. */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun ToolbarButton(t: ToolDef, context: ToolContext) {
+    val enabled = t.enabled(context)
+    androidx.compose.material3.TooltipBox(
+        positionProvider = androidx.compose.material3.TooltipDefaults.rememberTooltipPositionProvider(
+            androidx.compose.material3.TooltipAnchorPosition.Below,
+        ),
+        tooltip = { PlainTooltip { Text(t.label) } },
+        state = androidx.compose.material3.rememberTooltipState(),
+    ) {
+        Surface(
+            onClick = { Tools.run(t, context) },
+            enabled = enabled,
+            modifier = Modifier.size(44.dp, 40.dp),
+            shape = RoundedCornerShape(12.dp),
+            color = Color.Transparent,
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(t.icon, t.label, Modifier.size(22.dp), tint = if (enabled) t.group.colour else Palette.faint)
+            }
         }
     }
 }

@@ -74,6 +74,10 @@ class MainActivity : ComponentActivity() {
 
         override fun readAutosave() = autosave.takeIf { it.exists() }?.readText()
 
+        private val settings get() = java.io.File(filesDir, "settings.txt")
+        override fun readSettings() = settings.takeIf { it.exists() }?.readText()
+        override suspend fun writeSettings(text: String) = withContext(Dispatchers.IO) { settings.writeText(text) }
+
         override suspend fun writeAutosave(text: String) = withContext(Dispatchers.IO) {
             val tmp = java.io.File(filesDir, "autosave.pmet.tmp")
             tmp.writeText(text)

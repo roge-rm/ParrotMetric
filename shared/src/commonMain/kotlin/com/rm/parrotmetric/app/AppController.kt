@@ -8,6 +8,7 @@ import com.rm.parrotmetric.design.SketchFeature
 import com.rm.parrotmetric.sketch.ProfileCurve
 import com.rm.parrotmetric.sketch.Sketch
 import com.rm.parrotmetric.sketch.SketchPlane
+import com.rm.parrotmetric.ui.LayoutMode
 import com.rm.parrotmetric.ui.ModelActions
 import com.rm.parrotmetric.ui.ModelState
 import com.rm.parrotmetric.ui.design.DesignEditor
@@ -36,6 +37,9 @@ interface PlatformFiles {
     fun create(suggested: String, then: (FileSink) -> Unit)
     fun readAutosave(): String?
     suspend fun writeAutosave(text: String)
+    /** The app's settings as "key=value" lines, or null if none are saved yet. */
+    fun readSettings(): String?
+    suspend fun writeSettings(text: String)
 }
 
 /**
@@ -61,6 +65,9 @@ class AppController(
     private var autosaveJob: Job? = null
 
     init {
+        files.readSettings()?.lines()?.firstNotNullOfOrNull { line ->
+            if (line.startsWith("layout=")) LayoutMode.entries.firstOrNull { it.name == line.removePrefix("layout=") } else null
+        }?.let { state = state.copy(layout = it) }
         design.onShown = { state = state.copy(selectedFaces = 0, selectedEdges = 0, selectedAreas = 0, selectedPlanes = 0) }
         design.onHistoryChanged = ::scheduleAutosave
         // Carry on from where the last session left off.
@@ -214,6 +221,11 @@ class AppController(
             }
             newSketch = null
             state = state.copy(sketch = null)
+        }
+
+        override fun setLayout(mode: LayoutMode) {
+            state = state.copy(layout = mode)
+            scope.launch { files.writeSettings("layout=${mode.name}\n") }
         }
 
         override fun closeMenu() {
