@@ -420,13 +420,15 @@ JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_combine(JNIEnv* env, jobje
     }
 }
 
-JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_fillet(JNIEnv* env, jobject, jint id, jlong body, jobjectArray edges, jdouble r) {
+/** kind: 0 one radius, 1 from r to second along each edge, 2 r across; see pm::fillet. */
+JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_fillet(JNIEnv* env, jobject, jint id, jlong body, jobjectArray edges, jdouble r, jint kind,
+                                                            jdouble second) {
     try {
         std::unique_lock<std::mutex> g(lock);
         pm::NamedShape s = solidOf(body);
         g.unlock();
         pm::Body out;
-        out.solid = pm::fillet(id, s, strings(env, edges), r);
+        out.solid = pm::fillet(id, s, strings(env, edges), static_cast<pm::FilletKind>(kind), r, second);
         g.lock();
         return store.add(std::move(out));
     } catch (const std::exception& e) {
@@ -1778,6 +1780,49 @@ JNIEXPORT jfloatArray JNICALL Java_com_rm_parrotmetric_Core_cameraState(JNIEnv* 
     jfloatArray out = env->NewFloatArray(20);
     env->SetFloatArrayRegion(out, 0, 20, a);
     return out;
+}
+
+
+JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_offsetFaces(JNIEnv* env, jobject, jint id, jlong body, jobjectArray faces, jdouble distance) {
+    try {
+        std::unique_lock<std::mutex> g(lock);
+        pm::NamedShape s = solidOf(body);
+        g.unlock();
+        return keep(pm::offsetFaces(id, s, strings(env, faces), distance));
+    } catch (const std::exception& e) {
+        fail(env, e.what());
+        return 0;
+    }
+}
+
+JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_deleteFaces(JNIEnv* env, jobject, jint id, jlong body, jobjectArray faces) {
+    try {
+        std::unique_lock<std::mutex> g(lock);
+        pm::NamedShape s = solidOf(body);
+        g.unlock();
+        return keep(pm::deleteFaces(id, s, strings(env, faces)));
+    } catch (const std::exception& e) {
+        fail(env, e.what());
+        return 0;
+    }
+}
+
+/** 12 numbers for each place along the path; see pm::pathPlaces. */
+JNIEXPORT jdoubleArray JNICALL Java_com_rm_parrotmetric_Core_pathPlaces(JNIEnv* env, jobject, jdoubleArray pathPlane, jintArray pathKinds,
+                                                                       jintArray pathIds, jdoubleArray pathNums, jlong pathBody,
+                                                                       jobjectArray pathEdges, jint count, jdouble spacing, jboolean turn,
+                                                                       jboolean reverse) {
+    try {
+        auto places = pm::pathPlaces(pathOf(env, pathPlane, pathKinds, pathIds, pathNums, pathBody, pathEdges), count, spacing, turn, reverse);
+        std::vector<double> flat;
+        for (const auto& m : places) flat.insert(flat.end(), m.begin(), m.end());
+        jdoubleArray out = env->NewDoubleArray(static_cast<jsize>(flat.size()));
+        env->SetDoubleArrayRegion(out, 0, static_cast<jsize>(flat.size()), flat.data());
+        return out;
+    } catch (const std::exception& e) {
+        fail(env, e.what());
+        return nullptr;
+    }
 }
 
 }  // extern "C"

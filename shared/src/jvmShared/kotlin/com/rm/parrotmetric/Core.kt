@@ -15,7 +15,9 @@ object Core : NativeCore {
     override external fun revolve(id: Int, plane: DoubleArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, pickCounts: IntArray, pickIds: IntArray, pickPoints: DoubleArray, ax: Double, ay: Double, dx: Double, dy: Double, angle: Double): Long
     /** how: 0 join, 1 cut, 2 intersect. */
     override external fun combine(id: Int, target: Long, tool: Long, how: Int): Long
-    override external fun fillet(id: Int, body: Long, edges: Array<String>, radius: Double): Long
+    override external fun fillet(id: Int, body: Long, edges: Array<String>, radius: Double, kind: Int, second: Double): Long
+    override external fun offsetFaces(id: Int, body: Long, faces: Array<String>, distance: Double): Long
+    override external fun deleteFaces(id: Int, body: Long, faces: Array<String>): Long
     override external fun chamfer(id: Int, body: Long, edges: Array<String>, distance: Double, kind: Int, second: Double, flip: Boolean): Long
     override external fun overlaps(a: Long, b: Long): Boolean
     override external fun facePlane(body: Long, name: String): DoubleArray
@@ -37,6 +39,7 @@ object Core : NativeCore {
     override external fun bodyCentre(body: Long): DoubleArray
     override external fun sweep(id: Int, plane: DoubleArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, pickCounts: IntArray, pickIds: IntArray, pickPoints: DoubleArray, pathPlane: DoubleArray, pathKinds: IntArray, pathIds: IntArray, pathNums: DoubleArray, pathBody: Long, pathEdges: Array<String>): Long
     override external fun pipe(id: Int, pathPlane: DoubleArray, pathKinds: IntArray, pathIds: IntArray, pathNums: DoubleArray, pathBody: Long, pathEdges: Array<String>, diameter: Double, inner: Double): Long
+    override external fun pathPlaces(pathPlane: DoubleArray, pathKinds: IntArray, pathIds: IntArray, pathNums: DoubleArray, pathBody: Long, pathEdges: Array<String>, count: Int, spacing: Double, turn: Boolean, reverse: Boolean): DoubleArray?
     override external fun coil(id: Int, plane: DoubleArray, u: Double, v: Double, diameter: Double, pitch: Double, turns: Double, section: Double, square: Boolean): Long
     override external fun thread(id: Int, body: Long, face: String, pitch: Double): Long
     override external fun textOutline(text: String, height: Double, bold: Boolean): DoubleArray

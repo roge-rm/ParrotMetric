@@ -56,6 +56,9 @@ class Rebuilder(private val kernel: Kernel) {
     ) {
         /** Names found again by shape while building it, old to new. */
         var found: Map<String, String> = emptyMap()
+        /** The shape it added or took away, held for patterns and mirrors of it, and how it was used. */
+        var tool = 0L
+        var toolOp = Operation.NewBody
     }
 
     private val steps = mutableListOf<Step>()
@@ -128,6 +131,7 @@ class Rebuilder(private val kernel: Kernel) {
         while (steps.size > i) {
             val s = steps.removeAt(steps.size - 1)
             s.bodies.forEach { kernel.release(it.handle) }
+            if (s.tool != 0L) kernel.release(s.tool)
         }
     }
 
@@ -287,7 +291,9 @@ class Rebuilder(private val kernel: Kernel) {
             val tool = kernel.revolve(f.id, plane, sketch.curves(), f.regions, ax, ay, dx, dy, f.angle)
             applyTool(f, tool, f.operation, bodies, planes, made)
         }
-        is FilletFeature -> edgeFeature(f, f.edges, bodies, planes, made) { body, edges -> kernel.fillet(f.id, body, edges, f.radius) }
+        is FilletFeature -> edgeFeature(f, f.edges, bodies, planes, made) { body, edges -> kernel.fillet(f.id, body, edges, f.radius, f.kind.ordinal, f.second) }
+        is OffsetFaceFeature -> faceFeature(f, f.faces, bodies, planes, made) { body, faces -> kernel.offsetFaces(f.id, body, faces, f.distance) }
+        is DeleteFaceFeature -> faceFeature(f, f.faces, bodies, planes, made) { body, faces -> kernel.deleteFaces(f.id, body, faces) }
         is ChamferFeature -> edgeFeature(f, f.edges, bodies, planes, made) { body, edges ->
             kernel.chamfer(f.id, body, edges, f.distance, f.kind.ordinal, f.second, f.flip)
         }
@@ -320,14 +326,18 @@ class Rebuilder(private val kernel: Kernel) {
         is MirrorFeature -> {
             val plane = resolvePlane(f.plane, bodies, f, planes)
             val m = Transforms.mirror(plane.origin, plane.normal)
-            copies(f, bodies, planes, made, picked(f.bodies, bodies), f.join) { b -> listOf(kernel.transform(f.id, b.handle, m, "m")) }
+            if (f.features.isNotEmpty()) repeatFeatures(f, f.features, listOf(m), bodies, planes, made, all)
+            else copies(f, bodies, planes, made, picked(f.bodies, bodies), f.join) { b -> listOf(kernel.transform(f.id, b.handle, m, "m")) }
         }
         is PatternFeature -> {
             val axis = f.axisFeature?.let { id ->
                 steps.firstNotNullOfOrNull { it.axes[id] } ?: throw KernelException("Its axis has been deleted")
             }
-            val mats = patternMatrices(f, axis)
-            copies(f, bodies, planes, made, picked(f.bodies, bodies), f.join) { b ->
+            val mats = f.path?.let { path ->
+                kernel.pathPlaces(pathOf(path, f, bodies, planes, all), f.count, f.spacing, f.turn, f.reverse).drop(1)
+            } ?: patternMatrices(f, axis)
+            if (f.features.isNotEmpty()) repeatFeatures(f, f.features, mats, bodies, planes, made, all)
+            else copies(f, bodies, planes, made, picked(f.bodies, bodies), f.join) { b ->
                 mats.mapIndexed { i, m -> kernel.transform(f.id, b.handle, m, "p$i") }
             }
         }
@@ -691,6 +701,20 @@ class Rebuilder(private val kernel: Kernel) {
      * joined to, cut from or intersected with the bodies it overlaps.
      */
     private fun applyTool(f: Feature, tool: Long, op: Operation, bodies: List<BodyState>, planes: Map<Int, SketchPlane>, made: Int): Step {
+        kernel.retain(tool)
+        val step = try {
+            useTool(f, tool, op, bodies, planes, made)
+        } catch (e: KernelException) {
+            kernel.release(tool)
+            throw e
+        }
+        step.tool = tool
+        step.toolOp = op
+        return step
+    }
+
+    /** [applyTool] without keeping the tool; takes over the tool's handle. */
+    private fun useTool(f: Feature, tool: Long, op: Operation, bodies: List<BodyState>, planes: Map<Int, SketchPlane>, made: Int): Step {
         try {
             if (op == Operation.NewBody) {
                 keep(bodies)
@@ -736,6 +760,75 @@ class Rebuilder(private val kernel: Kernel) {
             kernel.release(tool)
             throw e
         }
+    }
+
+    /**
+     * Earlier features' shapes moved by each of [mats] and used again as each
+     * feature used its own. A cut that misses every body is left out.
+     */
+    private fun repeatFeatures(
+        f: Feature, ids: List<Int>, mats: List<DoubleArray>, bodies: List<BodyState>, planes: Map<Int, SketchPlane>, made: Int, all: List<Feature>,
+    ): Step {
+        val sources = ids.map { id ->
+            val i = all.indexOfFirst { it.id == id }
+            steps.getOrNull(i)?.takeIf { i < steps.size && it.tool != 0L && it.error == null }
+                ?: throw KernelException("Pick features that add or take away a shape, from before this one")
+        }
+        keep(bodies)
+        var now = bodies
+        var count = made
+        var used = 0
+        try {
+            for ((k, src) in sources.withIndex()) for ((j, m) in mats.withIndex()) {
+                val copy = kernel.transform(f.id, src.tool, m, "f${ids[k]}.$j")
+                if (src.toolOp == Operation.Cut || src.toolOp == Operation.Intersect) {
+                    if (now.none { kernel.overlaps(it.handle, copy) }) { kernel.release(copy); continue }
+                }
+                used++
+                val s = useTool(f, copy, src.toolOp, now, planes, count)
+                now.forEach { kernel.release(it.handle) }
+                now = s.bodies
+                count = s.bodyCount
+            }
+            if (used == 0 && mats.isNotEmpty()) throw KernelException("None of the copies reach a body")
+        } catch (e: KernelException) {
+            now.forEach { kernel.release(it.handle) }
+            throw e
+        }
+        return Step(f.key(), now, planes, null, count)
+    }
+
+    /** Press pull or delete face: each body with some of the faces gets the operation on its own faces. */
+    private fun faceFeature(
+        f: Feature, faces: List<String>, bodies: List<BodyState>, planes: Map<Int, SketchPlane>, made: Int,
+        op: (Long, List<String>) -> Long,
+    ): Step {
+        if (faces.isEmpty()) throw KernelException("Pick the faces")
+        @Suppress("NAME_SHADOWING")
+        val faces = faces.map { ref(f, it, false, bodies) }
+        val out = mutableListOf<BodyState>()
+        var found = 0
+        try {
+            for (b in bodies) {
+                val names = kernel.faceNames(b.handle).toSet()
+                val mine = faces.filter { it in names }
+                if (mine.isEmpty()) {
+                    kernel.retain(b.handle)
+                    out += b
+                } else {
+                    found += mine.size
+                    out += BodyState(b.label, op(b.handle, mine))
+                }
+            }
+        } catch (e: KernelException) {
+            out.forEach { kernel.release(it.handle) }
+            throw e
+        }
+        if (found == 0) {
+            out.forEach { kernel.release(it.handle) }
+            throw KernelException("Its faces aren't there any more")
+        }
+        return Step(f.key(), out, planes, null, made)
     }
 
     /** The two face names in an edge name. Face names can hold "|" in brackets, as a fillet's does. */

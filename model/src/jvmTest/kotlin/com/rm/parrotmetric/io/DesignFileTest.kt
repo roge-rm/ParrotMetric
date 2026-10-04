@@ -87,6 +87,14 @@ class DesignFileTest {
             com.rm.parrotmetric.design.AxisFeature(d.newId(), "Round", 0.0, 0.0, 0.0, com.rm.parrotmetric.design.Axis3.Z, com.rm.parrotmetric.design.AxisFeature.Kind.Round, "F1.s5|F1.end", "F2.side", listOf(com.rm.parrotmetric.design.PointRef.Construction(4))),
             com.rm.parrotmetric.design.AlignFeature(d.newId(), "Align", listOf("Body 2"), "F1.end", PlaneRef.OnFace("F3.s1", Vec3(1.0, 0.0, 0.0)), true, true, 1.5),
             com.rm.parrotmetric.design.PrimitiveFeature(d.newId(), "Torus", com.rm.parrotmetric.design.PrimitiveKind.Torus, top, 1.0, 2.0, 30.0, 6.0, 0.0, Operation.Join),
+            com.rm.parrotmetric.design.OffsetFaceFeature(d.newId(), "Press pull", listOf("F1.end"), -2.5),
+            com.rm.parrotmetric.design.DeleteFaceFeature(d.newId(), "Delete face", listOf("F4.r(F1.s1|F1.end)")),
+            com.rm.parrotmetric.design.FilletFeature(d.newId(), "Variable", listOf("F1.s1|F1.end"), 1.0, com.rm.parrotmetric.design.FilletKind.Variable, 3.0),
+            com.rm.parrotmetric.design.MirrorFeature(d.newId(), "Mirror features", emptyList(), top, false, listOf(2, 5)),
+            com.rm.parrotmetric.design.PatternFeature(
+                d.newId(), "Along", emptyList(), false, com.rm.parrotmetric.design.Axis3.X, 4, 12.0, 0.0, null, 1, 0.0, true,
+                path = com.rm.parrotmetric.design.PathRef.Edges(listOf("F1.s1|F1.end")), turn = true, features = listOf(2), reverse = true,
+            ),
         )
         features.forEach { d.add(it) }
         d.suppressed += features[1].id

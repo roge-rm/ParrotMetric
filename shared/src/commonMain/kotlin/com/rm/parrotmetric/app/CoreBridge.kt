@@ -71,7 +71,10 @@ class CoreKernel(private val core: NativeCore) : Kernel {
     override fun combine(id: Int, target: Long, tool: Long, how: Operation): Long =
         call { core.combine(id, target, tool, when (how) { Operation.Cut -> 1; Operation.Intersect -> 2; else -> 0 }) }
 
-    override fun fillet(id: Int, body: Long, edges: List<String>, radius: Double) = call { core.fillet(id, body, edges.toTypedArray(), radius) }
+    override fun fillet(id: Int, body: Long, edges: List<String>, radius: Double, kind: Int, second: Double) =
+        call { core.fillet(id, body, edges.toTypedArray(), radius, kind, second) }
+    override fun offsetFaces(id: Int, body: Long, faces: List<String>, distance: Double) = call { core.offsetFaces(id, body, faces.toTypedArray(), distance) }
+    override fun deleteFaces(id: Int, body: Long, faces: List<String>) = call { core.deleteFaces(id, body, faces.toTypedArray()) }
     override fun chamfer(id: Int, body: Long, edges: List<String>, distance: Double, kind: Int, second: Double, flip: Boolean) =
         call { core.chamfer(id, body, edges.toTypedArray(), distance, kind, second, flip) }
     override fun overlaps(a: Long, b: Long) = call { core.overlaps(a, b) }
@@ -111,6 +114,13 @@ class CoreKernel(private val core: NativeCore) : Kernel {
 
     override fun pipe(id: Int, path: KernelPath, diameter: Double, inner: Double) =
         call { withPath(path) { pp, pc, body, edges -> core.pipe(id, pp, pc.kinds, pc.ids, pc.nums, body, edges, diameter, inner) } }
+
+    override fun pathPlaces(path: KernelPath, count: Int, spacing: Double, turn: Boolean, reverse: Boolean): List<DoubleArray> = call {
+        val c = Curves(path.curves)
+        val flat = core.pathPlaces(path.plane?.numbers() ?: DoubleArray(9), c.kinds, c.ids, c.nums, path.body, path.edges.toTypedArray(), count, spacing, turn, reverse)
+            ?: DoubleArray(0)
+        (0 until flat.size / 12).map { flat.copyOfRange(it * 12, it * 12 + 12) }
+    }
 
     override fun coil(id: Int, plane: SketchPlane, u: Double, v: Double, diameter: Double, pitch: Double, turns: Double, section: Double, square: Boolean) =
         call { core.coil(id, plane.numbers(), u, v, diameter, pitch, turns, section, square) }

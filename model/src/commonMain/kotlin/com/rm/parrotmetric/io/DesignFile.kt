@@ -30,6 +30,9 @@ import com.rm.parrotmetric.design.Design
 import com.rm.parrotmetric.design.ExtrudeFeature
 import com.rm.parrotmetric.design.Feature
 import com.rm.parrotmetric.design.FilletFeature
+import com.rm.parrotmetric.design.FilletKind
+import com.rm.parrotmetric.design.OffsetFaceFeature
+import com.rm.parrotmetric.design.DeleteFaceFeature
 import com.rm.parrotmetric.design.ImportFeature
 import com.rm.parrotmetric.design.Operation
 import com.rm.parrotmetric.design.Parameter
@@ -156,11 +159,13 @@ object DesignFile {
                 "type" to "hole", "sketch" to f.sketchId, "diameter" to f.diameter, "depth" to f.depth, "kind" to f.kind.name,
                 "topDiameter" to f.topDiameter, "topDepth" to f.topDepth,
             )
-            is MirrorFeature -> mapOf("type" to "mirror", "bodies" to f.bodies, "plane" to plane(f.plane), "join" to f.join)
+            is MirrorFeature -> mapOf("type" to "mirror", "bodies" to f.bodies, "plane" to plane(f.plane), "join" to f.join, "features" to f.features)
+            is OffsetFaceFeature -> mapOf("type" to "offsetFace", "faces" to f.faces, "distance" to f.distance)
+            is DeleteFaceFeature -> mapOf("type" to "deleteFace", "faces" to f.faces)
             is PatternFeature -> mapOf(
                 "type" to "pattern", "bodies" to f.bodies, "circular" to f.circular, "axis" to f.axis.name, "count" to f.count,
                 "spacing" to f.spacing, "angle" to f.angle, "axis2" to f.axis2?.name, "count2" to f.count2, "spacing2" to f.spacing2, "join" to f.join,
-                "axisFeature" to f.axisFeature,
+                "axisFeature" to f.axisFeature, "path" to f.path?.let { path(it) }, "turn" to f.turn, "features" to f.features, "reverse" to f.reverse,
             )
             is CombineFeature -> mapOf(
                 "type" to "combine", "target" to f.target, "tools" to f.tools, "operation" to f.operation.name, "keepTools" to f.keepTools,
@@ -224,7 +229,7 @@ object DesignFile {
                 },
                 "angle" to f.angle, "operation" to f.operation.name,
             )
-            is FilletFeature -> mapOf("type" to "fillet", "edges" to f.edges, "radius" to f.radius)
+            is FilletFeature -> mapOf("type" to "fillet", "edges" to f.edges, "radius" to f.radius, "kind" to f.kind.name, "second" to f.second)
             is ChamferFeature -> mapOf(
                 "type" to "chamfer", "edges" to f.edges, "distance" to f.distance, "kind" to f.kind.name, "second" to f.second, "flip" to f.flip,
             )
@@ -246,11 +251,14 @@ object DesignFile {
             "hole" -> HoleFeature(
                 id, name, o.int("sketch"), o.num("diameter"), o.num("depth"), HoleKind.valueOf(o.str("kind")), o.num("topDiameter"), o.num("topDepth"),
             )
-            "mirror" -> MirrorFeature(id, name, strings(o.arr("bodies")), plane(o.obj("plane")), o.bool("join"))
+            "mirror" -> MirrorFeature(id, name, strings(o.arr("bodies")), plane(o.obj("plane")), o.bool("join"), ints(o["features"]))
+            "offsetFace" -> OffsetFaceFeature(id, name, strings(o.arr("faces")), o.num("distance"))
+            "deleteFace" -> DeleteFaceFeature(id, name, strings(o.arr("faces")))
             "pattern" -> PatternFeature(
                 id, name, strings(o.arr("bodies")), o.bool("circular"), Axis3.valueOf(o.str("axis")), o.int("count"), o.num("spacing"), o.num("angle"),
                 (o["axis2"] as? Json.Str)?.let { Axis3.valueOf(it.value) }, o.int("count2"), o.num("spacing2"), o.bool("join"),
-                (o["axisFeature"] as? Json.Num)?.value?.toInt(),
+                (o["axisFeature"] as? Json.Num)?.value?.toInt(), (o["path"] as? Json.Obj)?.let { path(it) }, (o["turn"] as? Json.Bool)?.value ?: false,
+                ints(o["features"]), (o["reverse"] as? Json.Bool)?.value ?: false,
             )
             "combine" -> CombineFeature(id, name, o.str("target"), strings(o.arr("tools")), Operation.valueOf(o.str("operation")), o.bool("keepTools"))
             "split" -> SplitFeature(id, name, o.str("body"), plane(o.obj("plane")), (o["keep"] as? Json.Num)?.value?.toInt() ?: 0, (o["tool"] as? Json.Str)?.value)
@@ -309,7 +317,10 @@ object DesignFile {
                 }
                 RevolveFeature(id, name, o.int("sketch"), readRegions(o.arr("regions")), axis, o.num("angle"), Operation.valueOf(o.str("operation")))
             }
-            "fillet" -> FilletFeature(id, name, o.arr("edges").map { (it as Json.Str).value }, o.num("radius"))
+            "fillet" -> FilletFeature(
+                id, name, o.arr("edges").map { (it as Json.Str).value }, o.num("radius"),
+                (o["kind"] as? Json.Str)?.let { FilletKind.valueOf(it.value) } ?: FilletKind.Constant, (o["second"] as? Json.Num)?.value ?: 0.0,
+            )
             "chamfer" -> ChamferFeature(
                 id, name, o.arr("edges").map { (it as Json.Str).value }, o.num("distance"),
                 (o["kind"] as? Json.Str)?.let { com.rm.parrotmetric.design.ChamferKind.valueOf(it.value) } ?: com.rm.parrotmetric.design.ChamferKind.Equal,
@@ -321,6 +332,7 @@ object DesignFile {
     }
 
     private fun strings(j: List<Json>) = j.map { (it as Json.Str).value }
+    private fun ints(j: Json?) = (j as? Json.Arr)?.items?.map { (it as Json.Num).value.toInt() } ?: emptyList()
 
     private fun plane(p: PlaneRef): Map<String, Any?> = when (p) {
         is PlaneRef.Fixed -> mapOf("name" to p.plane.name, "origin" to vec(p.plane.origin), "x" to vec(p.plane.x), "y" to vec(p.plane.y))

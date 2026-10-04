@@ -65,13 +65,27 @@ private class FakeKernel : Kernel {
         }
     }
 
-    override fun fillet(id: Int, body: Long, edges: List<String>, radius: Double): Long {
+    override fun offsetFaces(id: Int, body: Long, faces: List<String>, distance: Double): Long {
+        calls += "offsetFaces $id $faces $distance"
+        return make(bodies.getValue(body).let { it.copy(to = it.to + distance) })
+    }
+
+    override fun deleteFaces(id: Int, body: Long, faces: List<String>): Long {
+        calls += "deleteFaces $id $faces"
+        return make(bodies.getValue(body).let { b -> b.copy(faces = b.faces - faces.toSet()) })
+    }
+
+    /** Places 10 apart along x. */
+    override fun pathPlaces(path: KernelPath, count: Int, spacing: Double, turn: Boolean, reverse: Boolean) =
+        (0 until count).map { i -> doubleArrayOf(1.0, 0.0, 0.0, 10.0 * i, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0) }
+
+    override fun fillet(id: Int, body: Long, edges: List<String>, radius: Double, kind: Int, second: Double): Long {
         calls += "fillet $id $edges"
         if (radius > 5) throw KernelException("The fillet doesn't fit")
         return make(bodies.getValue(body).let { it.copy(faces = it.faces + "F$id.r") })
     }
 
-    override fun chamfer(id: Int, body: Long, edges: List<String>, distance: Double, kind: Int, second: Double, flip: Boolean) = fillet(id, body, edges, distance)
+    override fun chamfer(id: Int, body: Long, edges: List<String>, distance: Double, kind: Int, second: Double, flip: Boolean) = fillet(id, body, edges, distance, 0, 0.0)
 
     override fun overlaps(a: Long, b: Long): Boolean {
         val x = bodies.getValue(a); val y = bodies.getValue(b)
@@ -492,5 +506,31 @@ class RebuildTest {
         assertTrue("pipe ${d.features[4].id}" in k.calls)
         assertTrue("thread ${thread.id} F${box.id}.end 1.5" in k.calls)
         assertTrue(k.calls.any { it.startsWith("loft") && it.endsWith(" 2") })
+    }
+
+    @Test
+    fun pressPullDeleteFaceAndFeaturePatterns() {
+        val k = FakeKernel()
+        val d = Design()
+        val base = extrude(d, sketchAt(d, 0.0, 10.0), Operation.NewBody)
+        val boss = extrude(d, sketchAt(d, 5.0, 3.0), Operation.Join)
+        val pattern = PatternFeature(d.newId(), "Pattern", emptyList(), false, Axis3.X, 3, 0.0, 0.0, null, 1, 0.0, join = false,
+            path = PathRef.Sketch(boss.sketchId), features = listOf(boss.id))
+        d.add(pattern)
+        val pull = OffsetFaceFeature(d.newId(), "Press pull", listOf("F${base.id}.end"), 2.0)
+        d.add(pull)
+        d.add(DeleteFaceFeature(d.newId(), "Delete face", listOf("F${boss.id}.s1")))
+        d.add(MirrorFeature(d.newId(), "Mirror", emptyList(), PlaneRef.Fixed(SketchPlane.Right), false, features = listOf(boss.id)))
+        val r = Rebuilder(k)
+        val built = r.rebuild(d.active)
+        assertTrue(built.errors.isEmpty(), built.errors.toString())
+        // The boss again at 15 and 25 along the path, apart from the body so new bodies, then mirrored to -8.
+        assertEquals(listOf("Body 1", "Body 2", "Body 3", "Body 4"), built.bodies.map { it.label })
+        assertEquals(listOf(15.0, 25.0, -8.0), built.bodies.drop(1).map { k.bodies.getValue(it.handle).from })
+        assertTrue("offsetFaces ${pull.id} [F${base.id}.end] 2.0" in k.calls)
+        assertTrue(k.calls.any { it.startsWith("deleteFaces") })
+        assertTrue("transform ${pattern.id} f${boss.id}.0" in k.calls)
+        r.clear()
+        assertTrue(k.bodies.isEmpty())
     }
 }

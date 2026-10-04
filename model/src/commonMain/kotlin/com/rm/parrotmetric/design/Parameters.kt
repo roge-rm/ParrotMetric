@@ -73,7 +73,12 @@ object Parametrics {
                 else -> f
             }
             is RevolveFeature -> if (field == "angle") f.copy(angle = rad) else f
-            is FilletFeature -> if (field == "size") f.copy(radius = v) else f
+            is FilletFeature -> when (field) {
+                "size" -> f.copy(radius = v)
+                "second" -> f.copy(second = v)
+                else -> f
+            }
+            is OffsetFaceFeature -> if (field == "size") f.copy(distance = v) else f
             is ChamferFeature -> when (field) {
                 "size" -> f.copy(distance = v)
                 "second" -> f.copy(second = if (f.kind == ChamferKind.DistanceAngle) rad else v)

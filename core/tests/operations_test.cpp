@@ -402,3 +402,60 @@ TEST_CASE("a loft between two squares is a box") {
     CHECK(std::count(names.begin(), names.end(), "F1.s2") == 1);
     CHECK_THROWS(loft(1, {low}, false));
 }
+
+TEST_CASE("pressing and pulling a flat face keeps its name") {
+    NamedShape box = primitive(1, top, Primitive::Box, 0, 0, 10, 20, 30);
+    NamedShape pulled = offsetFaces(2, box, {"F1.end"}, 5);
+    CHECK(volume(pulled) == Catch::Approx(7000).epsilon(1e-6));
+    auto names = pulled.faceNames();
+    CHECK(std::count(names.begin(), names.end(), "F1.end") == 1);
+    NamedShape pushed = offsetFaces(3, box, {"F1.end"}, -5);
+    CHECK(volume(pushed) == Catch::Approx(5000).epsilon(1e-6));
+    names = pushed.faceNames();
+    CHECK(std::count(names.begin(), names.end(), "F1.end") == 1);
+    CHECK_THROWS(offsetFaces(4, box, {"F1.end"}, 0));
+}
+
+TEST_CASE("deleting a hole's faces fills it in") {
+    NamedShape box = primitive(1, top, Primitive::Box, 0, 0, 20, 20, 10);
+    NamedShape drilled = combine(3, box, primitive(2, top, Primitive::Cylinder, 0, 0, 6, 10, 0), Combine::Cut);
+    REQUIRE(volume(drilled) < 4000);
+    NamedShape filled = deleteFaces(4, drilled, {"F2.side"});
+    CHECK(volume(filled) == Catch::Approx(4000).epsilon(1e-6));
+}
+
+TEST_CASE("variable and chord fillets") {
+    const double pi = 3.14159265358979;
+    NamedShape box = primitive(1, top, Primitive::Box, 0, 0, 20, 20, 20);
+    std::string edge;
+    for (const auto& e : box.edgeNames()) if (e.find("F1.end") != std::string::npos) { edge = e; break; }
+    REQUIRE(!edge.empty());
+    NamedShape varied = fillet(2, box, {edge}, FilletKind::Variable, 1, 3);
+    CHECK(volume(varied) < 8000);
+    CHECK(volume(varied) > 8000 - (9 - pi * 9 / 4) * 20);
+    // A square edge's chord of 2 is a radius of 2 / (2 sin 45°).
+    NamedShape chord = fillet(3, box, {edge}, FilletKind::Chord, 2, 0);
+    double r = 2 / (2 * std::sin(pi / 4));
+    CHECK(volume(chord) == Catch::Approx(8000 - (r * r - pi * r * r / 4) * 20).epsilon(1e-6));
+}
+
+TEST_CASE("places along a path, spread evenly or spaced") {
+    auto path = pathFromEdges({straight(0, 0, 0, 100, 0, 0)});
+    auto even = pathPlaces(path, 5, 0, false);
+    REQUIRE(even.size() == 5);
+    CHECK(even[0][3] == Catch::Approx(0).margin(1e-9));
+    CHECK(even[2][3] == Catch::Approx(50));
+    CHECK(even[4][3] == Catch::Approx(100));
+    auto spaced = pathPlaces(path, 3, 10, false);
+    CHECK(spaced[2][3] == Catch::Approx(20));
+    CHECK_THROWS(pathPlaces(path, 3, 60, false));
+    // From the far end back.
+    auto back = pathPlaces(path, 3, 10, false, true);
+    CHECK(back[0][3] == Catch::Approx(0).margin(1e-9));
+    CHECK(back[2][3] == Catch::Approx(-20));
+    // Round a corner, turned to follow: the last copy faces up the second leg.
+    auto bent = pathFromEdges({straight(0, 0, 0, 10, 0, 0), straight(10, 0, 0, 10, 10, 0)});
+    auto turned = pathPlaces(bent, 2, 0, true);
+    CHECK(turned[1][0] == Catch::Approx(0).margin(1e-9));  // x goes to y: cos 90°
+    CHECK(turned[1][4] == Catch::Approx(1));
+}

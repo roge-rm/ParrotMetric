@@ -14,7 +14,9 @@ interface NativeCore {
     fun revolve(id: Int, plane: DoubleArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, pickCounts: IntArray, pickIds: IntArray, pickPoints: DoubleArray, ax: Double, ay: Double, dx: Double, dy: Double, angle: Double): Long
     /** how: 0 join, 1 cut, 2 intersect. */
     fun combine(id: Int, target: Long, tool: Long, how: Int): Long
-    fun fillet(id: Int, body: Long, edges: Array<String>, radius: Double): Long
+    fun fillet(id: Int, body: Long, edges: Array<String>, radius: Double, kind: Int, second: Double): Long
+    fun offsetFaces(id: Int, body: Long, faces: Array<String>, distance: Double): Long
+    fun deleteFaces(id: Int, body: Long, faces: Array<String>): Long
     fun chamfer(id: Int, body: Long, edges: Array<String>, distance: Double, kind: Int, second: Double, flip: Boolean): Long
     fun overlaps(a: Long, b: Long): Boolean
     fun facePlane(body: Long, name: String): DoubleArray
@@ -38,6 +40,7 @@ interface NativeCore {
     fun sweep(id: Int, plane: DoubleArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, pickCounts: IntArray, pickIds: IntArray, pickPoints: DoubleArray, pathPlane: DoubleArray, pathKinds: IntArray, pathIds: IntArray, pathNums: DoubleArray, pathBody: Long, pathEdges: Array<String>): Long
     /** A round tube along a path, given as for sweep; hollow when inner is more than 0. */
     fun pipe(id: Int, pathPlane: DoubleArray, pathKinds: IntArray, pathIds: IntArray, pathNums: DoubleArray, pathBody: Long, pathEdges: Array<String>, diameter: Double, inner: Double): Long
+    fun pathPlaces(pathPlane: DoubleArray, pathKinds: IntArray, pathIds: IntArray, pathNums: DoubleArray, pathBody: Long, pathEdges: Array<String>, count: Int, spacing: Double, turn: Boolean, reverse: Boolean): DoubleArray?
     fun coil(id: Int, plane: DoubleArray, u: Double, v: Double, diameter: Double, pitch: Double, turns: Double, section: Double, square: Boolean): Long
     fun thread(id: Int, body: Long, face: String, pitch: Double): Long
     /** Text as outline curves, nine numbers each: kind (0 line, 3 Bézier), start, end, then the two controls. */

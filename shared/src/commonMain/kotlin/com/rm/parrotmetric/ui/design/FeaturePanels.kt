@@ -354,9 +354,23 @@ private fun EdgeSettings(editor: DesignEditor, d: DesignEditor.EdgeDraft) {
         d.exprs.remove("second")
         editor.draftChanged()
     }
-    Field(editor, d, "size", if (d.chamfer) "Distance" else "Radius", d.size, "mm", allowNegative = false) {
+    if (!d.chamfer) Segmented(listOf("Radius", "Start to end", "Across"), d.filletKind.ordinal) {
+        d.filletKind = com.rm.parrotmetric.design.FilletKind.entries[it]
+        if (d.filletKind == com.rm.parrotmetric.design.FilletKind.Variable) { d.second = d.size * 2; d.exprs.remove("second") }
+        editor.draftChanged()
+    }
+    val sizeLabel = when {
+        d.chamfer -> "Distance"
+        d.filletKind == com.rm.parrotmetric.design.FilletKind.Variable -> "Start"
+        d.filletKind == com.rm.parrotmetric.design.FilletKind.Chord -> "Across"
+        else -> "Radius"
+    }
+    Field(editor, d, "size", sizeLabel, d.size, "mm", allowNegative = false) {
         d.size = it
         editor.draftChanged()
+    }
+    if (!d.chamfer && d.filletKind == com.rm.parrotmetric.design.FilletKind.Variable) {
+        Field(editor, d, "second", "End", d.second, "mm", allowNegative = false) { d.second = it; editor.draftChanged() }
     }
     if (d.chamfer && d.kind != com.rm.parrotmetric.design.ChamferKind.Equal) {
         val angle = d.kind == com.rm.parrotmetric.design.ChamferKind.DistanceAngle
@@ -508,12 +522,21 @@ private fun bodiesLabel(bodies: List<String>, emptyMeans: String) = when (bodies
 
 @Composable
 internal fun FaceSettings(editor: DesignEditor, d: DesignEditor.FaceDraft) {
-    Header(if (d.tilt) "Draft" else "Shell", if (d.tilt) Icons.draft else Icons.shell, Palette.modify, if (d.faces.isEmpty()) null else count(d.faces.size, "face", "faces"))
-    if (d.tilt) {
-        Segmented(listOf("Faces to tilt", "Pivot face"), if (d.pickingPivot) 1 else 0) { d.pickingPivot = it == 1 }
-        Field(editor, d, "size", "Angle", d.size, "°", allowNegative = true) { d.size = it; editor.draftChanged() }
-    } else {
-        Field(editor, d, "size", "Walls", d.size, "mm", allowNegative = false) { d.size = it; editor.draftChanged() }
+    val icon = when (d.tool) {
+        DesignEditor.FaceTool.Shell -> Icons.shell
+        DesignEditor.FaceTool.Draft -> Icons.draft
+        DesignEditor.FaceTool.PressPull -> Icons.pressPull
+        DesignEditor.FaceTool.Delete -> Icons.deleteFace
+    }
+    Header(d.tool.title, icon, Palette.modify, if (d.faces.isEmpty()) null else count(d.faces.size, "face", "faces"))
+    when (d.tool) {
+        DesignEditor.FaceTool.Draft -> {
+            Segmented(listOf("Faces to tilt", "Pivot face"), if (d.pickingPivot) 1 else 0) { d.pickingPivot = it == 1 }
+            Field(editor, d, "size", "Angle", d.size, "°", allowNegative = true) { d.size = it; editor.draftChanged() }
+        }
+        DesignEditor.FaceTool.Shell -> Field(editor, d, "size", "Walls", d.size, "mm", allowNegative = false) { d.size = it; editor.draftChanged() }
+        DesignEditor.FaceTool.PressPull -> Field(editor, d, "size", "Distance", d.size, "mm", allowNegative = true) { d.size = it; editor.draftChanged() }
+        DesignEditor.FaceTool.Delete -> {}
     }
 }
 
@@ -551,15 +574,49 @@ private fun AxisRow(label: String, axis: com.rm.parrotmetric.design.Axis3?, allo
 
 @Composable
 internal fun MirrorSettings(editor: DesignEditor, d: DesignEditor.MirrorDraft) {
-    Header("Mirror", Icons.mirror, Palette.modify, bodiesLabel(d.bodies, "All bodies"))
+    Header("Mirror", Icons.mirror, Palette.modify, if (d.byFeatures) featuresLabel(d.features) else bodiesLabel(d.bodies, "All bodies"))
+    FeatureChoice(editor, d.id, d.byFeatures, d.features) { by, features -> d.byFeatures = by; d.features = features; editor.draftChanged() }
     PlaneRow(d, d.plane) { d.plane = it; editor.draftChanged() }
-    Toggle("Join to the original", d.join) { d.join = it; editor.draftChanged() }
+    if (!d.byFeatures) Toggle("Join to the original", d.join) { d.join = it; editor.draftChanged() }
+}
+
+private fun featuresLabel(features: List<Int>) = if (features.isEmpty()) null else count(features.size, "feature", "features")
+
+/** Bodies or features to copy, and which features when it's those. */
+@Composable
+private fun FeatureChoice(editor: DesignEditor, id: Int, byFeatures: Boolean, features: List<Int>, set: (Boolean, List<Int>) -> Unit) {
+    Segmented(listOf("Bodies", "Features"), if (byFeatures) 1 else 0) { set(it == 1, features) }
+    if (byFeatures) {
+        val choices = editor.toolFeatures(id)
+        if (choices.isEmpty()) Text("Nothing before this adds or takes away a shape", fontSize = 14.sp, color = Palette.muted)
+        for (f in choices) Toggle(f.name, f.id in features) { on -> set(true, if (on) features + f.id else features - f.id) }
+    }
 }
 
 @Composable
 internal fun PatternSettings(editor: DesignEditor, d: DesignEditor.PatternDraft) {
-    Header("Pattern", Icons.pattern, Palette.modify, bodiesLabel(d.bodies, "All bodies"))
-    Segmented(listOf("In a row", "Round an axis"), if (d.circular) 1 else 0) { d.circular = it == 1; editor.draftChanged() }
+    Header("Pattern", Icons.pattern, Palette.modify, if (d.byFeatures) featuresLabel(d.features) else bodiesLabel(d.bodies, "All bodies"))
+    FeatureChoice(editor, d.id, d.byFeatures, d.features) { by, features -> d.byFeatures = by; d.features = features; editor.draftChanged() }
+    Segmented(listOf("In a row", "Round an axis", "Along a path"), if (d.alongPath) 2 else if (d.circular) 1 else 0) {
+        d.alongPath = it == 2
+        d.circular = it == 1
+        if (d.alongPath && d.pathSketch == null && !d.pathByEdges) d.pathSketch = editor.sketchChoices(null).lastOrNull()?.second
+        editor.draftChanged()
+    }
+    if (d.alongPath) {
+        PathRow(editor, null, d.pathByEdges, d.pathSketch, d.pathEdges.size) { byEdges, sketch ->
+            d.pathByEdges = byEdges
+            d.pathSketch = sketch
+            editor.draftChanged()
+        }
+        Field(editor, d, "count", "Count", d.count, "", allowNegative = false) { d.count = it; editor.draftChanged() }
+        Segmented(listOf("Spread along it", "Spaced"), if (d.spread) 0 else 1) { d.spread = it == 0; editor.draftChanged() }
+        if (!d.spread) Field(editor, d, "spacing", "Spacing", d.spacing, "mm", allowNegative = false) { d.spacing = it; editor.draftChanged() }
+        Toggle("Turn with the path", d.turn) { d.turn = it; editor.draftChanged() }
+        Toggle("Start from the other end", d.reverse) { d.reverse = it; editor.draftChanged() }
+        if (!d.byFeatures) Toggle("Join to the original", d.join) { d.join = it; editor.draftChanged() }
+        return
+    }
     val axes = editor.axisFeatures()
     if (d.circular && axes.isNotEmpty()) {
         val options = listOf<Int?>(null) + axes.map { it.id }
@@ -580,7 +637,7 @@ internal fun PatternSettings(editor: DesignEditor, d: DesignEditor.PatternDraft)
             Field(editor, d, "spacing2", "Spacing", d.spacing2, "mm", allowNegative = true) { d.spacing2 = it; editor.draftChanged() }
         }
     }
-    Toggle("Join to the original", d.join) { d.join = it; editor.draftChanged() }
+    if (!d.byFeatures) Toggle("Join to the original", d.join) { d.join = it; editor.draftChanged() }
 }
 
 @Composable

@@ -2,6 +2,10 @@
 #include "parallel.h"
 
 #include <BRepAdaptor_Curve.hxx>
+#include <GeomAPI_ProjectPointOnSurf.hxx>
+#include <GCPnts_AbscissaPoint.hxx>
+#include <BRepOffset_MakeOffset.hxx>
+#include <BRepAlgoAPI_Defeaturing.hxx>
 #include <gp_Lin2d.hxx>
 #include <BRepBuilderAPI_MakeEdge.hxx>
 #include <BRepBuilderAPI_MakeWire.hxx>
@@ -343,6 +347,177 @@ NamedShape fillet(int id, const NamedShape& body, const std::vector<std::string>
         return out;
     } catch (const Standard_Failure&) {
         throw std::runtime_error("The fillet doesn't fit");
+    }
+}
+
+NamedShape fillet(int id, const NamedShape& body, const std::vector<std::string>& edges, FilletKind kind, double size, double second) {
+    if (kind == FilletKind::Constant) return fillet(id, body, edges, size);
+    if (size <= 0 || (kind == FilletKind::Variable && second <= 0)) throw std::runtime_error("Sizes have to be more than 0");
+    try {
+        BRepFilletAPI_MakeFillet op(body.shape);
+        TopTools_IndexedDataMapOfShapeListOfShape edgeFaces;
+        TopExp::MapShapesAndAncestors(body.shape, TopAbs_EDGE, TopAbs_FACE, edgeFaces);
+        std::vector<std::pair<TopoDS_Edge, std::string>> added;
+        for (const auto& name : edges) {
+            for (const auto& e : body.findEdges(name)) {
+                if (kind == FilletKind::Variable) {
+                    op.Add(size, second, e);
+                } else {
+                    // The radius that makes the rounding size across: from the angle between the faces at the edge's middle.
+                    const TopTools_ListOfShape& faces = edgeFaces.FindFromKey(e);
+                    if (faces.Extent() < 2) continue;
+                    BRepAdaptor_Curve curve(e);
+                    gp_Pnt mid = curve.Value((curve.FirstParameter() + curve.LastParameter()) / 2);
+                    auto normal = [&](const TopoDS_Face& f) {
+                        BRepAdaptor_Surface s(f);
+                        GeomAPI_ProjectPointOnSurf onto(mid, BRep_Tool::Surface(f));
+                        double u = 0, v = 0;
+                        if (onto.NbPoints() > 0) onto.LowerDistanceParameters(u, v);
+                        gp_Pnt p;
+                        gp_Vec du, dv;
+                        s.D1(u, v, p, du, dv);
+                        gp_Vec n = du.Crossed(dv);
+                        if (f.Orientation() == TopAbs_REVERSED) n.Reverse();
+                        return n;
+                    };
+                    double turn = normal(TopoDS::Face(faces.First())).Angle(normal(TopoDS::Face(faces.Last())));
+                    if (turn < 1e-6) continue;
+                    op.Add(size / (2 * std::sin(turn / 2)), e);
+                }
+                added.push_back({e, name});
+            }
+        }
+        if (added.empty()) throw std::runtime_error("The edges to round aren't there any more");
+        op.Build();
+        if (!op.IsDone() || !BRepCheck_Analyzer(op.Shape()).IsValid()) throw std::runtime_error("The fillet doesn't fit");
+        NamedShape out = carryNames({&body}, op, op.Shape(), prefix(id));
+        for (const auto& [e, name] : added)
+            for (const auto& f : op.Generated(e)) out.names.Bind(f, prefix(id) + ".r(" + name + ")");
+        return out;
+    } catch (const Standard_Failure&) {
+        throw std::runtime_error("The fillet doesn't fit");
+    }
+}
+
+NamedShape offsetFaces(int id, const NamedShape& body, const std::vector<std::string>& faces, double distance) {
+    if (std::abs(distance) < 1e-9) throw std::runtime_error("Move the faces by more than 0");
+    try {
+        NamedShape current = body;
+        for (const auto& name : faces) {
+            auto found = current.findFaces(name);
+            if (found.empty()) throw std::runtime_error("A face to move isn't there any more");
+            const TopoDS_Face& face = found[0];
+            BRepAdaptor_Surface surface(face);
+            if (surface.GetType() != GeomAbs_Plane) {
+                // Curved: OCCT's offset, this face only.
+                BRepOffset_MakeOffset offset;
+                offset.Initialize(current.shape, 0, 1e-6, BRepOffset_Skin, false, false, GeomAbs_Intersection);
+                offset.SetOffsetOnFace(face, distance);
+                offset.MakeOffsetShape();
+                if (!offset.IsDone()) throw std::runtime_error("That face can't be moved that far");
+                NamedShape moved;
+                moved.shape = offset.Shape();
+                int k = 0;
+                for (TopExp_Explorer f(moved.shape, TopAbs_FACE); f.More(); f.Next()) {
+                    // Faces whose image came from an original keep its name.
+                    std::string n;
+                    for (TopExp_Explorer o(current.shape, TopAbs_FACE); o.More() && n.empty(); o.Next())
+                        if (offset.OffsetFacesFromShapes().HasImage(o.Current())) {
+                            TopTools_ListOfShape images;
+                            offset.OffsetFacesFromShapes().LastImage(o.Current(), images);
+                            for (const auto& im : images) if (im.IsSame(f.Current())) n = current.faceName(o.Current());
+                        }
+                    moved.names.Bind(f.Current(), n.empty() ? prefix(id) + ".o" + std::to_string(k++) : n);
+                }
+                check(moved.shape, "That face can't be moved that far");
+                current = std::move(moved);
+                continue;
+            }
+            // Flat: a slab on the face, joined on or cut away.
+            gp_Dir n = surface.Plane().Axis().Direction();
+            if (face.Orientation() == TopAbs_REVERSED) n.Reverse();
+            BRepPrimAPI_MakePrism slab(face, gp_Vec(n) * distance);
+            if (!slab.IsDone()) throw std::runtime_error("That face can't be moved");
+            NamedShape tool;
+            tool.shape = slab.Shape();
+            int k = 0;
+            TopoDS_Shape far = slab.LastShape();
+            for (TopExp_Explorer f(tool.shape, TopAbs_FACE); f.More(); f.Next()) {
+                bool end = false;
+                for (TopExp_Explorer l(far, TopAbs_FACE); l.More(); l.Next()) end = end || l.Current().IsSame(f.Current());
+                tool.names.Bind(f.Current(), end ? name : prefix(id) + ".o" + std::to_string(k++));
+            }
+            NamedShape joined = combine(id, current, tool, distance > 0 ? Combine::Join : Combine::Cut);
+            // A push leaves the slab's far face as the new face; it keeps the old name, which combine gave a new one.
+            current = std::move(joined);
+        }
+        return current;
+    } catch (const Standard_Failure&) {
+        throw std::runtime_error("That face can't be moved that far");
+    }
+}
+
+NamedShape deleteFaces(int id, const NamedShape& body, const std::vector<std::string>& faces) {
+    try {
+        BRepAlgoAPI_Defeaturing op;
+        op.SetShape(body.shape);
+        bool any = false;
+        for (const auto& name : faces)
+            for (const auto& f : body.findFaces(name)) { op.AddFaceToRemove(f); any = true; }
+        if (!any) throw std::runtime_error("The faces to take away aren't there any more");
+        op.SetRunParallel(useCores());
+        op.Build();
+        if (!op.IsDone()) throw std::runtime_error("Those faces can't be taken away: the faces round them can't close the gap");
+        NamedShape out = carryNames({&body}, op, op.Shape(), prefix(id));
+        check(out.shape, "Those faces can't be taken away");
+        return out;
+    } catch (const Standard_Failure&) {
+        throw std::runtime_error("Those faces can't be taken away");
+    }
+}
+
+std::vector<std::array<double, 12>> pathPlaces(const TopoDS_Wire& path, int count, double spacing, bool turn, bool reverse) {
+    if (count < 1 || count > 500) throw std::runtime_error("Use between 1 and 500 copies");
+    try {
+        BRepAdaptor_CompCurve curve(path);
+        const double length = GCPnts_AbscissaPoint::Length(curve);
+        if (length < 1e-9) throw std::runtime_error("The path has no length");
+        const double step = spacing > 0 ? spacing : (count > 1 ? length / (count - 1) : 0);
+        if (step * (count - 1) > length + 1e-6) throw std::runtime_error("The copies don't fit on the path at that spacing");
+        auto at = [&](double s, gp_Pnt& p, gp_Vec& t) {
+            s = std::min(s, length);
+            GCPnts_AbscissaPoint along(curve, reverse ? length - s : s, curve.FirstParameter());
+            curve.D1(along.Parameter(), p, t);
+            if (reverse) t.Reverse();
+        };
+        gp_Pnt p0;
+        gp_Vec t0;
+        at(0, p0, t0);
+        std::vector<std::array<double, 12>> out;
+        for (int i = 0; i < count; ++i) {
+            gp_Pnt p;
+            gp_Vec t;
+            at(i * step, p, t);
+            gp_Trsf m;
+            if (turn && t.Magnitude() > 1e-12 && t0.Magnitude() > 1e-12) {
+                gp_Dir a(t0), b(t);
+                gp_Vec axis = gp_Vec(a).Crossed(gp_Vec(b));
+                if (axis.Magnitude() > 1e-12) m.SetRotation(gp_Ax1(p0, gp_Dir(axis)), a.Angle(b));
+                else if (a.Dot(b) < 0) m.SetRotation(gp_Ax1(p0, gp_Dir(gp_Vec(a).Crossed(std::abs(a.X()) < 0.9 ? gp_Vec(1, 0, 0) : gp_Vec(0, 1, 0)))), M_PI);
+            }
+            gp_Trsf move;
+            move.SetTranslation(p0, p);
+            gp_Trsf all = move * m;
+            std::array<double, 12> r{};
+            for (int row = 0; row < 3; ++row) {
+                for (int col = 0; col < 3; ++col) r[size_t(row * 4 + col)] = all.Value(row + 1, col + 1);
+                r[size_t(row * 4 + 3)] = all.Value(row + 1, 4);
+            }
+            out.push_back(r);
+        }
+        return out;
+    } catch (const Standard_Failure&) {
+        throw std::runtime_error("The copies couldn't be placed along the path");
     }
 }
 

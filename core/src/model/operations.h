@@ -51,6 +51,34 @@ NamedShape combine(int id, const NamedShape& target, const NamedShape& tool, Com
 /** Rounds the named edges. New faces are F<id>.r(<edge name>). */
 NamedShape fillet(int id, const NamedShape& body, const std::vector<std::string>& edges, double radius);
 
+enum class FilletKind { Constant, Variable, Chord };
+
+/**
+ * Rounds edges: Constant, [size] radius; Variable, from [size] at each
+ * edge's start to [second] at its end; Chord, so the rounding is [size]
+ * across from face to face.
+ */
+NamedShape fillet(int id, const NamedShape& body, const std::vector<std::string>& edges, FilletKind kind, double size, double second);
+
+/**
+ * Moves faces along their normals by [distance] (out when more than 0),
+ * the body growing or shrinking to follow, as pressing or pulling them.
+ * Each moved face keeps its name.
+ */
+NamedShape offsetFaces(int id, const NamedShape& body, const std::vector<std::string>& faces, double distance);
+
+/** Takes faces away and closes the gap they leave, as removing a fillet, hole or boss does. */
+NamedShape deleteFaces(int id, const NamedShape& body, const std::vector<std::string>& faces);
+
+/**
+ * Where copies go along a path: [count] of them, spread evenly over its
+ * length, or [spacing] mm apart when that's more than 0. Each is a 3x4
+ * matrix (rows of rotation then translation) taking the path's start to
+ * its place; with [turn], turned to follow the path too. The first is the
+ * start itself. With [reverse], the path is taken from its end back.
+ */
+std::vector<std::array<double, 12>> pathPlaces(const TopoDS_Wire& path, int count, double spacing, bool turn, bool reverse = false);
+
 enum class ChamferKind { Equal, TwoDistances, DistanceAngle };
 
 /**

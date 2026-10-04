@@ -25,7 +25,14 @@ interface Kernel {
     fun revolve(id: Int, plane: SketchPlane, curves: List<ProfileCurve>, regions: List<RegionRef>, ax: Double, ay: Double, dx: Double, dy: Double, angle: Double): Long
     /** how is Join, Cut or Intersect. */
     fun combine(id: Int, target: Long, tool: Long, how: Operation): Long
-    fun fillet(id: Int, body: Long, edges: List<String>, radius: Double): Long
+    /** kind is FilletKind's ordinal; second is the end radius of a variable fillet. */
+    fun fillet(id: Int, body: Long, edges: List<String>, radius: Double, kind: Int = 0, second: Double = 0.0): Long
+    /** The body with faces moved along their normals, out when distance is more than 0. */
+    fun offsetFaces(id: Int, body: Long, faces: List<String>, distance: Double): Long = throw KernelException("Not here")
+    /** The body with faces taken away and the gap closed. */
+    fun deleteFaces(id: Int, body: Long, faces: List<String>): Long = throw KernelException("Not here")
+    /** Where copies go along a path, 3x4 matrices from its start, the first being the start; see PatternFeature. */
+    fun pathPlaces(path: KernelPath, count: Int, spacing: Double, turn: Boolean, reverse: Boolean = false): List<DoubleArray> = throw KernelException("Not here")
     /** kind is ChamferKind's ordinal; second is a distance or an angle in radians; see ChamferFeature. */
     fun chamfer(id: Int, body: Long, edges: List<String>, distance: Double, kind: Int = 0, second: Double = 0.0, flip: Boolean = false): Long
     fun overlaps(a: Long, b: Long): Boolean

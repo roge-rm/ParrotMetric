@@ -105,8 +105,22 @@ data class RevolveFeature(
     override fun key() = this
 }
 
-/** Rounds edges, found by name. */
-data class FilletFeature(override val id: Int, override val name: String, val edges: List<String>, val radius: Double) : Feature() {
+/** How a fillet is measured. */
+enum class FilletKind { Constant, Variable, Chord }
+
+/**
+ * Rounds edges, found by name: [radius] all along, or for [FilletKind.Variable]
+ * from [radius] at each edge's start to [second] at its end, or for
+ * [FilletKind.Chord] [radius] straight across from face to face.
+ */
+data class FilletFeature(
+    override val id: Int,
+    override val name: String,
+    val edges: List<String>,
+    val radius: Double,
+    val kind: FilletKind = FilletKind.Constant,
+    val second: Double = 0.0,
+) : Feature() {
     override fun key() = this
 }
 

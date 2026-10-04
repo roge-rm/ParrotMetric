@@ -13,6 +13,16 @@ data class DraftFeature(override val id: Int, override val name: String, val fac
     override fun key() = this
 }
 
+/** Moves faces along their normals by [distance] mm, out when more than 0, the body following. */
+data class OffsetFaceFeature(override val id: Int, override val name: String, val faces: List<String>, val distance: Double) : Feature() {
+    override fun key() = this
+}
+
+/** Takes faces away and closes the gap, as removing a fillet, hole or boss. */
+data class DeleteFaceFeature(override val id: Int, override val name: String, val faces: List<String>) : Feature() {
+    override fun key() = this
+}
+
 enum class HoleKind { Simple, Counterbore, Countersink }
 
 /**
@@ -36,15 +46,30 @@ data class HoleFeature(
 /** Which bodies a feature works on: by label, or every body when empty. */
 typealias BodyPick = List<String>
 
-/** A mirror image of bodies across a plane, joined to them or as new bodies. */
-data class MirrorFeature(override val id: Int, override val name: String, val bodies: BodyPick, val plane: PlaneRef, val join: Boolean) : Feature() {
+/**
+ * A mirror image of bodies across a plane, joined to them or as new bodies.
+ * With [features], those features are done again mirrored instead, each
+ * joining, cutting or adding as it did.
+ */
+data class MirrorFeature(
+    override val id: Int,
+    override val name: String,
+    val bodies: BodyPick,
+    val plane: PlaneRef,
+    val join: Boolean,
+    val features: List<Int> = emptyList(),
+) : Feature() {
     override fun key() = this
 }
 
 /**
  * Copies of bodies in a row (along [axis], [spacing] mm apart, and
  * optionally along [axis2] too) or round [axis] ([angle] radians shared
- * between them; a full turn spaces them evenly).
+ * between them; a full turn spaces them evenly). With [path], they go along
+ * it instead: [count] spread over its length, or [spacing] apart when that's
+ * more than 0, turned to follow it with [turn], from its far end with
+ * [reverse]. With [features], those
+ * features are done again at each place instead of copying bodies.
  */
 data class PatternFeature(
     override val id: Int,
@@ -61,6 +86,10 @@ data class PatternFeature(
     val join: Boolean,
     /** For a pattern round an axis: a construction axis to use instead of the origin's. */
     val axisFeature: Int? = null,
+    val path: PathRef? = null,
+    val turn: Boolean = false,
+    val features: List<Int> = emptyList(),
+    val reverse: Boolean = false,
 ) : Feature() {
     override fun key() = this
 }

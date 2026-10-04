@@ -623,8 +623,10 @@ class DesignEditor(
         rebuild()
     }
 
-    fun startShell() = openFaces(FaceDraft(null, tilt = false))
-    fun startDraft() = openFaces(FaceDraft(null, tilt = true))
+    fun startShell() = openFaces(FaceDraft(null, FaceTool.Shell))
+    fun startDraft() = openFaces(FaceDraft(null, FaceTool.Draft))
+    fun startPressPull() = openFaces(FaceDraft(null, FaceTool.PressPull))
+    fun startDeleteFace() = openFaces(FaceDraft(null, FaceTool.Delete))
 
     private fun openFaces(d: FaceDraft) {
         d.faces = viewport.selectedFaces().map { it.second }.filter { it.isNotEmpty() }
@@ -778,6 +780,17 @@ class DesignEditor(
     /** Construction points as last built, for Project in sketches. */
     fun constructionPoints(): List<Vec3> = built?.points?.values?.toList().orEmpty()
 
+    /** Features before [id] that add or take away a shape, to pattern or mirror. */
+    fun toolFeatures(id: Int): List<Feature> {
+        val all = design.active
+        val i = all.indexOfFirst { it.id == id }.let { if (it < 0) all.size else it }
+        return all.subList(0, i).filter {
+            it is ExtrudeFeature || it is RevolveFeature || it is HoleFeature || it is com.rm.parrotmetric.design.SweepFeature ||
+                it is com.rm.parrotmetric.design.PipeFeature || it is com.rm.parrotmetric.design.CoilFeature ||
+                it is com.rm.parrotmetric.design.LoftFeature || it is com.rm.parrotmetric.design.PrimitiveFeature
+        }
+    }
+
     /** Construction axes so far, for patterns round them. */
     fun axisFeatures(): List<AxisFeature> = design.active.filterIsInstance<AxisFeature>()
 
@@ -866,8 +879,10 @@ class DesignEditor(
             is RevolveFeature -> RevolveDraft(f)
             is FilletFeature -> EdgeDraft(f, chamfer = false)
             is ChamferFeature -> EdgeDraft(f, chamfer = true)
-            is ShellFeature -> FaceDraft(f, tilt = false)
-            is DraftFeature -> FaceDraft(f, tilt = true)
+            is ShellFeature -> FaceDraft(f, FaceTool.Shell)
+            is DraftFeature -> FaceDraft(f, FaceTool.Draft)
+            is com.rm.parrotmetric.design.OffsetFaceFeature -> FaceDraft(f, FaceTool.PressPull)
+            is com.rm.parrotmetric.design.DeleteFaceFeature -> FaceDraft(f, FaceTool.Delete)
             is HoleFeature -> HoleDraft(f)
             is MirrorFeature -> MirrorDraft(f)
             is PatternFeature -> PatternDraft(f)
@@ -970,6 +985,12 @@ class DesignEditor(
                 rebuild()
             }
             is BodyDraft -> {
+                if (d is PatternDraft && d.alongPath && d.pathByEdges) {
+                    d.pathEdges = viewport.selectedEdges()
+                    rebuild()
+                    if (d.byFeatures) return
+                }
+                if ((d as? PatternDraft)?.byFeatures == true || (d as? MirrorDraft)?.byFeatures == true) return
                 val picked = pickedBodies()
                 if (picked.isNotEmpty() || viewport.selectedFaces().isEmpty()) {
                     d.bodies = picked
@@ -1223,29 +1244,47 @@ class DesignEditor(
 
     private fun nextName(prefix: String, count: Int) = "$prefix ${count + 1}"
 
-    /** Shell (faces left open) or Draft (faces tilted, and the face they pivot on). */
-    inner class FaceDraft(editing: Feature?, val tilt: Boolean) : FeatureDraft() {
+    enum class FaceTool(val title: String) { Shell("Shell"), Draft("Draft"), PressPull("Press pull"), Delete("Delete face") }
+
+    /**
+     * Features on picked faces: Shell (faces left open), Draft (faces tilted,
+     * and the face they pivot on), Press pull (faces moved) and Delete face.
+     */
+    inner class FaceDraft(editing: Feature?, val tool: FaceTool) : FeatureDraft() {
+        val tilt get() = tool == FaceTool.Draft
         val id = editing?.id ?: newId()
-        private val name = editing?.name ?: if (tilt) nextName("Draft", design.features.count { it is DraftFeature })
-        else nextName("Shell", design.features.count { it is ShellFeature })
+        private val name = editing?.name ?: nextName(tool.title, design.features.count {
+            when (tool) {
+                FaceTool.Shell -> it is ShellFeature
+                FaceTool.Draft -> it is DraftFeature
+                FaceTool.PressPull -> it is com.rm.parrotmetric.design.OffsetFaceFeature
+                FaceTool.Delete -> it is com.rm.parrotmetric.design.DeleteFaceFeature
+            }
+        })
         var faces by mutableStateOf<List<String>>(emptyList())
         var neutral by mutableStateOf<String?>(null)
         var pickingPivot by mutableStateOf(false)
-        var size by mutableStateOf(if (tilt) 3.0 else 2.0)  // Degrees for a draft, mm for a shell.
+        // Degrees for a draft, mm otherwise.
+        var size by mutableStateOf(when (tool) { FaceTool.Draft -> 3.0; FaceTool.PressPull -> 1.0; else -> 2.0 })
 
         init {
             when (editing) {
                 is ShellFeature -> { faces = editing.faces; size = editing.thickness }
                 is DraftFeature -> { faces = editing.faces; neutral = editing.neutral; size = editing.angle * 180 / PI }
+                is com.rm.parrotmetric.design.OffsetFaceFeature -> { faces = editing.faces; size = editing.distance }
+                is com.rm.parrotmetric.design.DeleteFaceFeature -> faces = editing.faces
                 else -> {}
             }
         }
 
-        override fun feature(): Feature? = if (tilt) {
-            val n = neutral
-            if (faces.isEmpty() || n == null) null else DraftFeature(id, name, faces - n, n, size * PI / 180)
-        } else {
-            if (faces.isEmpty()) null else ShellFeature(id, name, faces, size)
+        override fun feature(): Feature? = when (tool) {
+            FaceTool.Draft -> {
+                val n = neutral
+                if (faces.isEmpty() || n == null) null else DraftFeature(id, name, faces - n, n, size * PI / 180)
+            }
+            FaceTool.Shell -> if (faces.isEmpty()) null else ShellFeature(id, name, faces, size)
+            FaceTool.PressPull -> if (faces.isEmpty()) null else com.rm.parrotmetric.design.OffsetFaceFeature(id, name, faces, size)
+            FaceTool.Delete -> if (faces.isEmpty()) null else com.rm.parrotmetric.design.DeleteFaceFeature(id, name, faces)
         }
 
         override fun missing() = if (tilt && neutral == null) "Pick the face they pivot on" else "Tap the faces"
@@ -1282,8 +1321,12 @@ class DesignEditor(
         private val name = editing?.name ?: nextName("Mirror", design.features.count { it is MirrorFeature })
         var plane by mutableStateOf<PlaneRef>(editing?.plane ?: PlaneRef.Fixed(SketchPlane.Right))
         var join by mutableStateOf(editing?.join ?: true)
+        var byFeatures by mutableStateOf(editing?.features?.isNotEmpty() ?: false)
+        var features by mutableStateOf(editing?.features ?: emptyList())
         init { if (editing != null) bodies = editing.bodies }
-        override fun feature() = MirrorFeature(id, name, bodies, plane, join)
+        override fun feature() = if (byFeatures && features.isEmpty()) null
+        else MirrorFeature(id, name, bodies, plane, join, if (byFeatures) features else emptyList())
+        override fun missing() = if (byFeatures) "Tick the features to mirror" else super.missing()
     }
 
     inner class PatternDraft(editing: PatternFeature?) : BodyDraft(editing) {
@@ -1298,11 +1341,33 @@ class DesignEditor(
         var spacing2 by mutableStateOf(editing?.spacing2 ?: 20.0)
         var join by mutableStateOf(editing?.join ?: true)
         var axisFeature by mutableStateOf(editing?.axisFeature)
+        var alongPath by mutableStateOf(editing?.path != null)
+        var pathByEdges by mutableStateOf(editing?.path is com.rm.parrotmetric.design.PathRef.Edges)
+        var pathSketch by mutableStateOf((editing?.path as? com.rm.parrotmetric.design.PathRef.Sketch)?.sketchId)
+        var pathEdges by mutableStateOf((editing?.path as? com.rm.parrotmetric.design.PathRef.Edges)?.names ?: emptyList())
+        /** Along a path: spread over all of it, else [spacing] apart. */
+        var spread by mutableStateOf(editing?.path == null || editing.spacing <= 0)
+        var turn by mutableStateOf(editing?.turn ?: true)
+        var reverse by mutableStateOf(editing?.reverse ?: false)
+        var byFeatures by mutableStateOf(editing?.features?.isNotEmpty() ?: false)
+        var features by mutableStateOf(editing?.features ?: emptyList())
         init { if (editing != null) bodies = editing.bodies }
-        override fun feature() = PatternFeature(
-            id, name, bodies, circular, axis, count.toInt(), spacing, degrees * PI / 180, axis2, count2.toInt(), spacing2, join,
-            if (circular) axisFeature else null,
-        )
+        override fun feature(): PatternFeature? {
+            if (byFeatures && features.isEmpty()) return null
+            val path = if (!alongPath) null
+            else if (pathByEdges) pathEdges.takeIf { it.isNotEmpty() }?.let { com.rm.parrotmetric.design.PathRef.Edges(it) } ?: return null
+            else pathSketch?.let { com.rm.parrotmetric.design.PathRef.Sketch(it) } ?: return null
+            return PatternFeature(
+                id, name, bodies, circular && !alongPath, axis, count.toInt(), if (alongPath && spread) 0.0 else spacing, degrees * PI / 180,
+                if (alongPath) null else axis2, count2.toInt(), spacing2, join, if (circular && !alongPath) axisFeature else null,
+                path, turn, if (byFeatures) features else emptyList(), reverse,
+            )
+        }
+        override fun missing() = when {
+            byFeatures && features.isEmpty() -> "Tick the features to repeat"
+            alongPath -> "Pick the path to follow"
+            else -> super.missing()
+        }
     }
 
     inner class CombineDraft(editing: CombineFeature?) : BodyDraft(editing) {
@@ -1502,13 +1567,14 @@ class DesignEditor(
         var edges by mutableStateOf<List<String>>(emptyList())
         var size by mutableStateOf(if (chamfer) 1.0 else 2.0)
         var kind by mutableStateOf(ChamferKind.Equal)
-        /** The second distance in mm, or the angle in degrees. */
+        var filletKind by mutableStateOf(com.rm.parrotmetric.design.FilletKind.Constant)
+        /** The second distance in mm (a fillet's end radius), or the angle in degrees. */
         var second by mutableStateOf(1.0)
         var flip by mutableStateOf(false)
 
         init {
             when (editing) {
-                is FilletFeature -> { edges = editing.edges; size = editing.radius }
+                is FilletFeature -> { edges = editing.edges; size = editing.radius; filletKind = editing.kind; second = editing.second }
                 is ChamferFeature -> {
                     edges = editing.edges; size = editing.distance; kind = editing.kind; flip = editing.flip
                     second = if (editing.kind == ChamferKind.DistanceAngle) editing.second * 180 / PI else editing.second
@@ -1519,7 +1585,7 @@ class DesignEditor(
 
         override fun feature(): Feature? {
             if (edges.isEmpty()) return null
-            if (!chamfer) return FilletFeature(id, name, edges, size)
+            if (!chamfer) return FilletFeature(id, name, edges, size, filletKind, if (filletKind == com.rm.parrotmetric.design.FilletKind.Variable) second else 0.0)
             return when (kind) {
                 ChamferKind.Equal -> ChamferFeature(id, name, edges, size)
                 ChamferKind.TwoDistances -> ChamferFeature(id, name, edges, size, kind, second, flip)
