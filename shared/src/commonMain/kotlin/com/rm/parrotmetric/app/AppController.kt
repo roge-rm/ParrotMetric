@@ -98,7 +98,8 @@ class AppController(
         scope.launch {
             while (true) {
                 delay(30_000)
-                if (unsaved) saveNow()
+                // An open sketch changes without telling the history, so it's saved each time.
+                if (unsaved || state.sketch != null) write()
             }
         }
     }
@@ -135,9 +136,13 @@ class AppController(
     /** Writes the design to autosave now, if one is open: when the app goes to the background or closes. */
     suspend fun saveNow() {
         autosaveJob?.cancel()
+        write()
+    }
+
+    private suspend fun write() {
         if (!designOpen) return
         unsaved = false
-        files.writeAutosave(design.fileText(state.title))
+        files.writeAutosave(autosaveContent())
     }
 
     /**
@@ -148,7 +153,13 @@ class AppController(
         if (!designOpen) return null
         autosaveJob?.cancel()
         unsaved = false
-        return design.fileText(state.title)
+        return autosaveContent()
+    }
+
+    /** The design, with a new sketch that's still open. */
+    private fun autosaveContent(): String {
+        val drawing = newSketch?.let { (ref, name) -> state.sketch?.let { Triple(name, ref, it.sketch) } }
+        return design.fileText(state.title, drawing)
     }
 
     private fun opening() {
@@ -179,7 +190,7 @@ class AppController(
         autosaveJob?.cancel()
         autosaveJob = scope.launch {
             delay(800)
-            saveNow()
+            write()
         }
     }
 

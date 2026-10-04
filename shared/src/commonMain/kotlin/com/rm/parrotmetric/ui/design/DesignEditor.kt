@@ -272,8 +272,20 @@ class DesignEditor(
         rebuild(refit = refit)
     }
 
-    /** The design as a .pmet file. */
-    fun fileText(title: String): String = DesignFile.write(design, title)
+    /**
+     * The design as a .pmet file. A new sketch still being drawn ([drawing]:
+     * its name, plane and sketch) goes in as if finished, so autosave keeps it.
+     */
+    fun fileText(title: String, drawing: Triple<String, PlaneRef, Sketch>? = null): String {
+        if (drawing == null || drawing.third.curves.isEmpty()) return DesignFile.write(design, title)
+        val before = design.snapshot()
+        design.add(SketchFeature(design.newId(), drawing.first, drawing.second, drawing.third))
+        return try {
+            DesignFile.write(design, title)
+        } finally {
+            design.restore(before)
+        }
+    }
 
     /** Replaces the design with a file's. Returns its title; throws IllegalArgumentException if it can't be read. */
     fun openFile(text: String): String {
