@@ -20,3 +20,22 @@ TEST_CASE("a mesh with a hole is refused") {
     m.triangles.pop_back();
     CHECK_THROWS(MeshBody::fromMesh(m));
 }
+
+TEST_CASE("a mesh can be reduced, remeshed and smoothed") {
+    MeshBody box = MeshBody::box(20, 20, 20);
+    // Split finer, then reduced back down: the flat sides need few triangles.
+    MeshBody fine = box.remeshed(2);
+    CHECK(fine.triangleCount() > box.triangleCount() * 10);
+    CHECK(fine.volume() == Catch::Approx(8000.0));
+    MeshBody fewer = fine.reduced(0.01);
+    CHECK(fewer.triangleCount() < fine.triangleCount() / 4);
+    CHECK(fewer.volume() == Catch::Approx(8000.0).epsilon(1e-4));
+    // Rounded off with no edge kept sharp it turns into a blob; keeping its square edges it stays a box.
+    MeshBody round = box.smoothed(180, 4);
+    CHECK(round.triangleCount() == box.triangleCount() * 16);
+    CHECK(round.volume() != Catch::Approx(8000.0).epsilon(0.05));
+    CHECK(openEdgeCount(round.toMesh()) == 0);
+    CHECK(fine.smoothed(30, 2).volume() == Catch::Approx(8000.0).epsilon(0.01));
+    CHECK_THROWS(box.reduced(0));
+    CHECK_THROWS(box.smoothed(30, 0));
+}

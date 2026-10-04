@@ -29,6 +29,8 @@ interface Kernel {
     fun fillet(id: Int, body: Long, edges: List<String>, radius: Double, kind: Int = 0, second: Double = 0.0): Long
     /** The body with faces moved along their normals, out when distance is more than 0. */
     fun offsetFaces(id: Int, body: Long, faces: List<String>, distance: Double): Long = throw KernelException("Not here")
+    /** A mesh body changed as MeshEditFeature says; kind is MeshEdit's ordinal. A solid is made a mesh first. */
+    fun meshEdit(id: Int, body: Long, kind: Int, size: Double, steps: Int): Long = throw KernelException("Not here")
     /** The body with faces taken away and the gap closed. */
     fun deleteFaces(id: Int, body: Long, faces: List<String>): Long = throw KernelException("Not here")
     /** Where copies go along a path, 3x4 matrices from its start, the first being the start; see PatternFeature. */

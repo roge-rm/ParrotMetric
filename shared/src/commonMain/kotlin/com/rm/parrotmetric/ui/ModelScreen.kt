@@ -192,6 +192,7 @@ fun ModelScreen(
         when (sheet) {
             "measure" -> design.stopMeasuring()
             "section" -> design.stopSection()
+            "printcheck" -> design.stopPrintCheck()
         }
         sheet = null
     }
@@ -362,6 +363,8 @@ fun ModelScreen(
                         com.rm.parrotmetric.ui.design.MeasureSheet(design) { design.stopMeasuring(); sheet = null }
                     } else if (sheet == "section") {
                         com.rm.parrotmetric.ui.design.SectionSheet(design) { design.stopSection(); sheet = null }
+                    } else if (sheet == "printcheck") {
+                        com.rm.parrotmetric.ui.design.PrintCheckSheet(design) { design.stopPrintCheck(); sheet = null }
                     } else if (sheet == "interference") {
                         com.rm.parrotmetric.ui.design.InterferenceSheet(design) { sheet = null }
                     } else if (sheet == "parameters") {
@@ -680,12 +683,13 @@ private fun ExpandedModel(
                     Message(design)
                 }
             }
-            val docked = design.panel != null || sheet in setOf("measure", "section", "interference", "parameters", "export")
+            val docked = design.panel != null || sheet in setOf("measure", "section", "printcheck", "interference", "parameters", "export")
             if (docked) Box(Modifier.width(380.dp)) {
                 when {
                     design.panel != null -> FeaturePanel(design)
                     sheet == "measure" -> com.rm.parrotmetric.ui.design.MeasureSheet(design) { design.stopMeasuring(); setSheet(null) }
                     sheet == "section" -> com.rm.parrotmetric.ui.design.SectionSheet(design) { design.stopSection(); setSheet(null) }
+                    sheet == "printcheck" -> com.rm.parrotmetric.ui.design.PrintCheckSheet(design) { design.stopPrintCheck(); setSheet(null) }
                     sheet == "interference" -> com.rm.parrotmetric.ui.design.InterferenceSheet(design) { setSheet(null) }
                     sheet == "parameters" -> com.rm.parrotmetric.ui.design.ParametersSheet(design) { setSheet(null) }
                     sheet == "export" -> com.rm.parrotmetric.ui.design.ExportSheet(design, { setSheet(null) }) { actions.export(it); setSheet(null) }

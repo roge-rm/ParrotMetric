@@ -71,6 +71,8 @@ interface Viewport {
     fun measure(): List<String>
     /** Hides what's behind a plane through origin facing normal, or shows everything again. */
     fun setSection(on: Boolean, origin: Vec3, normal: Vec3)
+    /** Colours bodies to check them for printing: 0 off, 1 overhangs past limit radians, 2 walls thinner than limit mm. */
+    fun setAnalysis(mode: Int, limit: Double) {}
     /** A face's edges as curves on a plane, for projecting into a sketch. Throws if the face is gone. */
     fun faceOutline(body: Long, face: String, plane: SketchPlane): List<ProfileCurve>
     fun selectedEdges(): List<String>
@@ -183,6 +185,22 @@ class DesignEditor(
 
     fun stopMeasuring() {
         measuring = false
+    }
+
+    /** Colouring bodies to check them for printing: 0 off, 1 overhangs, 2 thin walls. */
+    var printCheck by mutableStateOf(0)
+    /** Overhangs steeper than this from straight up need support, degrees. */
+    var overhangAngle by mutableStateOf(45.0)
+    var thinWall by mutableStateOf(1.2)
+
+    fun updatePrintCheck() {
+        viewport.setAnalysis(printCheck, if (printCheck == 1) (90 - overhangAngle) * kotlin.math.PI / 180 else thinWall)
+        rebuild()
+    }
+
+    fun stopPrintCheck() {
+        printCheck = 0
+        updatePrintCheck()
     }
 
     var sectionOn by mutableStateOf(false)
@@ -841,6 +859,7 @@ class DesignEditor(
     }
     fun startPlaneCut() = openBodies(SplitDraft(null).also { it.keep = 1 })
     fun startConvert() = openBodies(ConvertDraft(null))
+    fun startMeshEdit(kind: com.rm.parrotmetric.design.MeshEdit) = openBodies(MeshEditDraft(null, kind))
 
     private fun openBodies(d: BodyDraft) {
         d.planes = planeChoices()
@@ -891,6 +910,7 @@ class DesignEditor(
             is MoveFeature -> MoveDraft(f, scaling = f.dx == 0.0 && f.dy == 0.0 && f.dz == 0.0 && f.angle == 0.0 && f.scaled)
             is com.rm.parrotmetric.design.AlignFeature -> AlignDraft(f).also { alignPicks(it) }
             is com.rm.parrotmetric.design.ConvertFeature -> ConvertDraft(f)
+            is com.rm.parrotmetric.design.MeshEditFeature -> MeshEditDraft(f, f.kind)
             is PointFeature -> PointDraft(f)
             is PlaneFeature -> PlaneDraft(f, f.kind).also { it.planes = planeChoices().filter { c -> c.second != PlaneRef.Construction(f.id) } }
             is AxisFeature -> AxisDraft(f)
@@ -1420,6 +1440,26 @@ class DesignEditor(
         init { if (editing != null) bodies = listOf(editing.body) }
         override fun feature(): Feature? = bodies.firstOrNull()?.let { com.rm.parrotmetric.design.ConvertFeature(id, name, it) }
         override fun missing() = "Tap the mesh to make solid"
+    }
+
+    /** Reduce, remesh or smooth a body's triangles. */
+    inner class MeshEditDraft(editing: com.rm.parrotmetric.design.MeshEditFeature?, kind: com.rm.parrotmetric.design.MeshEdit) : BodyDraft(editing) {
+        private val name = editing?.name ?: nextName(kind.name, design.features.count { it is com.rm.parrotmetric.design.MeshEditFeature && it.kind == kind })
+        var kind by mutableStateOf(kind)
+        var size by mutableStateOf(editing?.size ?: defaultSize(kind))
+        var steps by mutableStateOf((editing?.steps ?: 2).toDouble())
+        init { if (editing != null) bodies = listOf(editing.body) }
+
+        fun defaultSize(k: com.rm.parrotmetric.design.MeshEdit) = when (k) {
+            com.rm.parrotmetric.design.MeshEdit.Reduce -> 0.05
+            com.rm.parrotmetric.design.MeshEdit.Remesh -> 1.0
+            com.rm.parrotmetric.design.MeshEdit.Smooth -> 30.0
+        }
+
+        override fun feature(): Feature? = bodies.firstOrNull()?.let {
+            com.rm.parrotmetric.design.MeshEditFeature(id, name, it, kind, size, steps.toInt())
+        }
+        override fun missing() = "Tap the body"
     }
 
     /** Move, or with [scaling] just Scale. */

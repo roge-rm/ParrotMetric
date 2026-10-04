@@ -37,6 +37,16 @@ public:
     MeshBody transformed(const double m[12]) const;
     /** The parts on each side of a plane: first the side the normal points to. Either may be empty. */
     std::pair<MeshBody, MeshBody> split(const double origin[3], const double normal[3]) const;
+    /** Fewer triangles, the surface moving no more than tolerance mm. */
+    MeshBody reduced(double tolerance) const;
+    /** Long triangles split until no edge is longer than length mm. */
+    MeshBody remeshed(double length) const;
+    /**
+     * Rounded off: each triangle split into steps x steps and laid on a
+     * smooth surface through the corners, keeping edges sharper than
+     * sharpAngle degrees.
+     */
+    MeshBody smoothed(double sharpAngle, int steps) const;
     bool empty() const;
     /**
      * Where the mesh crosses a plane, as closed loops in the plane's own x

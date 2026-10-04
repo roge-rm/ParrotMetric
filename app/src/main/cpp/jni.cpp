@@ -32,6 +32,7 @@
 #include <string>
 
 #include "display/display_mesh.h"
+#include "display/thickness.h"
 #include "io/exchange.h"
 #include "io/mesh_formats.h"
 #include "mesh/mesh_body.h"
@@ -196,7 +197,21 @@ struct DisplayCached {
 };
 std::unordered_map<jlong, DisplayCached> displayCache;  // Only show() uses it, one call at a time.
 
+const DisplayCached& displayShape(jlong handle, const pm::Body& b);
+
+/** The view bodies are coloured by (Renderer::setAnalysis); thickness has to be worked out for bodies shown. */
+std::atomic<int> analysisMode{0};
+
 const DisplayCached& displayOf(jlong handle, const pm::Body& b) {
+    const DisplayCached& c = displayShape(handle, b);
+    if (analysisMode != 2 || !c.mesh->thickness.empty()) return c;
+    auto withThickness = std::make_shared<pm::DisplayMesh>(pm::withThickness(*c.mesh));
+    DisplayCached& again = displayCache[handle];
+    again.mesh = std::move(withThickness);
+    return again;
+}
+
+const DisplayCached& displayShape(jlong handle, const pm::Body& b) {
     int detail = b.solid ? displayDetail.load() : -1;
     auto found = displayCache.find(handle);
     if (found != displayCache.end() && found->second.detail == detail) return found->second;
@@ -215,11 +230,14 @@ const DisplayCached& displayOf(jlong handle, const pm::Body& b) {
             c.cornerNames.push_back(names[i]);
         }
         mesh.corners = std::move(kept);
+        mesh.body = true;
         c.mesh = std::make_shared<pm::DisplayMesh>(std::move(mesh));
     } else {
         pm::Mesh m = b.mesh->toMesh();
         c.triangles = m.triangles.size();
-        c.mesh = std::make_shared<pm::DisplayMesh>(pm::displayMesh(m));
+        auto mesh = pm::displayMesh(m);
+        mesh.body = true;
+        c.mesh = std::make_shared<pm::DisplayMesh>(std::move(mesh));
     }
     return displayCache[handle] = std::move(c);
 }
@@ -1452,6 +1470,13 @@ JNIEXPORT jobjectArray JNICALL Java_com_rm_parrotmetric_Core_selectedFaces(JNIEn
     return stringArray(env, out);
 }
 
+/** Colours bodies to check them for printing; see Renderer::setAnalysis. Thickness shows from the next show(). */
+JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_setAnalysis(JNIEnv*, jobject, jint mode, jdouble limit) {
+    std::lock_guard<std::mutex> g(lock);
+    analysisMode = mode;
+    renderer.setAnalysis(mode, float(limit));
+}
+
 /** Shows a section: everything behind the plane through (ox, oy, oz) facing (nx, ny, nz) is hidden. */
 JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_setSection(JNIEnv*, jobject, jboolean on, jdouble ox, jdouble oy, jdouble oz, jdouble nx, jdouble ny, jdouble nz) {
     std::lock_guard<std::mutex> g(lock);
@@ -1822,6 +1847,27 @@ JNIEXPORT jdoubleArray JNICALL Java_com_rm_parrotmetric_Core_pathPlaces(JNIEnv* 
     } catch (const std::exception& e) {
         fail(env, e.what());
         return nullptr;
+    }
+}
+
+/** kind: 0 reduce (size a tolerance), 1 remesh (size the longest edge), 2 smooth (size the sharp angle in degrees, and steps). */
+JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_meshEdit(JNIEnv* env, jobject, jint, jlong body, jint kind, jdouble size, jint steps) {
+    try {
+        std::unique_lock<std::mutex> g(lock);
+        const pm::Body b = store.get(body);
+        g.unlock();
+        pm::MeshBody m = b.asMesh();
+        pm::Body out;
+        switch (kind) {
+            case 0: out.mesh = m.reduced(size); break;
+            case 1: out.mesh = m.remeshed(size); break;
+            default: out.mesh = m.smoothed(size, steps); break;
+        }
+        g.lock();
+        return store.add(std::move(out));
+    } catch (const std::exception& e) {
+        fail(env, e.what());
+        return 0;
     }
 }
 

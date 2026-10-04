@@ -79,6 +79,11 @@ object Parametrics {
                 else -> f
             }
             is OffsetFaceFeature -> if (field == "size") f.copy(distance = v) else f
+            is MeshEditFeature -> when (field) {
+                "size" -> f.copy(size = v)
+                "steps" -> f.copy(steps = v.toInt())
+                else -> f
+            }
             is ChamferFeature -> when (field) {
                 "size" -> f.copy(distance = v)
                 "second" -> f.copy(second = if (f.kind == ChamferKind.DistanceAngle) rad else v)

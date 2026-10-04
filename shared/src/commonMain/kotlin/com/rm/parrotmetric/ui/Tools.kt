@@ -70,6 +70,15 @@ object Tools {
         ToolDef("thread", "Thread", Icons.thread, ToolGroup.Modify, cluster = "Holes and threads") { it.design.startThread() },
         ToolDef("draft", "Draft", Icons.draft, ToolGroup.Modify, key = "Shift+D", suggest = ::faces, cluster = "Faces") { it.design.startDraft() },
         ToolDef("planecut", "Plane cut", Icons.cut, ToolGroup.Modify, solid = false, mesh = true, cluster = "Split and cut") { it.design.startPlaneCut() },
+        ToolDef("reduce", "Reduce", Icons.meshEdit, ToolGroup.Modify, solid = false, mesh = true, cluster = "Triangles") {
+            it.design.startMeshEdit(com.rm.parrotmetric.design.MeshEdit.Reduce)
+        },
+        ToolDef("remesh", "Remesh", Icons.meshEdit, ToolGroup.Modify, solid = false, mesh = true, cluster = "Triangles") {
+            it.design.startMeshEdit(com.rm.parrotmetric.design.MeshEdit.Remesh)
+        },
+        ToolDef("smooth", "Smooth", Icons.meshEdit, ToolGroup.Modify, solid = false, mesh = true, cluster = "Triangles") {
+            it.design.startMeshEdit(com.rm.parrotmetric.design.MeshEdit.Smooth)
+        },
         ToolDef("tosolid", "To solid", Icons.convert, ToolGroup.Modify, solid = false, mesh = true) { it.design.startConvert() },
         ToolDef("mirror", "Mirror", Icons.mirror, ToolGroup.Modify, key = "Shift+M", mesh = true, cluster = "Mirror and pattern") { it.design.startMirror() },
         ToolDef("pattern", "Pattern", Icons.pattern, ToolGroup.Modify, key = "P", mesh = true, cluster = "Mirror and pattern") { it.design.startPattern() },
@@ -98,6 +107,9 @@ object Tools {
             it.design.startMeasuring(); it.openSheet("measure")
         },
         ToolDef("section", "Section", Icons.section, ToolGroup.Inspect, key = "Shift+I") { it.design.startSection(); it.openSheet("section") },
+        ToolDef("printcheck", "Print check", Icons.printCheck, ToolGroup.Inspect) {
+            it.design.printCheck = 1; it.design.updatePrintCheck(); it.openSheet("printcheck")
+        },
         ToolDef("interference", "Interference", Icons.interference, ToolGroup.Inspect) { it.openSheet("interference") },
         ToolDef("parameters", "Parameters", Icons.parameters, ToolGroup.Inspect) { it.openSheet("parameters") },
     )

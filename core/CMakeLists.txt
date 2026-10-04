@@ -62,6 +62,7 @@ file(COPY_FILE ${CMAKE_BINARY_DIR}/fonts.cpp.new ${CMAKE_BINARY_DIR}/fonts.cpp O
 
 add_library(pmcore STATIC
         src/display/display_mesh.cpp
+        src/display/thickness.cpp
         src/mesh/mesh.cpp
         src/mesh/stl.cpp
         src/mesh/mesh_body.cpp

@@ -70,6 +70,11 @@ private class FakeKernel : Kernel {
         return make(bodies.getValue(body).let { it.copy(to = it.to + distance) })
     }
 
+    override fun meshEdit(id: Int, body: Long, kind: Int, size: Double, steps: Int): Long {
+        calls += "meshEdit $id $kind $size $steps"
+        return make(bodies.getValue(body))
+    }
+
     override fun deleteFaces(id: Int, body: Long, faces: List<String>): Long {
         calls += "deleteFaces $id $faces"
         return make(bodies.getValue(body).let { b -> b.copy(faces = b.faces - faces.toSet()) })
@@ -520,6 +525,8 @@ class RebuildTest {
         val pull = OffsetFaceFeature(d.newId(), "Press pull", listOf("F${base.id}.end"), 2.0)
         d.add(pull)
         d.add(DeleteFaceFeature(d.newId(), "Delete face", listOf("F${boss.id}.s1")))
+        val smooth = MeshEditFeature(d.newId(), "Smooth", "Body 2", MeshEdit.Smooth, 30.0, 3)
+        d.add(smooth)
         d.add(MirrorFeature(d.newId(), "Mirror", emptyList(), PlaneRef.Fixed(SketchPlane.Right), false, features = listOf(boss.id)))
         val r = Rebuilder(k)
         val built = r.rebuild(d.active)
@@ -529,6 +536,7 @@ class RebuildTest {
         assertEquals(listOf(15.0, 25.0, -8.0), built.bodies.drop(1).map { k.bodies.getValue(it.handle).from })
         assertTrue("offsetFaces ${pull.id} [F${base.id}.end] 2.0" in k.calls)
         assertTrue(k.calls.any { it.startsWith("deleteFaces") })
+        assertTrue("meshEdit ${smooth.id} 2 30.0 3" in k.calls)
         assertTrue("transform ${pattern.id} f${boss.id}.0" in k.calls)
         r.clear()
         assertTrue(k.bodies.isEmpty())

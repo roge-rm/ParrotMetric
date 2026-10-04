@@ -50,6 +50,17 @@ public:
         clipping_ = on;
     }
 
+    /**
+     * Colours bodies to check them for printing: 0 off; 1 overhangs, faces
+     * facing down more steeply than limit radians from straight down, above
+     * the lowest point; 2 walls thinner than limit mm (needs
+     * DisplayMesh::thickness).
+     */
+    void setAnalysis(int mode, float limit) {
+        analysis_ = mode;
+        limit_ = limit;
+    }
+
     /** Screen pixels per density-independent pixel, for line widths. */
     void setDensity(float density) { density_ = density; }
 
@@ -97,6 +108,7 @@ private:
         float edgeColour[4];
         float faceColour[4];
         bool behind = false;
+        bool body = false;
         uint32_t faceCount = 0, edgeCount = 0;
         uint32_t cornerVao = 0, cornerVbo = 0;
         int cornerCount = 0;
@@ -131,6 +143,9 @@ private:
     float lastViewProjection_[16] = {};
     float clip_[4] = {0, 0, 1, 0};
     bool clipping_ = false;
+    int analysis_ = 0;
+    float limit_ = 0;
+    float bedZ_ = 0;  // The lowest point of the bodies, where the bed is.
     float density_ = 1;
 
     std::vector<DisplayMesh> bodies_;

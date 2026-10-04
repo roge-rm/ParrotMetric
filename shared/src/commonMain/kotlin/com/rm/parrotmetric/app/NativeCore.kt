@@ -17,6 +17,7 @@ interface NativeCore {
     fun fillet(id: Int, body: Long, edges: Array<String>, radius: Double, kind: Int, second: Double): Long
     fun offsetFaces(id: Int, body: Long, faces: Array<String>, distance: Double): Long
     fun deleteFaces(id: Int, body: Long, faces: Array<String>): Long
+    fun meshEdit(id: Int, body: Long, kind: Int, size: Double, steps: Int): Long
     fun chamfer(id: Int, body: Long, edges: Array<String>, distance: Double, kind: Int, second: Double, flip: Boolean): Long
     fun overlaps(a: Long, b: Long): Boolean
     fun facePlane(body: Long, name: String): DoubleArray
@@ -84,6 +85,7 @@ interface NativeCore {
     /** Lines describing what's selected: lengths, areas, gaps, angles, the body's volume and size. */
     fun measure(): Array<String>
     fun setSection(on: Boolean, ox: Double, oy: Double, oz: Double, nx: Double, ny: Double, nz: Double)
+    fun setAnalysis(mode: Int, limit: Double)
     /** A face's edges as sketch curves on a plane; see jni.cpp. */
     fun faceOutline(body: Long, face: String, plane: DoubleArray): DoubleArray
     fun shownTriangles(): Int

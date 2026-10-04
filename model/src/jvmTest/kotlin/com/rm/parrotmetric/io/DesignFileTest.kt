@@ -89,6 +89,7 @@ class DesignFileTest {
             com.rm.parrotmetric.design.PrimitiveFeature(d.newId(), "Torus", com.rm.parrotmetric.design.PrimitiveKind.Torus, top, 1.0, 2.0, 30.0, 6.0, 0.0, Operation.Join),
             com.rm.parrotmetric.design.OffsetFaceFeature(d.newId(), "Press pull", listOf("F1.end"), -2.5),
             com.rm.parrotmetric.design.DeleteFaceFeature(d.newId(), "Delete face", listOf("F4.r(F1.s1|F1.end)")),
+            com.rm.parrotmetric.design.MeshEditFeature(d.newId(), "Smooth", "Body 2", com.rm.parrotmetric.design.MeshEdit.Smooth, 40.0, 3),
             com.rm.parrotmetric.design.FilletFeature(d.newId(), "Variable", listOf("F1.s1|F1.end"), 1.0, com.rm.parrotmetric.design.FilletKind.Variable, 3.0),
             com.rm.parrotmetric.design.MirrorFeature(d.newId(), "Mirror features", emptyList(), top, false, listOf(2, 5)),
             com.rm.parrotmetric.design.PatternFeature(

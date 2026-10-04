@@ -27,14 +27,19 @@ const char* kFaceVertex = R"(#version 300 es
 layout(location = 0) in vec3 position;
 layout(location = 1) in vec3 normal;
 layout(location = 2) in uint face;
+layout(location = 3) in float thickness;
 uniform mat4 viewProjection;
 uniform mat3 view;
 uniform sampler2D selected;
 out vec3 eyeNormal;
 out vec3 world;
+out vec3 worldNormal;
+out float thick;
 flat out float chosen;
 void main() {
     eyeNormal = view * normal;
+    worldNormal = normal;
+    thick = thickness;
     world = position;
     chosen = texelFetch(selected, ivec2(int(face) % 1024, int(face) / 1024), 0).r;
     gl_Position = viewProjection * vec4(position, 1.0);
@@ -44,10 +49,17 @@ const char* kFaceFragment = R"(#version 300 es
 precision mediump float;
 in vec3 eyeNormal;
 in vec3 world;
+in vec3 worldNormal;
+in float thick;
 flat in float chosen;
 uniform vec4 faceColour;
 uniform vec4 clip;
 uniform bool clipping;
+// 0 plain, 1 overhangs steeper than limit (radians from straight down), 2 walls thinner than limit (mm).
+uniform int analysis;
+uniform float limit;
+uniform float bedZ;
+uniform bool analysed;
 out vec4 colour;
 void main() {
     if (clipping && dot(vec4(world, 1.0), clip) < 0.0) discard;
@@ -63,7 +75,19 @@ void main() {
     vec3 ambient = mix(vec3(0.20, 0.19, 0.18), vec3(0.34, 0.40, 0.40), up);
     float key = max(dot(n, normalize(vec3(-0.45, 0.65, 0.62))), 0.0);
     float rim = pow(1.0 - max(n.z, 0.0), 3.0) * 0.18;
-    vec3 base = mix(faceColour.rgb, vec3(1.0, 0.48, 0.24), chosen * 0.55);
+    vec3 own = faceColour.rgb;
+    if (analysed && analysis == 1) {
+        // How far it faces down past the limit; faces on the bed are held up by it.
+        float down = -normalize(worldNormal).z;
+        float c = cos(limit);
+        if (down > c && world.z > bedZ + 0.05) own = mix(vec3(0.95, 0.62, 0.25), vec3(0.86, 0.22, 0.20), clamp((down - c) / max(1.0 - c, 0.01) * 2.0, 0.0, 1.0));
+        else own = vec3(0.62, 0.78, 0.70);
+    } else if (analysed && analysis == 2) {
+        if (thick < limit) own = vec3(0.86, 0.22, 0.20);
+        else if (thick < limit * 2.0) own = mix(vec3(0.95, 0.70, 0.25), vec3(0.62, 0.78, 0.70), (thick - limit) / limit);
+        else own = vec3(0.62, 0.78, 0.70);
+    }
+    vec3 base = mix(own, vec3(1.0, 0.48, 0.24), chosen * 0.55);
     float alpha = faceColour.a < 1.0 ? mix(faceColour.a, 0.55, chosen) : 1.0;
     colour = vec4(base * (ambient + 0.72 * key) + rim * (1.0 - chosen), alpha);
 })";
@@ -279,6 +303,10 @@ void Renderer::setBodies(std::vector<DisplayMesh> bodies, bool refit) {
     bodies_ = std::move(bodies);
     bodiesDirty_ = true;
     selection_.clear();
+    bedZ_ = 1e30f;
+    for (const auto& b : bodies_)
+        if (b.body)
+            for (size_t i = 2; i < b.positions.size(); i += 3) bedZ_ = std::min(bedZ_, b.positions[i]);
     float lo[3] = {1e30f, 1e30f, 1e30f}, hi[3] = {-1e30f, -1e30f, -1e30f};
     bool any = false;
     for (const auto& b : bodies_) {
@@ -327,6 +355,7 @@ void Renderer::upload() {
         std::copy(b.edgeColour, b.edgeColour + 4, g.edgeColour);
         std::copy(b.faceColour, b.faceColour + 4, g.faceColour);
         g.behind = b.behind;
+        g.body = b.body;
         g.edgeCount = uint32_t(b.edges.size());
 
         glGenVertexArrays(1, &g.faceVao);
@@ -335,17 +364,22 @@ void Renderer::upload() {
         glBindBuffer(GL_ARRAY_BUFFER, g.faceVbo);
         size_t n = b.vertexCount();
         // Laid out as all positions, then all normals, then all face numbers.
+        // Then the thickness at each vertex, a large number where it's not known.
         size_t posBytes = n * 12, faceBytes = n * 4;
-        glBufferData(GL_ARRAY_BUFFER, GLsizeiptr(posBytes * 2 + faceBytes), nullptr, GL_STATIC_DRAW);
+        glBufferData(GL_ARRAY_BUFFER, GLsizeiptr(posBytes * 2 + faceBytes * 2), nullptr, GL_STATIC_DRAW);
         glBufferSubData(GL_ARRAY_BUFFER, 0, GLsizeiptr(posBytes), b.positions.data());
         glBufferSubData(GL_ARRAY_BUFFER, GLintptr(posBytes), GLsizeiptr(posBytes), b.normals.data());
         glBufferSubData(GL_ARRAY_BUFFER, GLintptr(posBytes * 2), GLsizeiptr(faceBytes), b.faceOfVertex.data());
+        std::vector<float> thick = b.thickness.size() == n ? b.thickness : std::vector<float>(n, 1e9f);
+        glBufferSubData(GL_ARRAY_BUFFER, GLintptr(posBytes * 2 + faceBytes), GLsizeiptr(faceBytes), thick.data());
         glEnableVertexAttribArray(0);
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
         glEnableVertexAttribArray(1);
         glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, reinterpret_cast<void*>(posBytes));
         glEnableVertexAttribArray(2);
         glVertexAttribIPointer(2, 1, GL_UNSIGNED_INT, 0, reinterpret_cast<void*>(posBytes * 2));
+        glEnableVertexAttribArray(3);
+        glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, 0, reinterpret_cast<void*>(posBytes * 2 + faceBytes));
         glGenBuffers(1, &g.faceIbo);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, g.faceIbo);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, GLsizeiptr(b.indices.size() * 4), b.indices.data(), GL_STATIC_DRAW);
@@ -540,6 +574,9 @@ void Renderer::drawScene(bool ids, const float* vp, const float* normal) {
     if (!ids) {
         glUniformMatrix3fv(glGetUniformLocation(faceProgram, "view"), 1, GL_FALSE, normal);
         glUniform1i(glGetUniformLocation(faceProgram, "selected"), 0);
+        glUniform1i(glGetUniformLocation(faceProgram, "analysis"), analysis_);
+        glUniform1f(glGetUniformLocation(faceProgram, "limit"), limit_);
+        glUniform1f(glGetUniformLocation(faceProgram, "bedZ"), bedZ_);
     }
     // For picking, what's drawn behind (construction planes) goes first and
     // leaves no depth, so bodies and sketch areas anywhere in front of or
@@ -576,7 +613,10 @@ void Renderer::drawScene(bool ids, const float* vp, const float* normal) {
             if (ids && g.behind && seeThrough) continue;
             if (seeThrough) glPolygonOffset(g.behind ? 2.0f : 0.0f, g.behind ? 4.0f : 0.0f);
             if (ids) glUniform1ui(glGetUniformLocation(faceProgram, "base"), i << 20);
-            else glUniform4fv(glGetUniformLocation(faceProgram, "faceColour"), 1, g.faceColour);
+            else {
+                glUniform4fv(glGetUniformLocation(faceProgram, "faceColour"), 1, g.faceColour);
+                glUniform1i(glGetUniformLocation(faceProgram, "analysed"), g.body ? 1 : 0);
+            }
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, g.faceSelected);
             glBindVertexArray(g.faceVao);

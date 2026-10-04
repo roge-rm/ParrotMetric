@@ -318,6 +318,23 @@ private fun ColourPick(colour: Int?, onPick: (Int?) -> Unit) {
 
 /** Section: a plane to cut the view along, how far along, and which side to keep. */
 @Composable
+fun PrintCheckSheet(editor: DesignEditor, close: () -> Unit) {
+    SheetFrame("Print check", close) {
+        Segmented(listOf("Overhangs", "Thin walls"), (editor.printCheck - 1).coerceAtLeast(0)) {
+            editor.printCheck = it + 1
+            editor.updatePrintCheck()
+        }
+        if (editor.printCheck == 2) NumberRow("Thinnest", editor.thinWall, "mm", allowNegative = false) {
+            editor.thinWall = it
+            editor.updatePrintCheck()
+        } else NumberRow("Steepest", editor.overhangAngle, "°", allowNegative = false) {
+            editor.overhangAngle = it.coerceIn(0.0, 89.0)
+            editor.updatePrintCheck()
+        }
+    }
+}
+
+@Composable
 fun SectionSheet(editor: DesignEditor, close: () -> Unit) {
     SheetFrame("Section", close) {
         val planes = editor.sectionPlanes

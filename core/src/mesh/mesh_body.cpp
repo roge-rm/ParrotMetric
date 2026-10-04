@@ -1,6 +1,8 @@
 #include "mesh/mesh_body.h"
 
 #include <manifold/manifold.h>
+#include <algorithm>
+#include <numeric>
 
 #include <stdexcept>
 
@@ -80,6 +82,36 @@ std::pair<MeshBody, MeshBody> MeshBody::split(const double origin[3], const doub
 }
 
 bool MeshBody::empty() const { return m_->IsEmpty(); }
+
+MeshBody MeshBody::reduced(double tolerance) const {
+    if (tolerance <= 0) throw std::runtime_error("The tolerance has to be more than 0");
+    return MeshBody(m_->Simplify(tolerance));
+}
+
+MeshBody MeshBody::remeshed(double length) const {
+    if (length <= 0) throw std::runtime_error("The edge length has to be more than 0");
+    // About the size of the body's box divided by the length, cubed and squared; kept from running away.
+    auto b = bounds();
+    double extent = std::max({b[3] - b[0], b[4] - b[1], b[5] - b[2]});
+    if (extent / length > 2000) throw std::runtime_error("That would make too many triangles; use a longer edge");
+    return MeshBody(m_->RefineToLength(length));
+}
+
+MeshBody MeshBody::smoothed(double sharpAngle, int steps) const {
+    if (steps < 1 || steps > 6) throw std::runtime_error("Use between 1 and 6 steps");
+    if (triangleCount() * size_t(steps) * size_t(steps) > 4000000) throw std::runtime_error("That would make too many triangles");
+    // Manifold keeps the faces it groups as flat flat, and it groups near-flat neighbours;
+    // each triangle its own face lets them all curve.
+    manifold::MeshGL gl = m_->GetMeshGL();
+    gl.faceID.resize(gl.NumTri());
+    std::iota(gl.faceID.begin(), gl.faceID.end(), 0u);
+    gl.runIndex.clear();
+    gl.runOriginalID.clear();
+    gl.runTransform.clear();
+    manifold::Manifold apart(gl);
+    if (apart.Status() != manifold::Manifold::Error::NoError) throw std::runtime_error("The mesh couldn't be smoothed");
+    return MeshBody(apart.SmoothOut(sharpAngle, 0).Refine(steps));
+}
 
 std::vector<std::vector<std::array<double, 2>>> MeshBody::slice(const double o[3], const double x[3], const double y[3]) const {
     // Into the plane's own coordinates (the inverse of its frame, a rotation), so the plane is z = 0.

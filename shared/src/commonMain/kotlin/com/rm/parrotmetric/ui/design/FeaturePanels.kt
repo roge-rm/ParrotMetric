@@ -85,6 +85,7 @@ fun FeaturePanel(editor: DesignEditor) {
                 is DesignEditor.SplitDraft -> SplitSettings(editor, d)
                 is DesignEditor.MoveDraft -> MoveSettings(editor, d)
                 is DesignEditor.ConvertDraft -> Header("To solid", Icons.convert, Palette.modify, d.bodies.firstOrNull())
+                is DesignEditor.MeshEditDraft -> MeshEditSettings(editor, d)
                 is DesignEditor.PlaneDraft -> PlaneSettings(editor, d)
                 is DesignEditor.AxisDraft -> AxisSettings(editor, d)
                 is DesignEditor.PointDraft -> PointSettings(editor, d)
@@ -538,6 +539,26 @@ internal fun FaceSettings(editor: DesignEditor, d: DesignEditor.FaceDraft) {
         DesignEditor.FaceTool.PressPull -> Field(editor, d, "size", "Distance", d.size, "mm", allowNegative = true) { d.size = it; editor.draftChanged() }
         DesignEditor.FaceTool.Delete -> {}
     }
+}
+
+@Composable
+private fun MeshEditSettings(editor: DesignEditor, d: DesignEditor.MeshEditDraft) {
+    Header(d.kind.name, Icons.meshEdit, Palette.modify, d.bodies.firstOrNull()?.let { editor.design.nameOf(it) })
+    Segmented(listOf("Reduce", "Remesh", "Smooth"), d.kind.ordinal) {
+        d.kind = com.rm.parrotmetric.design.MeshEdit.entries[it]
+        d.size = d.defaultSize(d.kind)
+        d.exprs.remove("size")
+        editor.draftChanged()
+    }
+    when (d.kind) {
+        com.rm.parrotmetric.design.MeshEdit.Reduce -> Field(editor, d, "size", "Allowed error", d.size, "mm", allowNegative = false) { d.size = it; editor.draftChanged() }
+        com.rm.parrotmetric.design.MeshEdit.Remesh -> Field(editor, d, "size", "Longest edge", d.size, "mm", allowNegative = false) { d.size = it; editor.draftChanged() }
+        com.rm.parrotmetric.design.MeshEdit.Smooth -> {
+            Field(editor, d, "steps", "Steps", d.steps, "", allowNegative = false) { d.steps = it; editor.draftChanged() }
+            Field(editor, d, "size", "Sharp over", d.size, "°", allowNegative = false) { d.size = it; editor.draftChanged() }
+        }
+    }
+    Text("${editor.triangles} triangles shown", fontSize = 13.sp, color = Palette.muted)
 }
 
 @Composable

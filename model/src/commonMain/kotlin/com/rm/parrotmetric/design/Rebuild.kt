@@ -394,6 +394,10 @@ class Rebuilder(private val kernel: Kernel) {
             }
             Step(f.key(), out, planes, null, made)
         }
+        is MeshEditFeature -> {
+            val body = bodies.firstOrNull { it.label == f.body } ?: throw KernelException("${f.body} isn't there any more")
+            replace(f, bodies, planes, made, body) { kernel.meshEdit(f.id, body.handle, f.kind.ordinal, f.size, f.steps) }
+        }
         is ConvertFeature -> {
             val body = bodies.firstOrNull { it.label == f.body } ?: throw KernelException("${f.body} isn't there any more")
             replace(f, bodies, planes, made, body) { kernel.convertToSolid(f.id, body.handle) }

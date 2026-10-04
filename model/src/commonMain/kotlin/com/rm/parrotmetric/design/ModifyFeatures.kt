@@ -23,6 +23,26 @@ data class DeleteFaceFeature(override val id: Int, override val name: String, va
     override fun key() = this
 }
 
+enum class MeshEdit { Reduce, Remesh, Smooth }
+
+/**
+ * Changes a body's triangles, making it a mesh body if it's a solid:
+ * Reduce to fewer, the surface moving no more than [size] mm; Remesh to
+ * smaller ones, no edge longer than [size] mm; Smooth, each triangle split
+ * [steps] x [steps] and rounded off, keeping edges sharper than [size]
+ * degrees.
+ */
+data class MeshEditFeature(
+    override val id: Int,
+    override val name: String,
+    val body: String,
+    val kind: MeshEdit,
+    val size: Double,
+    val steps: Int = 2,
+) : Feature() {
+    override fun key() = this
+}
+
 enum class HoleKind { Simple, Counterbore, Countersink }
 
 /**
