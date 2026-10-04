@@ -11,3 +11,4 @@ build/
 *.jks
 *.keystore
 __pycache__/
+/web/core/out/

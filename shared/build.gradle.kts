@@ -16,6 +16,7 @@ kotlin {
     }
 
     jvm("desktop")
+    wasmJs { browser() }
 
     sourceSets {
         androidMain { kotlin.srcDir("src/jvmShared/kotlin") }

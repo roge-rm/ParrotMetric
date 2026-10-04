@@ -3,7 +3,8 @@ Version: @VERSION@
 Architecture: @ARCH@
 Maintainer: dan <14335001+roge-rm@users.noreply.github.com>
 Installed-Size: @SIZE@
-Depends: openjdk-21-jre | java21-runtime, libegl1, libgles2
+Depends: openjdk-21-jre | java21-runtime, libgl1, libx11-6
+Recommends: libegl1, libgles2
 Section: graphics
 Priority: optional
 Homepage: https://github.com/roge-rm/ParrotMetric

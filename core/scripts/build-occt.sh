@@ -20,7 +20,7 @@ work=$here/build/occt-work/$target
 # The file formats pull in its viewer toolkits too, built here without FreeType or
 # OpenGL, and the linker drops what we don't call.
 toolkits="TKMesh TKFillet TKOffset TKBool TKPrim TKShHealing TKHLR TKDESTEP TKDEIGES TKDEOBJ TKDEPLY TKDEVRML"
-rev="$(git -C "$src" rev-parse HEAD 2>/dev/null || cat "$src/.occt-rev" 2>/dev/null || echo unknown) $toolkits"
+rev="$(git -C "$src" rev-parse HEAD 2>/dev/null || echo unknown) $toolkits${OCCT_FLAGS:+ $OCCT_FLAGS}"
 
 if [ -f "$out/.rev" ] && [ "$(cat "$out/.rev")" = "$rev" ]; then
     exit 0
@@ -43,8 +43,8 @@ set -- -G Ninja -S "$src" -B "$work" \
     -DBUILD_USE_PCH=OFF \
     -DUSE_TCL=OFF -DUSE_TK=OFF -DUSE_FREETYPE=OFF -DUSE_XLIB=OFF \
     -DUSE_OPENGL=OFF -DUSE_GLES2=OFF \
-    -DCMAKE_C_FLAGS=-ffunction-sections\ -fdata-sections \
-    -DCMAKE_CXX_FLAGS=-ffunction-sections\ -fdata-sections \
+    "-DCMAKE_C_FLAGS=-ffunction-sections -fdata-sections ${OCCT_FLAGS:-}" \
+    "-DCMAKE_CXX_FLAGS=-ffunction-sections -fdata-sections ${OCCT_FLAGS:-}" \
     -DCMAKE_POSITION_INDEPENDENT_CODE=ON
 
 case "$second" in
@@ -56,7 +56,8 @@ case "$second" in
         -DANDROID_PLATFORM=android-27 \
         -DANDROID_STL=c++_shared ;;
 esac
-# Extra settings for a target, such as the AppImage's static C++ runtime.
+# Extra settings for a target, such as a compiler cache. OCCT_FLAGS adds
+# compiler flags, such as the browser build's exception handling.
 if [ -n "${OCCT_CMAKE_ARGS:-}" ]; then
     # shellcheck disable=SC2086
     set -- "$@" $OCCT_CMAKE_ARGS

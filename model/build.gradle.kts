@@ -8,6 +8,7 @@ plugins {
 
 kotlin {
     jvm()
+    wasmJs { browser() }
 
     android {
         namespace = "com.rm.parrotmetric.model"

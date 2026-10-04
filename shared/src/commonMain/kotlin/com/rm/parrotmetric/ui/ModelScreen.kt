@@ -109,6 +109,8 @@ fun ModelScreen(
     state: ModelState,
     design: DesignEditor,
     actions: ModelActions,
+    /** True where the 3D view is drawn behind the screen (the browser), so the screen leaves it showing. */
+    seeThrough: Boolean = false,
 ) {
     var openGroup by remember { mutableStateOf<ToolGroup?>(null) }
     // A sheet over the bottom: the parts list or export.
@@ -116,7 +118,7 @@ fun ModelScreen(
     MaterialTheme(colorScheme = Palette.scheme) {
         val sketch = state.sketch
         // The view stays put while the controls over it change, so it keeps its GL context.
-        Box(Modifier.fillMaxSize().background(Palette.ground)) {
+        Box(if (seeThrough) Modifier.fillMaxSize() else Modifier.fillMaxSize().background(Palette.ground)) {
             viewport()
             if (sketch != null) {
                 state.camera?.let { SketchOverlay(sketch, PlaneProjection(it, sketch.plane), actions::pan, actions::zoom) }

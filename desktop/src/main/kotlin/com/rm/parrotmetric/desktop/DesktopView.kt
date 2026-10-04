@@ -9,26 +9,21 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
-import androidx.compose.ui.input.pointer.PointerButton
-import androidx.compose.ui.input.pointer.PointerEventType
-import androidx.compose.ui.input.pointer.PointerInputScope
-import androidx.compose.ui.input.pointer.isPrimaryPressed
-import androidx.compose.ui.input.pointer.isShiftPressed
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.rm.parrotmetric.Core
 import com.rm.parrotmetric.DesktopGl
+import com.rm.parrotmetric.ui.ViewControls
+import com.rm.parrotmetric.ui.viewGestures
 import org.jetbrains.skia.ColorAlphaType
 import org.jetbrains.skia.ColorType
 import org.jetbrains.skia.Image
@@ -37,7 +32,6 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.swing.SwingUtilities
-import kotlin.math.pow
 
 /**
  * The 3D view on desktop. The core draws on its own GL thread into an
@@ -133,69 +127,23 @@ class DesktopView(
     }
 }
 
-/**
- * Shows [view]. Dragging with the left button orbits, with the right or middle
- * button (or Shift) pans, and the wheel zooms. A click selects and a double
- * click fits the view.
- */
+/** Shows [view], with the shared gestures (see viewGestures). */
 @Composable
 fun DesktopViewport(view: DesktopView) {
     val density = LocalDensity.current.density
     SideEffect { view.density = density }
-    Box(
-        Modifier.fillMaxSize()
-            .onSizeChanged { view.resize(it) }
-            .pointerInput(view) { mouse(view) },
-    ) {
+    val controls = remember(view) {
+        object : ViewControls {
+            override fun orbit(dx: Float, dy: Float) = view.gl { Core.orbit(dx, dy) }
+            override fun pan(dx: Float, dy: Float) = view.gl { Core.pan(dx, dy) }
+            override fun zoom(factor: Float) = view.gl { Core.zoom(factor) }
+            override fun tap(x: Float, y: Float, double: Boolean) = view.tap(x, y, double)
+        }
+    }
+    Box(Modifier.fillMaxSize().onSizeChanged { view.resize(it) }.viewGestures(controls)) {
         view.frame?.let { image -> Canvas(Modifier.fillMaxSize()) { drawImage(image) } }
         view.problem?.let {
             Text("No 3D view: $it", Modifier.align(Alignment.Center).padding(24.dp), color = Color(0xFFE8DCC8))
-        }
-    }
-}
-
-@OptIn(ExperimentalComposeUiApi::class)
-private suspend fun PointerInputScope.mouse(view: DesktopView) = awaitPointerEventScope {
-    var down: Offset? = null
-    var last = Offset.Zero
-    var dragging = false
-    var panning = false
-    var primary = false
-    var lastClick = 0L
-    while (true) {
-        val event = awaitPointerEvent()
-        val change = event.changes.firstOrNull() ?: continue
-        when (event.type) {
-            PointerEventType.Press -> {
-                down = change.position
-                last = change.position
-                dragging = false
-                primary = event.buttons.isPrimaryPressed
-                panning = !primary || event.keyboardModifiers.isShiftPressed
-            }
-            PointerEventType.Move -> {
-                val from = down ?: continue
-                val at = change.position
-                if (!dragging && (at - from).getDistance() > viewConfiguration.touchSlop) dragging = true
-                if (dragging) {
-                    val d = at - last
-                    if (panning) view.gl { Core.pan(d.x, d.y) } else view.gl { Core.orbit(d.x, d.y) }
-                }
-                last = at
-            }
-            PointerEventType.Release -> {
-                if (down != null && !dragging && primary && event.button == PointerButton.Primary) {
-                    val now = change.uptimeMillis
-                    val double = now - lastClick < 350
-                    lastClick = if (double) 0 else now
-                    view.tap(change.position.x, change.position.y, double)
-                }
-                down = null
-            }
-            PointerEventType.Scroll -> {
-                val steps = change.scrollDelta.y
-                view.gl { Core.zoom(1.15f.pow(-steps)) }
-            }
         }
     }
 }

@@ -186,6 +186,7 @@ fun registerDeb(arch: String, runtime: Configuration, core: TaskProvider<Exec>) 
     tasks.register("deb$cap") {
         group = "distribution"
         description = "Builds parrotmetric_${versionName}_$arch.deb"
+        notCompatibleWithConfigurationCache("uses the build script's jar copying")
         dependsOn(stageTask)
         val dir = stage.get().asFile
         val out = deb.get().asFile

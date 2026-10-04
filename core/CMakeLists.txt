@@ -22,6 +22,14 @@ set(third_party ${CMAKE_CURRENT_LIST_DIR}/../third_party)
 
 # NO_CMAKE_FIND_ROOT_PATH: the NDK toolchain would otherwise look only in its sysroot.
 find_package(OpenCASCADE REQUIRED CONFIG PATHS ${PM_OCCT_DIR} NO_DEFAULT_PATH NO_CMAKE_FIND_ROOT_PATH)
+# OCCT names libstdc++ itself, which would link it dynamically even where the
+# build asks for it static (the Linux packages). The compiler adds the right
+# C++ runtime anyway.
+get_target_property(occt_kernel_libs TKernel INTERFACE_LINK_LIBRARIES)
+if(occt_kernel_libs)
+    list(FILTER occt_kernel_libs EXCLUDE REGEX "stdc\\+\\+")
+    set_target_properties(TKernel PROPERTIES INTERFACE_LINK_LIBRARIES "${occt_kernel_libs}")
+endif()
 
 # Manifold, for mesh bodies. Built from source with the core, without its 2D
 # cross sections (they need Clipper2) or threads.
