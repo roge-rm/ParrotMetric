@@ -51,6 +51,18 @@ interface Kernel {
     fun splitBy(id: Int, body: Long, tool: Long): List<Long>
     /** How much two bodies overlap, mm³. */
     fun overlapVolume(a: Long, b: Long): Double = 0.0
+    /** Where a named corner of a body is (PointRef.Corner), or null if it hasn't got it. */
+    fun corner(body: Long, name: String): Vec3? = null
+    /**
+     * What shape a named edge or face is: kind, then a point, a direction
+     * and a size. 0 a straight edge (start, along it, length); 1 a round edge
+     * (centre, axis, radius); 2 a cylinder or cone (a point on its axis, the
+     * axis, radius); 3 a sphere (centre, -, radius); 4 a flat face (middle,
+     * normal, 0). Null if it's none of these or the body hasn't got it.
+     */
+    fun shapeOf(body: Long, name: String, edge: Boolean): DoubleArray? = null
+    /** The point a fraction t along a named edge, then the edge's direction there; null if the body hasn't got it. */
+    fun alongEdge(body: Long, name: String, t: Double): DoubleArray? = null
     fun retain(body: Long)
     fun release(body: Long)
     /** Where a named face (or edge) of a body is and how big, to find it again by shape; null if the body hasn't got it. */

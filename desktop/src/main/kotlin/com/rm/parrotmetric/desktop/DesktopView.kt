@@ -134,9 +134,13 @@ class DesktopView(
     }
 }
 
-/** Shows [view], with the shared gestures (see viewGestures). [onMenu] opens the right-click menu at a point. */
+/**
+ * Shows [view], with the shared gestures (see viewGestures). [onMenu] opens
+ * the right-click menu at a point. While [collecting] says a tool is taking
+ * picks, a plain click adds to them in place of starting again.
+ */
 @Composable
-fun DesktopViewport(view: DesktopView, onMenu: (Float, Float) -> Unit) {
+fun DesktopViewport(view: DesktopView, onMenu: (Float, Float) -> Unit, collecting: () -> Boolean = { false }) {
     val density = LocalDensity.current.density
     SideEffect { view.density = density }
     var box by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
@@ -148,7 +152,7 @@ fun DesktopViewport(view: DesktopView, onMenu: (Float, Float) -> Unit) {
             override fun zoomAt(factor: Float, x: Float, y: Float) = view.gl { Core.zoomAt(factor, x, y) }
             override fun fit() = view.gl { Core.fit() }
             override fun tap(x: Float, y: Float, double: Boolean) = view.tap(x, y, double)
-            override fun click(x: Float, y: Float, add: Boolean) = view.select { Core.click(x, y, add) }
+            override fun click(x: Float, y: Float, add: Boolean) = view.select { Core.click(x, y, add || collecting()) }
             override fun box(rect: androidx.compose.ui.geometry.Rect, crossing: Boolean, add: Boolean) =
                 view.select { Core.selectBox(rect.left, rect.top, rect.right, rect.bottom, crossing, add) }
             override fun menu(x: Float, y: Float) = onMenu(x, y)

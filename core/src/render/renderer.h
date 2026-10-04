@@ -10,10 +10,10 @@ namespace pm {
 
 /** What a tap landed on. */
 struct Pick {
-    enum Kind : uint8_t { None, Face, Edge };
+    enum Kind : uint8_t { None, Face, Edge, Vertex };
     Kind kind = None;
     uint32_t body = 0;
-    uint32_t index = 0;  // The face or edge number in that body's DisplayMesh.
+    uint32_t index = 0;  // The face, edge or corner number in that body's DisplayMesh.
 
     bool operator==(const Pick& o) const { return kind == o.kind && body == o.body && index == o.index; }
 };
@@ -83,6 +83,8 @@ private:
         float faceColour[4];
         bool behind = false;
         uint32_t faceCount = 0, edgeCount = 0;
+        uint32_t cornerVao = 0, cornerVbo = 0;
+        int cornerCount = 0;
     };
 
     void upload();
@@ -100,6 +102,7 @@ private:
 
     // GL objects.
     uint32_t faceProgram_ = 0, edgeProgram_ = 0, faceIdProgram_ = 0, edgeIdProgram_ = 0;
+    uint32_t cornerProgram_ = 0, cornerIdProgram_ = 0;
     uint32_t pickFbo_ = 0, pickColour_ = 0, pickDepth_ = 0;
     int pickWidth_ = 0, pickHeight_ = 0;
     std::vector<Gpu> gpu_;

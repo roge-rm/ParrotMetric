@@ -88,6 +88,7 @@ data class ModelState(
     val selectedEdges: Int = 0,
     val selectedAreas: Int = 0,
     val selectedPlanes: Int = 0,
+    val selectedCorners: Int = 0,
     val yaw: Float = 0f,
     val pitch: Float = 0f,
     /** The camera as last drawn, for lining the sketch overlay up with the view. */
@@ -211,7 +212,7 @@ fun ModelScreen(
             design.panel != null -> { focus.requestFocus(); design.cancelPanel() }
             sheet != null -> closeSheet()
             openGroup != null -> openGroup = null
-            state.selectedFaces + state.selectedEdges + state.selectedAreas + state.selectedPlanes > 0 -> actions.clearSelection()
+            state.selectedFaces + state.selectedEdges + state.selectedAreas + state.selectedPlanes + state.selectedCorners > 0 -> actions.clearSelection()
             else -> return false
         }
         return true
@@ -452,6 +453,7 @@ private fun SelectionChip(state: ModelState, actions: ModelActions) {
         if (state.selectedEdges > 0) add(if (state.selectedEdges == 1) "1 edge" else "${state.selectedEdges} edges")
         if (state.selectedAreas > 0) add(if (state.selectedAreas == 1) "1 area" else "${state.selectedAreas} areas")
         if (state.selectedPlanes > 0) add(if (state.selectedPlanes == 1) "1 plane" else "${state.selectedPlanes} planes")
+        if (state.selectedCorners > 0) add(if (state.selectedCorners == 1) "1 corner" else "${state.selectedCorners} corners")
     }
     AnimatedVisibility(parts.isNotEmpty(), enter = fadeIn(tween(150)), exit = fadeOut(tween(150))) {
         Surface(color = Color(0xFF3A2C24), contentColor = Color(0xFFFFB48C), shape = RoundedCornerShape(18.dp)) {
@@ -632,7 +634,7 @@ private fun SelectionMenu(at: Offset, context: ToolContext, close: () -> Unit) {
             for (t in suggested) add(t.label to { Tools.run(t, context) })
             if (state.selectedFaces > 0) add("Hide" to { design.hideSelectedBodies() })
             add("Fit the view" to { context.actions.fit() })
-            if (state.selectedFaces + state.selectedEdges + state.selectedAreas + state.selectedPlanes > 0) add("Clear selection" to { context.actions.clearSelection() })
+            if (state.selectedFaces + state.selectedEdges + state.selectedAreas + state.selectedPlanes + state.selectedCorners > 0) add("Clear selection" to { context.actions.clearSelection() })
         }
         DropdownMenu(true, onDismissRequest = close, containerColor = Palette.raised) {
             for ((label, action) in items) DropdownMenuItem({ Text(label) }, onClick = { close(); action() })

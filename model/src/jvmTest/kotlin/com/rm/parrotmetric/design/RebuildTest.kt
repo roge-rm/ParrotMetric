@@ -411,4 +411,44 @@ class RebuildTest {
         assertTrue(built.errors.isEmpty(), built.errors.toString())
         assertTrue("transform ${align.id} a" in k.calls)
     }
+
+    @Test
+    fun constructionThroughPointsAndPlanes() {
+        val k = FakeKernel()
+        val d = Design()
+        val a = PointFeature(d.newId(), "A", 0.0, 0.0, 5.0).also { d.add(it) }
+        val b = PointFeature(d.newId(), "B", 10.0, 0.0, 5.0).also { d.add(it) }
+        val c = PointFeature(d.newId(), "C", 0.0, 10.0, 5.0).also { d.add(it) }
+        val refs = listOf(a, b, c).map { PointRef.Construction(it.id) }
+        val flat = PlaneFeature(d.newId(), "Flat", PlaneFeature.Kind.ThreePoints, PlaneRef.Fixed(SketchPlane.Top), 0.0, 0.0, false, null, refs).also { d.add(it) }
+        val axis = AxisFeature(d.newId(), "AB", 0.0, 0.0, 0.0, Axis3.Z, AxisFeature.Kind.TwoPoints, points = refs.take(2)).also { d.add(it) }
+        val up = PlaneFeature(d.newId(), "Up", PlaneFeature.Kind.Offset, PlaneRef.Fixed(SketchPlane.Front), 3.0, 0.0, false, null).also { d.add(it) }
+        val across = PlaneFeature(d.newId(), "Across", PlaneFeature.Kind.Offset, PlaneRef.Fixed(SketchPlane.Right), 2.0, 0.0, false, null).also { d.add(it) }
+        val planes = listOf(PlaneRef.Construction(flat.id), PlaneRef.Construction(up.id), PlaneRef.Construction(across.id))
+        val corner = PointFeature(d.newId(), "Meet", 0.0, 0.0, 0.0, PointFeature.Kind.ThreePlanes, planes = planes).also { d.add(it) }
+        val built = Rebuilder(k).rebuild(d.active)
+        assertTrue(built.errors.isEmpty(), built.errors.toString())
+        val plane = built.sketchPlanes.getValue(flat.id)
+        assertEquals(1.0, kotlin.math.abs(plane.normal.z), 1e-9)
+        assertEquals(5.0, plane.origin.z, 1e-9)
+        val (from, dir) = built.axes.getValue(axis.id)
+        assertEquals(0.0, from.x, 1e-9)
+        assertEquals(1.0, dir.x, 1e-9)
+        // Where the three meet is on each of them.
+        val at = built.points.getValue(corner.id)
+        for (id in listOf(flat.id, up.id, across.id)) {
+            val p = built.sketchPlanes.getValue(id)
+            assertEquals(0.0, (at - p.origin).dot(p.normal), 1e-9)
+        }
+    }
+
+    @Test
+    fun threePointsInALineMakeNoPlane() {
+        val k = FakeKernel()
+        val d = Design()
+        val refs = listOf(0.0, 1.0, 2.0).map { x -> PointRef.Construction(PointFeature(d.newId(), "P", x, 0.0, 0.0).also { d.add(it) }.id) }
+        val flat = PlaneFeature(d.newId(), "Flat", PlaneFeature.Kind.ThreePoints, PlaneRef.Fixed(SketchPlane.Top), 0.0, 0.0, false, null, refs).also { d.add(it) }
+        val built = Rebuilder(k).rebuild(d.active)
+        assertEquals("The points are in a line", built.errors[flat.id])
+    }
 }

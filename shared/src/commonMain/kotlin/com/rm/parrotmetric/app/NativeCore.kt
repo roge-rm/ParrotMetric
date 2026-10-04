@@ -42,6 +42,14 @@ interface NativeCore {
     fun splitBy(id: Int, body: Long, tool: Long): LongArray
     /** How much two bodies overlap, mm³. */
     fun overlapVolume(a: Long, b: Long): Double
+    /** The names of the selected corners. */
+    fun selectedCorners(): Array<String>
+    /** Where a named corner of a solid is, or null. */
+    fun corner(body: Long, name: String): DoubleArray?
+    /** What shape a named edge or face is: kind, point, direction, size (see Kernel.shapeOf); null if none of those. */
+    fun shapeOf(body: Long, name: String, edge: Boolean): DoubleArray?
+    /** A point a fraction t along a named edge and the edge's direction there; null if it hasn't got it. */
+    fun alongEdge(body: Long, name: String, t: Double): DoubleArray?
     /** A body's volume (mm³), surface area (mm²) and centre of mass x, y, z. */
     fun properties(body: Long): DoubleArray
     /** Where bodies cross a plane, as sketch curves; see jni.cpp. */
@@ -80,7 +88,7 @@ interface NativeCore {
     fun selectedFaces(): Array<String>
     /** Pairs of sketch number and region number. */
     fun selectedRegions(): IntArray
-    fun select(edges: Array<String>, regions: IntArray, faces: Array<String>)
+    fun select(edges: Array<String>, regions: IntArray, faces: Array<String>, corners: Array<String>)
 
     /** A sketch's closed regions; see jni.cpp for the layouts. */
     fun findRegions(kinds: IntArray, ids: IntArray, numbers: DoubleArray): FloatArray

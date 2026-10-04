@@ -190,7 +190,8 @@ private fun WebApp() {
             }
             override fun zoomAt(factor: Float, x: Float, y: Float) = view.gl { WebCore.zoomAt(factor, x, y) }
             override fun fit() = view.gl { WebCore.fit() }
-            override fun click(x: Float, y: Float, add: Boolean) = view.gl { app.selectionChanged(WebCore.click(x, y, add)) }
+            // While a tool is taking picks, a plain click adds to them.
+            override fun click(x: Float, y: Float, add: Boolean) = view.gl { app.selectionChanged(WebCore.click(x, y, add || app.design.panel != null)) }
             override fun box(rect: androidx.compose.ui.geometry.Rect, crossing: Boolean, add: Boolean) =
                 view.gl { app.selectionChanged(WebCore.selectBox(rect.left, rect.top, rect.right, rect.bottom, crossing, add)) }
             override fun menu(x: Float, y: Float) = app.openMenu(x, y)

@@ -20,6 +20,8 @@ constexpr int kSelectionRow = 1024;  // Selection textures are this many texels 
 
 // Picked ids: 0 is nothing; otherwise body << 20 | kind << 19 | index, plus one.
 constexpr uint32_t kEdgeBit = 1u << 19;
+// Corners are edges with this bit too.
+constexpr uint32_t kCornerBit = 1u << 18;
 
 const char* kFaceVertex = R"(#version 300 es
 layout(location = 0) in vec3 position;
@@ -137,6 +139,37 @@ void main() {
     colour = vec4(float(v & 255u), float((v >> 8) & 255u), float((v >> 16) & 255u), 255.0) / 255.0;
 })";
 
+// Corners: points a fixed number of pixels across, numbered by their order.
+const char* kCornerVertex = R"(#version 300 es
+layout(location = 0) in vec3 position;
+uniform mat4 viewProjection;
+uniform float size;
+flat out uint id;
+out vec3 world;
+void main() {
+    id = uint(gl_VertexID);
+    world = position;
+    gl_Position = viewProjection * vec4(position, 1.0);
+    // A touch nearer than the edges meeting there, so the corner wins where they overlap.
+    gl_Position.z -= 0.002 * gl_Position.w;
+    gl_PointSize = size;
+})";
+
+const char* kCornerFragment = R"(#version 300 es
+precision mediump float;
+flat in uint id;
+in vec3 world;
+uniform vec4 cornerColour;
+uniform vec4 clip;
+uniform bool clipping;
+out vec4 colour;
+void main() {
+    if (clipping && dot(vec4(world, 1.0), clip) < 0.0) discard;
+    // Round dots.
+    if (length(gl_PointCoord - vec2(0.5)) > 0.5) discard;
+    colour = cornerColour;
+})";
+
 uint32_t compile(GLenum type, const char* source) {
     GLuint s = glCreateShader(type);
     // Desktop OpenGL takes the same shaders under its own version line.
@@ -201,6 +234,10 @@ void Renderer::surfaceCreated() {
     edgeProgram_ = link(kEdgeVertex, kEdgeFragment);
     faceIdProgram_ = link(kFaceIdVertex, kIdFragment);
     edgeIdProgram_ = link(kEdgeVertex, kIdFragment);
+    cornerProgram_ = link(kCornerVertex, kCornerFragment);
+    cornerIdProgram_ = link(kCornerVertex, kIdFragment);
+    // Desktop GL sizes points from the shader only when asked.
+    if (desktopGl) glEnable(0x8642);  // GL_PROGRAM_POINT_SIZE
     glEnable(GL_DEPTH_TEST);
     bodiesDirty_ = true;
 }
@@ -246,8 +283,9 @@ void Renderer::releaseGpu() {
     for (auto& g : gpu_) {
         glDeleteVertexArrays(1, &g.faceVao);
         glDeleteVertexArrays(1, &g.edgeVao);
-        GLuint buffers[4] = {g.faceVbo, g.faceIbo, g.edgeVbo, g.edgeIbo};
-        glDeleteBuffers(4, buffers);
+        glDeleteVertexArrays(1, &g.cornerVao);
+        GLuint buffers[5] = {g.faceVbo, g.faceIbo, g.edgeVbo, g.edgeIbo, g.cornerVbo};
+        glDeleteBuffers(5, buffers);
         GLuint textures[2] = {g.faceSelected, g.edgeSelected};
         glDeleteTextures(2, textures);
     }
@@ -328,6 +366,18 @@ void Renderer::upload() {
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, GLsizeiptr(idx.size() * 4), idx.data(), GL_STATIC_DRAW);
         g.edgeIndices = int(idx.size());
         glBindVertexArray(0);
+
+        if (!b.corners.empty()) {
+            glGenVertexArrays(1, &g.cornerVao);
+            glBindVertexArray(g.cornerVao);
+            glGenBuffers(1, &g.cornerVbo);
+            glBindBuffer(GL_ARRAY_BUFFER, g.cornerVbo);
+            glBufferData(GL_ARRAY_BUFFER, GLsizeiptr(b.corners.size() * 4), b.corners.data(), GL_STATIC_DRAW);
+            glEnableVertexAttribArray(0);
+            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
+            g.cornerCount = int(b.corners.size() / 3);
+            glBindVertexArray(0);
+        }
 
         g.faceSelected = makeSelectionTexture(g.faceCount);
         g.edgeSelected = makeSelectionTexture(g.edgeCount);
@@ -535,6 +585,37 @@ void Renderer::drawScene(bool ids, const float* vp, const float* normal) {
         glDrawElements(GL_TRIANGLES, g.edgeIndices, GL_UNSIGNED_INT, nullptr);
     }
     glBindVertexArray(0);
+
+    // Corners, over the edges they end: small dots, a finger wide to pick, and bigger when picked.
+    GLuint cornerProgram = ids ? cornerIdProgram_ : cornerProgram_;
+    glUseProgram(cornerProgram);
+    glUniformMatrix4fv(glGetUniformLocation(cornerProgram, "viewProjection"), 1, GL_FALSE, vp);
+    glUniform4fv(glGetUniformLocation(cornerProgram, "clip"), 1, clip_);
+    glUniform1i(glGetUniformLocation(cornerProgram, "clipping"), clipping_ ? 1 : 0);
+    glDepthFunc(GL_LEQUAL);
+    for (uint32_t i = 0; i < gpu_.size(); ++i) {
+        const Gpu& g = gpu_[i];
+        if (g.cornerCount == 0) continue;
+        glBindVertexArray(g.cornerVao);
+        if (ids) {
+            glUniform1ui(glGetUniformLocation(cornerProgram, "base"), (i << 20) | kEdgeBit | kCornerBit);
+            glUniform1f(glGetUniformLocation(cornerProgram, "size"), 18.0f * density_);
+            glDrawArrays(GL_POINTS, 0, g.cornerCount);
+            continue;
+        }
+        // Lighter than the edges, so they show where edges meet.
+        const float dot[4] = {0.55f, 0.62f, 0.60f, 0.95f};
+        glUniform4fv(glGetUniformLocation(cornerProgram, "cornerColour"), 1, dot);
+        glUniform1f(glGetUniformLocation(cornerProgram, "size"), 5.0f * density_);
+        glDrawArrays(GL_POINTS, 0, g.cornerCount);
+        const float picked[4] = {1.0f, 0.48f, 0.24f, 1.0f};
+        glUniform4fv(glGetUniformLocation(cornerProgram, "cornerColour"), 1, picked);
+        glUniform1f(glGetUniformLocation(cornerProgram, "size"), 10.0f * density_);
+        for (const auto& p : selection_)
+            if (p.kind == Pick::Vertex && p.body == i && int(p.index) < g.cornerCount) glDrawArrays(GL_POINTS, GLint(p.index), 1);
+    }
+    glDepthFunc(GL_LESS);
+    glBindVertexArray(0);
     if (!ids) glDisable(GL_BLEND);
 }
 
@@ -630,9 +711,9 @@ Pick Renderer::fromId(uint32_t v) {
     if (v == 0) return {};
     v -= 1;
     Pick p;
-    p.kind = (v & kEdgeBit) ? Pick::Edge : Pick::Face;
+    p.kind = (v & kEdgeBit) ? ((v & kCornerBit) ? Pick::Vertex : Pick::Edge) : Pick::Face;
     p.body = v >> 20;
-    p.index = v & (kEdgeBit - 1);
+    p.index = v & (p.kind == Pick::Face ? kEdgeBit - 1 : kCornerBit - 1);
     return p;
 }
 

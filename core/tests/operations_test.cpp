@@ -316,3 +316,18 @@ TEST_CASE("a body split by another comes apart where they cross") {
     CHECK(overlapVolume(block, rod) == Catch::Approx(pi * 25 * 10).epsilon(1e-4));
     CHECK(overlapVolume(block, primitive(4, top, Primitive::Box, 100, 0, 5, 5, 5)) == 0);
 }
+
+TEST_CASE("each corner of a box has a name it can be found by") {
+    NamedShape box = primitive(1, top, Primitive::Box, 0, 0, 10, 20, 30);
+    auto names = box.cornerNames();
+    REQUIRE(names.size() == 8);
+    for (const auto& n : names) {
+        auto p = box.findCorner(n);
+        REQUIRE(p.has_value());
+        CHECK(std::abs(std::abs(p->X()) - 5) < 1e-9);
+        CHECK(std::abs(std::abs(p->Y()) - 10) < 1e-9);
+    }
+    std::vector<std::string> sorted = names;
+    std::sort(sorted.begin(), sorted.end());
+    CHECK(std::unique(sorted.begin(), sorted.end()) == sorted.end());
+}

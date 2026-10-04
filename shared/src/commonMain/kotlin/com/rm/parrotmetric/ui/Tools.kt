@@ -75,6 +75,14 @@ object Tools {
         ToolDef("plane.offset", "Offset plane", Icons.plane, ToolGroup.Construct, cluster = "Planes") { it.design.startPlane(PlaneFeature.Kind.Offset) },
         ToolDef("plane.angle", "Angled plane", Icons.plane, ToolGroup.Construct, cluster = "Planes") { it.design.startPlane(PlaneFeature.Kind.Angle) },
         ToolDef("plane.mid", "Midplane", Icons.plane, ToolGroup.Construct, cluster = "Planes") { it.design.startPlane(PlaneFeature.Kind.Midway) },
+        ToolDef("plane.points", "Plane through three points", Icons.plane, ToolGroup.Construct, cluster = "Planes", suggest = { it.selectedCorners >= 3 }) {
+            it.design.startPlane(PlaneFeature.Kind.ThreePoints)
+        },
+        ToolDef("plane.edges", "Plane through two edges", Icons.plane, ToolGroup.Construct, cluster = "Planes", suggest = { it.selectedEdges == 2 }) {
+            it.design.startPlane(PlaneFeature.Kind.TwoEdges)
+        },
+        ToolDef("plane.tangent", "Tangent plane", Icons.plane, ToolGroup.Construct, cluster = "Planes") { it.design.startPlane(PlaneFeature.Kind.Tangent) },
+        ToolDef("plane.along", "Plane along an edge", Icons.plane, ToolGroup.Construct, cluster = "Planes") { it.design.startPlane(PlaneFeature.Kind.AlongEdge) },
         ToolDef("axis", "Axis", Icons.axis, ToolGroup.Construct) { it.design.startAxis() },
         ToolDef("point", "Point", Icons.pointTool, ToolGroup.Construct) { it.design.startPoint() },
 

@@ -13,6 +13,7 @@
 #include <TopTools_IndexedDataMapOfShapeListOfShape.hxx>
 #include <TopTools_IndexedMapOfShape.hxx>
 #include <TopoDS.hxx>
+#include <TopoDS_Vertex.hxx>
 
 #include <algorithm>
 #include <cmath>
@@ -53,6 +54,39 @@ std::vector<std::string> NamedShape::edgeNames() const {
     std::vector<std::string> out;
     for (int i = 1; i <= edges.Extent(); ++i) out.push_back(edgeName(TopoDS::Edge(edges(i))));
     return out;
+}
+
+std::vector<std::string> NamedShape::cornerNames() const {
+    TopTools_IndexedMapOfShape corners;
+    TopExp::MapShapes(shape, TopAbs_VERTEX, corners);
+    TopTools_IndexedDataMapOfShapeListOfShape edgesAt;
+    TopExp::MapShapesAndAncestors(shape, TopAbs_VERTEX, TopAbs_EDGE, edgesAt);
+    std::vector<std::string> out;
+    for (int i = 1; i <= corners.Extent(); ++i) {
+        // The first two different edge names there, in order, so the name doesn't depend on map order.
+        std::vector<std::string> names;
+        for (const auto& e : edgesAt.FindFromKey(corners(i))) {
+            if (BRep_Tool::Degenerated(TopoDS::Edge(e))) continue;
+            std::string n = edgeName(TopoDS::Edge(e));
+            if (!n.empty() && std::find(names.begin(), names.end(), n) == names.end()) names.push_back(n);
+        }
+        std::sort(names.begin(), names.end());
+        out.push_back(names.size() >= 2 ? names[0] + " & " + names[1] : std::string());
+    }
+    return out;
+}
+
+std::optional<gp_Pnt> NamedShape::findCorner(const std::string& name) const {
+    size_t split = name.find(" & ");
+    if (split == std::string::npos) return std::nullopt;
+    auto first = findEdges(name.substr(0, split));
+    auto second = findEdges(name.substr(split + 3));
+    for (const auto& a : first)
+        for (const auto& b : second) {
+            TopoDS_Vertex v;
+            if (TopExp::CommonVertex(a, b, v)) return BRep_Tool::Pnt(v);
+        }
+    return std::nullopt;
 }
 
 std::vector<TopoDS_Edge> NamedShape::findEdges(const std::string& name) const {

@@ -50,6 +50,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rm.parrotmetric.design.AxisRef
 import com.rm.parrotmetric.design.Operation
+import com.rm.parrotmetric.design.AxisFeature
+import com.rm.parrotmetric.design.PointFeature
 import com.rm.parrotmetric.design.PrimitiveKind
 import com.rm.parrotmetric.design.SketchFeature
 import com.rm.parrotmetric.sketch.Line
@@ -537,10 +539,18 @@ internal fun MoveSettings(editor: DesignEditor, d: DesignEditor.MoveDraft) {
 
 @Composable
 internal fun PointSettings(editor: DesignEditor, d: DesignEditor.PointDraft) {
-    Header("Point", Icons.pointTool, Palette.construct, null)
-    Field(editor, d, "x", "X", d.x, "mm", allowNegative = true) { d.x = it; editor.draftChanged() }
-    Field(editor, d, "y", "Y", d.y, "mm", allowNegative = true) { d.y = it; editor.draftChanged() }
-    Field(editor, d, "z", "Z", d.z, "mm", allowNegative = true) { d.z = it; editor.draftChanged() }
+    val picked = when (d.kind) {
+        PointFeature.Kind.At -> if (d.ref != null) "Picked" else null
+        PointFeature.Kind.ThreePlanes -> "${d.planes.size.coerceAtMost(3)} of 3"
+        PointFeature.Kind.Fixed -> null
+    }
+    Header("Point", Icons.pointTool, Palette.construct, picked)
+    Segmented(listOf("At", "Corner or centre", "Three planes"), d.kind.ordinal) { editor.setConstructionKind(d, PointFeature.Kind.entries[it]) }
+    if (d.kind == PointFeature.Kind.Fixed) {
+        Field(editor, d, "x", "X", d.x, "mm", allowNegative = true) { d.x = it; editor.draftChanged() }
+        Field(editor, d, "y", "Y", d.y, "mm", allowNegative = true) { d.y = it; editor.draftChanged() }
+        Field(editor, d, "z", "Z", d.z, "mm", allowNegative = true) { d.z = it; editor.draftChanged() }
+    }
 }
 
 @Composable
@@ -549,11 +559,33 @@ internal fun PlaneSettings(editor: DesignEditor, d: DesignEditor.PlaneDraft) {
         com.rm.parrotmetric.design.PlaneFeature.Kind.Offset -> "Offset plane"
         com.rm.parrotmetric.design.PlaneFeature.Kind.Angle -> "Angled plane"
         com.rm.parrotmetric.design.PlaneFeature.Kind.Midway -> "Midplane"
+        com.rm.parrotmetric.design.PlaneFeature.Kind.ThreePoints -> "Plane through three points"
+        com.rm.parrotmetric.design.PlaneFeature.Kind.TwoEdges -> "Plane through two edges"
+        com.rm.parrotmetric.design.PlaneFeature.Kind.Tangent -> "Tangent plane"
+        com.rm.parrotmetric.design.PlaneFeature.Kind.AlongEdge -> "Plane along an edge"
     }
-    Header(title, Icons.plane, Palette.construct, null)
-    Text("From", fontSize = 13.sp, color = Palette.muted)
-    Segmented(d.planes.map { it.first }, d.planes.indexOfFirst { it.second == d.base }.coerceAtLeast(0)) { d.base = d.planes[it].second; editor.draftChanged() }
+    val picked = when (d.kind) {
+        com.rm.parrotmetric.design.PlaneFeature.Kind.ThreePoints -> "${d.points.size.coerceAtMost(3)} of 3"
+        com.rm.parrotmetric.design.PlaneFeature.Kind.TwoEdges -> "${d.edges.size.coerceAtMost(2)} of 2"
+        com.rm.parrotmetric.design.PlaneFeature.Kind.Tangent -> if (d.face != null) "1 face" else null
+        com.rm.parrotmetric.design.PlaneFeature.Kind.AlongEdge -> if (d.edges.isNotEmpty()) "1 edge" else null
+        else -> null
+    }
+    Header(title, Icons.plane, Palette.construct, picked)
+    val fromAPlane = d.kind in setOf(
+        com.rm.parrotmetric.design.PlaneFeature.Kind.Offset, com.rm.parrotmetric.design.PlaneFeature.Kind.Angle,
+        com.rm.parrotmetric.design.PlaneFeature.Kind.Midway, com.rm.parrotmetric.design.PlaneFeature.Kind.Tangent,
+    )
+    if (fromAPlane) {
+        Text(if (d.kind == com.rm.parrotmetric.design.PlaneFeature.Kind.Tangent) "Facing" else "From", fontSize = 13.sp, color = Palette.muted)
+        Segmented(d.planes.map { it.first }, d.planes.indexOfFirst { it.second == d.base }.coerceAtLeast(0)) { d.base = d.planes[it].second; editor.draftChanged() }
+    }
     when (d.kind) {
+        com.rm.parrotmetric.design.PlaneFeature.Kind.Tangent ->
+            Field(editor, d, "angle", "Turned", d.degrees, "°", allowNegative = true) { d.degrees = it; editor.draftChanged() }
+        com.rm.parrotmetric.design.PlaneFeature.Kind.AlongEdge ->
+            Field(editor, d, "along", "Along", d.alongPercent, "%", allowNegative = true) { d.alongPercent = it.coerceIn(0.0, 100.0); editor.draftChanged() }
+        com.rm.parrotmetric.design.PlaneFeature.Kind.ThreePoints, com.rm.parrotmetric.design.PlaneFeature.Kind.TwoEdges -> {}
         com.rm.parrotmetric.design.PlaneFeature.Kind.Offset ->
             Field(editor, d, "offset", "Distance", d.offset, "mm", allowNegative = true) { d.offset = it; editor.draftChanged() }
         com.rm.parrotmetric.design.PlaneFeature.Kind.Angle -> {
@@ -570,9 +602,18 @@ internal fun PlaneSettings(editor: DesignEditor, d: DesignEditor.PlaneDraft) {
 
 @Composable
 internal fun AxisSettings(editor: DesignEditor, d: DesignEditor.AxisDraft) {
-    Header("Axis", Icons.axis, Palette.construct, null)
-    AxisRow("Along", d.along, false) { d.along = it!!; editor.draftChanged() }
-    Field(editor, d, "x", "Through X", d.x, "mm", allowNegative = true) { d.x = it; editor.draftChanged() }
-    Field(editor, d, "y", "Y", d.y, "mm", allowNegative = true) { d.y = it; editor.draftChanged() }
-    Field(editor, d, "z", "Z", d.z, "mm", allowNegative = true) { d.z = it; editor.draftChanged() }
+    val picked = when (d.kind) {
+        AxisFeature.Kind.Edge -> if (d.edge != null) "1 edge" else null
+        AxisFeature.Kind.Round -> if (d.face != null || d.edge != null) "Picked" else null
+        AxisFeature.Kind.TwoPoints -> "${d.points.size.coerceAtMost(2)} of 2"
+        AxisFeature.Kind.Fixed -> null
+    }
+    Header("Axis", Icons.axis, Palette.construct, picked)
+    Segmented(listOf("Along", "Edge", "Round", "Two points"), d.kind.ordinal) { editor.setConstructionKind(d, AxisFeature.Kind.entries[it]) }
+    if (d.kind == AxisFeature.Kind.Fixed) {
+        AxisRow("Along", d.along, false) { d.along = it!!; editor.draftChanged() }
+        Field(editor, d, "x", "Through X", d.x, "mm", allowNegative = true) { d.x = it; editor.draftChanged() }
+        Field(editor, d, "y", "Y", d.y, "mm", allowNegative = true) { d.y = it; editor.draftChanged() }
+        Field(editor, d, "z", "Z", d.z, "mm", allowNegative = true) { d.z = it; editor.draftChanged() }
+    }
 }

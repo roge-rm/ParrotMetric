@@ -110,6 +110,7 @@ object Parametrics {
             is PlaneFeature -> when (field) {
                 "offset" -> f.copy(offset = v)
                 "angle" -> f.copy(angle = rad)
+                "along" -> f.copy(along = v / 100)
                 else -> f
             }
             is AlignFeature -> if (field == "gap") f.copy(gap = v) else f

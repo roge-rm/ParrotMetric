@@ -103,6 +103,18 @@ object DesignFile {
     }
 
     private fun vec(v: Vec3) = listOf(v.x, v.y, v.z)
+
+    private fun pointRef(r: com.rm.parrotmetric.design.PointRef): Map<String, Any?> = when (r) {
+        is com.rm.parrotmetric.design.PointRef.Corner -> mapOf("corner" to r.name)
+        is com.rm.parrotmetric.design.PointRef.CentreOf -> mapOf("centreOf" to r.edge)
+        is com.rm.parrotmetric.design.PointRef.Construction -> mapOf("point" to r.featureId)
+    }
+
+    private fun pointRef(o: Json.Obj): com.rm.parrotmetric.design.PointRef = when {
+        o["corner"] is Json.Str -> com.rm.parrotmetric.design.PointRef.Corner(o.str("corner"))
+        o["centreOf"] is Json.Str -> com.rm.parrotmetric.design.PointRef.CentreOf(o.str("centreOf"))
+        else -> com.rm.parrotmetric.design.PointRef.Construction(o.int("point"))
+    }
     private fun vec(j: Json?): Vec3 {
         val a = (j as Json.Arr).items.map { (it as Json.Num).value }
         return Vec3(a[0], a[1], a[2])
@@ -145,9 +157,16 @@ object DesignFile {
             is PlaneFeature -> mapOf(
                 "type" to "plane", "kind" to f.kind.name, "base" to plane(f.base), "offset" to f.offset, "angle" to f.angle,
                 "turnRoundY" to f.turnRoundY, "other" to f.other?.let { plane(it) },
+                "points" to f.points.map { pointRef(it) }, "edges" to f.edges, "face" to f.face, "along" to f.along,
             )
-            is com.rm.parrotmetric.design.PointFeature -> mapOf("type" to "point", "x" to f.x, "y" to f.y, "z" to f.z)
-            is AxisFeature -> mapOf("type" to "axis", "x" to f.x, "y" to f.y, "z" to f.z, "along" to f.along.name)
+            is com.rm.parrotmetric.design.PointFeature -> mapOf(
+                "type" to "point", "x" to f.x, "y" to f.y, "z" to f.z, "kind" to f.kind.name,
+                "ref" to f.ref?.let { pointRef(it) }, "planes" to f.planes.map { plane(it) },
+            )
+            is AxisFeature -> mapOf(
+                "type" to "axis", "x" to f.x, "y" to f.y, "z" to f.z, "along" to f.along.name, "kind" to f.kind.name,
+                "edge" to f.edge, "face" to f.face, "points" to f.points.map { pointRef(it) },
+            )
             is MoveFeature -> mapOf(
                 "type" to "move", "bodies" to f.bodies, "dx" to f.dx, "dy" to f.dy, "dz" to f.dz, "axis" to f.axis.name, "angle" to f.angle, "copy" to f.copy,
                 "sx" to f.sx, "sy" to f.sy, "sz" to f.sz,
@@ -208,9 +227,18 @@ object DesignFile {
             "plane" -> PlaneFeature(
                 id, name, PlaneFeature.Kind.valueOf(o.str("kind")), plane(o.obj("base")), o.num("offset"), o.num("angle"),
                 o.bool("turnRoundY"), (o["other"] as? Json.Obj)?.let { plane(it) },
+                o.arr("points").map { pointRef(it as Json.Obj) }, strings(o.arr("edges")), (o["face"] as? Json.Str)?.value, o.numOr("along", 0.0),
             )
-            "point" -> com.rm.parrotmetric.design.PointFeature(id, name, o.num("x"), o.num("y"), o.num("z"))
-            "axis" -> AxisFeature(id, name, o.num("x"), o.num("y"), o.num("z"), Axis3.valueOf(o.str("along")))
+            "point" -> com.rm.parrotmetric.design.PointFeature(
+                id, name, o.num("x"), o.num("y"), o.num("z"),
+                (o["kind"] as? Json.Str)?.let { com.rm.parrotmetric.design.PointFeature.Kind.valueOf(it.value) } ?: com.rm.parrotmetric.design.PointFeature.Kind.Fixed,
+                (o["ref"] as? Json.Obj)?.let { pointRef(it) }, o.arr("planes").map { plane(it as Json.Obj) },
+            )
+            "axis" -> AxisFeature(
+                id, name, o.num("x"), o.num("y"), o.num("z"), Axis3.valueOf(o.str("along")),
+                (o["kind"] as? Json.Str)?.let { AxisFeature.Kind.valueOf(it.value) } ?: AxisFeature.Kind.Fixed,
+                (o["edge"] as? Json.Str)?.value, (o["face"] as? Json.Str)?.value, o.arr("points").map { pointRef(it as Json.Obj) },
+            )
             "move" -> MoveFeature(
                 id, name, strings(o.arr("bodies")), o.num("dx"), o.num("dy"), o.num("dz"), Axis3.valueOf(o.str("axis")), o.num("angle"), o.bool("copy"),
                 o.numOr("sx", 1.0), o.numOr("sy", 1.0), o.numOr("sz", 1.0),

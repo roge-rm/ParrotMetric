@@ -92,7 +92,7 @@ class AppController(
         )
         applyDetail()
         if (state.autoDetail == null) measureSpeed()
-        design.onShown = { state = state.copy(selectedFaces = 0, selectedEdges = 0, selectedAreas = 0, selectedPlanes = 0) }
+        design.onShown = { state = state.copy(selectedFaces = 0, selectedEdges = 0, selectedAreas = 0, selectedPlanes = 0, selectedCorners = 0) }
         design.onHistoryChanged = ::scheduleAutosave
         // Saves now and then while there are changes, besides shortly after each.
         scope.launch {
@@ -175,7 +175,10 @@ class AppController(
 
     /** A tap changed the selection; counts as NativeCore.tap gives them. Main thread. */
     fun selectionChanged(counts: IntArray) {
-        state = state.copy(selectedFaces = counts[0], selectedEdges = counts[1], selectedAreas = counts[2], selectedPlanes = counts[3])
+        state = state.copy(
+            selectedFaces = counts[0], selectedEdges = counts[1], selectedAreas = counts[2], selectedPlanes = counts[3],
+            selectedCorners = counts.getOrElse(4) { 0 },
+        )
         design.selectionChanged()
     }
 
@@ -326,7 +329,7 @@ class AppController(
         override fun clearSelection() {
             core.clearSelection()
             gl {}
-            state = state.copy(selectedFaces = 0, selectedEdges = 0, selectedAreas = 0, selectedPlanes = 0)
+            state = state.copy(selectedFaces = 0, selectedEdges = 0, selectedAreas = 0, selectedPlanes = 0, selectedCorners = 0)
             design.selectionChanged()
         }
 

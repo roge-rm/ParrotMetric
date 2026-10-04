@@ -73,6 +73,13 @@ class DesignFileTest {
             com.rm.parrotmetric.design.PointFeature(d.newId(), "Point", 1.0, 2.0, 3.0),
             ExtrudeFeature(d.newId(), "Through", 1, emptyList(), 5.0, 0.0, Operation.Cut, throughAll = true, offset = 2.0, thin = 1.5),
             com.rm.parrotmetric.design.SplitFeature(d.newId(), "Split by", "Body 1", top, 2, "Body 2"),
+            com.rm.parrotmetric.design.PlaneFeature(
+                d.newId(), "Three", com.rm.parrotmetric.design.PlaneFeature.Kind.ThreePoints, top, 0.0, 0.0, false, null,
+                listOf(com.rm.parrotmetric.design.PointRef.Corner("a & b"), com.rm.parrotmetric.design.PointRef.CentreOf("F1.s5|F1.end"), com.rm.parrotmetric.design.PointRef.Construction(4)),
+                listOf("F1.s1|F1.end"), "F2.side", 0.25,
+            ),
+            com.rm.parrotmetric.design.PointFeature(d.newId(), "Meet", 0.0, 0.0, 0.0, com.rm.parrotmetric.design.PointFeature.Kind.ThreePlanes, null, listOf(top, top, top)),
+            com.rm.parrotmetric.design.AxisFeature(d.newId(), "Round", 0.0, 0.0, 0.0, com.rm.parrotmetric.design.Axis3.Z, com.rm.parrotmetric.design.AxisFeature.Kind.Round, "F1.s5|F1.end", "F2.side", listOf(com.rm.parrotmetric.design.PointRef.Construction(4))),
             com.rm.parrotmetric.design.AlignFeature(d.newId(), "Align", listOf("Body 2"), "F1.end", PlaneRef.OnFace("F3.s1", Vec3(1.0, 0.0, 0.0)), true, true, 1.5),
             com.rm.parrotmetric.design.PrimitiveFeature(d.newId(), "Torus", com.rm.parrotmetric.design.PrimitiveKind.Torus, top, 1.0, 2.0, 30.0, 6.0, 0.0, Operation.Join),
         )

@@ -107,6 +107,13 @@ DisplayMesh Solid::display(const Tessellation& t) const {
         }
     }
 
+    TopTools_IndexedMapOfShape corners;
+    TopExp::MapShapes(*shape_, TopAbs_VERTEX, corners);
+    for (int i = 1; i <= corners.Extent(); ++i) {
+        gp_Pnt p = BRep_Tool::Pnt(TopoDS::Vertex(corners(i)));
+        d.corners.insert(d.corners.end(), {float(p.X()), float(p.Y()), float(p.Z())});
+    }
+
     // Each edge's points, from its polygon on the triangulation of one of its faces.
     TopTools_IndexedMapOfShape edges;
     TopExp::MapShapes(*shape_, TopAbs_EDGE, edges);

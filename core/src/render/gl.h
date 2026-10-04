@@ -37,6 +37,8 @@
     X(PFNGLDEPTHMASKPROC, glDepthMask) \
     X(PFNGLDISABLEPROC, glDisable) \
     X(PFNGLDRAWELEMENTSPROC, glDrawElements) \
+    X(PFNGLDRAWARRAYSPROC, glDrawArrays) \
+    X(PFNGLDEPTHFUNCPROC, glDepthFunc) \
     X(PFNGLENABLEPROC, glEnable) \
     X(PFNGLENABLEVERTEXATTRIBARRAYPROC, glEnableVertexAttribArray) \
     X(PFNGLFRAMEBUFFERRENDERBUFFERPROC, glFramebufferRenderbuffer) \
@@ -101,6 +103,8 @@ PM_GL_CALLS(PM_GL_DECLARE)
 #define glDepthMask pm_glDepthMask
 #define glDisable pm_glDisable
 #define glDrawElements pm_glDrawElements
+#define glDrawArrays pm_glDrawArrays
+#define glDepthFunc pm_glDepthFunc
 #define glEnable pm_glEnable
 #define glEnableVertexAttribArray pm_glEnableVertexAttribArray
 #define glFramebufferRenderbuffer pm_glFramebufferRenderbuffer

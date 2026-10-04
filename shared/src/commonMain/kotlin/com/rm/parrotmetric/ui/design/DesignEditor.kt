@@ -21,6 +21,7 @@ import com.rm.parrotmetric.design.Built
 import com.rm.parrotmetric.design.ChamferFeature
 import com.rm.parrotmetric.design.ChamferKind
 import com.rm.parrotmetric.design.PointFeature
+import com.rm.parrotmetric.design.PointRef
 import com.rm.parrotmetric.design.Design
 import com.rm.parrotmetric.design.ExtrudeFeature
 import com.rm.parrotmetric.design.Feature
@@ -70,11 +71,13 @@ interface Viewport {
     /** A face's edges as curves on a plane, for projecting into a sketch. Throws if the face is gone. */
     fun faceOutline(body: Long, face: String, plane: SketchPlane): List<ProfileCurve>
     fun selectedEdges(): List<String>
+    /** Names of the selected corners of solids. */
+    fun selectedCorners(): List<String>
     /** Selected faces as body number (in the order shown) and face name. */
     fun selectedFaces(): List<Pair<Int, String>>
     /** Selected sketch areas as sketch number (in the order shown) and area number. */
     fun selectedRegions(): List<Pair<Int, Int>>
-    fun select(edges: List<String>, regions: List<Pair<Int, Int>>, faces: List<String> = emptyList())
+    fun select(edges: List<String>, regions: List<Pair<Int, Int>>, faces: List<String> = emptyList(), corners: List<String> = emptyList())
     fun clearSelection()
     fun viewFrom(yaw: Float, pitch: Float)
     fun fit()
@@ -563,9 +566,59 @@ class DesignEditor(
         // Start from what's selected: a plane, else a face, else the top plane.
         val pick = viewport.selectedPlanes().firstOrNull()?.let { shownPlanes.getOrNull(it) }?.let { PlaneRef.Construction(it.id) }
             ?: d.planes.firstOrNull { it.first == "The face" }?.second
-        if (pick != null) d.base = pick
+        if (pick != null && kind != PlaneFeature.Kind.Tangent) d.base = pick
+        constructionPicks(d)
         panel = d
         rebuild()
+    }
+
+    /** A construction draft's picks, shown selected again, so more can be added to them. */
+    private fun showPicks(points: List<PointRef>, edges: List<String>, faces: List<String>) = viewport.select(
+        edges + points.mapNotNull { (it as? PointRef.CentreOf)?.edge }, emptyList(), faces,
+        points.mapNotNull { (it as? PointRef.Corner)?.name },
+    )
+
+    /** Corners and the centres of round edges picked in the view, in that order. */
+    private fun pickedPoints(): List<PointRef> =
+        viewport.selectedCorners().map { PointRef.Corner(it) } + viewport.selectedEdges().filter { edgeKind(it) == 1.0 }.map { PointRef.CentreOf(it) }
+
+    /** What shape a named edge is (Kernel.shapeOf's kind), or null. */
+    private fun edgeKind(name: String): Double? = shownBodies.firstNotNullOfOrNull { kernel.shapeOf(it.handle, name, true) }?.get(0)
+
+    /** What shape a named face is (Kernel.shapeOf's kind), or null. */
+    private fun faceKind(name: String): Double? = shownBodies.firstNotNullOfOrNull { kernel.shapeOf(it.handle, name, false) }?.get(0)
+
+    /** Planes picked in the view: construction planes and flat faces. */
+    private fun pickedPlanes(): List<PlaneRef> =
+        viewport.selectedPlanes().mapNotNull { shownPlanes.getOrNull(it)?.let { p -> PlaneRef.Construction(p.id) } } +
+            viewport.selectedFaces().map { it.second }.filter { it.isNotEmpty() && faceKind(it) == 4.0 }.map { PlaneRef.OnFace(it, Vec3(1.0, 0.0, 0.0)) }
+
+    /** Fills a construction draft's picks from the selection, for kinds that use them. */
+    private fun constructionPicks(d: FeatureDraft) {
+        when (d) {
+            is PlaneDraft -> when (d.kind) {
+                PlaneFeature.Kind.ThreePoints -> d.points = pickedPoints()
+                PlaneFeature.Kind.TwoEdges -> d.edges = viewport.selectedEdges().filter { edgeKind(it) == 0.0 }
+                PlaneFeature.Kind.AlongEdge -> d.edges = viewport.selectedEdges().take(1)
+                PlaneFeature.Kind.Tangent -> viewport.selectedFaces().map { it.second }.firstOrNull { it.isNotEmpty() && faceKind(it) == 2.0 }?.let { d.face = it }
+                else -> {}
+            }
+            is AxisDraft -> when (d.kind) {
+                AxisFeature.Kind.Edge -> d.edge = viewport.selectedEdges().firstOrNull { edgeKind(it) == 0.0 }
+                AxisFeature.Kind.Round -> {
+                    d.face = viewport.selectedFaces().map { it.second }.firstOrNull { it.isNotEmpty() && faceKind(it) == 2.0 }
+                    d.edge = if (d.face == null) viewport.selectedEdges().firstOrNull { edgeKind(it) == 1.0 } else null
+                }
+                AxisFeature.Kind.TwoPoints -> d.points = pickedPoints()
+                else -> {}
+            }
+            is PointDraft -> when (d.kind) {
+                PointFeature.Kind.At -> pickedPoints().firstOrNull()?.let { d.ref = it }
+                PointFeature.Kind.ThreePlanes -> d.planes = pickedPlanes()
+                else -> {}
+            }
+            else -> {}
+        }
     }
 
     /** A box, cylinder, sphere, torus or cone, on the selected face or plane, else the top plane. */
@@ -581,16 +634,43 @@ class DesignEditor(
 
     fun startPoint() {
         val d = PointDraft(null)
-        // At the middle of a selected flat face, if there is one.
-        viewport.selectedFaces().firstOrNull { it.second.isNotEmpty() }?.let { (b, face) ->
+        // The kind that suits what's picked: a corner or round edge, three planes, else where a flat face's middle is.
+        d.kind = when {
+            pickedPoints().isNotEmpty() -> PointFeature.Kind.At
+            pickedPlanes().size >= 3 -> PointFeature.Kind.ThreePlanes
+            else -> PointFeature.Kind.Fixed
+        }
+        if (d.kind == PointFeature.Kind.Fixed) viewport.selectedFaces().firstOrNull { it.second.isNotEmpty() }?.let { (b, face) ->
             shownBodies.getOrNull(b)?.let { body -> kernel.facePlane(body.handle, face) }?.let { c -> d.x = c[0]; d.y = c[1]; d.z = c[2] }
         }
+        constructionPicks(d)
         panel = d
         rebuild()
     }
 
+    /** Switches a construction draft to another kind, taking its picks from the selection. */
+    fun setConstructionKind(d: FeatureDraft, kind: Enum<*>) {
+        when (d) {
+            is AxisDraft -> d.kind = kind as AxisFeature.Kind
+            is PointDraft -> d.kind = kind as PointFeature.Kind
+            else -> {}
+        }
+        constructionPicks(d)
+        rebuild()
+    }
+
     fun startAxis() {
-        panel = AxisDraft(null)
+        val d = AxisDraft(null)
+        // The kind that suits what's picked.
+        val edges = viewport.selectedEdges()
+        d.kind = when {
+            pickedPoints().size >= 2 -> AxisFeature.Kind.TwoPoints
+            viewport.selectedFaces().any { it.second.isNotEmpty() && faceKind(it.second) == 2.0 } || edges.any { edgeKind(it) == 1.0 } -> AxisFeature.Kind.Round
+            edges.any { edgeKind(it) == 0.0 } -> AxisFeature.Kind.Edge
+            else -> AxisFeature.Kind.Fixed
+        }
+        constructionPicks(d)
+        panel = d
         rebuild()
     }
 
@@ -761,6 +841,10 @@ class DesignEditor(
                 alignPicks(d)
                 rebuild()
             }
+            is PlaneDraft, is AxisDraft, is PointDraft -> {
+                constructionPicks(d)
+                rebuild()
+            }
             is BodyDraft -> {
                 val picked = pickedBodies()
                 if (picked.isNotEmpty() || viewport.selectedFaces().isEmpty()) {
@@ -788,6 +872,9 @@ class DesignEditor(
             is EdgeDraft -> viewport.select(d.edges, emptyList())
             is FaceDraft -> viewport.select(emptyList(), emptyList(), d.faces + listOfNotNull(d.neutral))
             is AlignDraft -> viewport.select(emptyList(), emptyList(), listOfNotNull(d.face, (d.target as? PlaneRef.OnFace)?.face))
+            is PlaneDraft -> showPicks(d.points, d.edges, listOfNotNull(d.face))
+            is AxisDraft -> showPicks(d.points, listOfNotNull(d.edge), listOfNotNull(d.face))
+            is PointDraft -> showPicks(listOfNotNull(d.ref), emptyList(), d.planes.mapNotNull { (it as? PlaneRef.OnFace)?.face })
         }
     }
 
@@ -1082,13 +1169,31 @@ class DesignEditor(
         var base by mutableStateOf<PlaneRef>(editing?.base ?: PlaneRef.Fixed(SketchPlane.Top))
         var other by mutableStateOf<PlaneRef?>(editing?.other)
         var offset by mutableStateOf(editing?.offset ?: 10.0)
-        var degrees by mutableStateOf((editing?.angle ?: (PI / 4)) * 180 / PI)
+        var degrees by mutableStateOf((editing?.angle ?: (if (kind == PlaneFeature.Kind.Tangent) 0.0 else PI / 4)) * 180 / PI)
         var turnRoundY by mutableStateOf(editing?.turnRoundY ?: false)
+        var points by mutableStateOf(editing?.points ?: emptyList())
+        var edges by mutableStateOf(editing?.edges ?: emptyList())
+        var face by mutableStateOf(editing?.face)
+        /** How far along the edge, percent. */
+        var alongPercent by mutableStateOf((editing?.along ?: 0.5) * 100)
         override fun feature(): Feature? {
-            if (kind == PlaneFeature.Kind.Midway && other == null) return null
-            return PlaneFeature(id, name, kind, base, offset, degrees * PI / 180, turnRoundY, other)
+            when (kind) {
+                PlaneFeature.Kind.Midway -> if (other == null) return null
+                PlaneFeature.Kind.ThreePoints -> if (points.size < 3) return null
+                PlaneFeature.Kind.TwoEdges -> if (edges.size < 2) return null
+                PlaneFeature.Kind.Tangent -> if (face == null) return null
+                PlaneFeature.Kind.AlongEdge -> if (edges.isEmpty()) return null
+                else -> {}
+            }
+            return PlaneFeature(id, name, kind, base, offset, degrees * PI / 180, turnRoundY, other, points, edges, face, alongPercent / 100)
         }
-        override fun missing() = "Pick the second plane"
+        override fun missing() = when (kind) {
+            PlaneFeature.Kind.ThreePoints -> "Tap three corners or round edges"
+            PlaneFeature.Kind.TwoEdges -> "Tap two straight edges"
+            PlaneFeature.Kind.Tangent -> "Tap a cylinder's face"
+            PlaneFeature.Kind.AlongEdge -> "Tap an edge"
+            else -> "Pick the second plane"
+        }
     }
 
     inner class PrimitiveDraft(editing: com.rm.parrotmetric.design.PrimitiveFeature?, kind: com.rm.parrotmetric.design.PrimitiveKind) : FeatureDraft() {
@@ -1120,8 +1225,15 @@ class DesignEditor(
         var x by mutableStateOf(editing?.x ?: 0.0)
         var y by mutableStateOf(editing?.y ?: 0.0)
         var z by mutableStateOf(editing?.z ?: 0.0)
-        override fun feature() = PointFeature(id, name, x, y, z)
-        override fun missing() = ""
+        var kind by mutableStateOf(editing?.kind ?: PointFeature.Kind.Fixed)
+        var ref by mutableStateOf(editing?.ref)
+        var planes by mutableStateOf(editing?.planes ?: emptyList())
+        override fun feature(): Feature? = when (kind) {
+            PointFeature.Kind.Fixed -> PointFeature(id, name, x, y, z)
+            PointFeature.Kind.At -> ref?.let { PointFeature(id, name, x, y, z, kind, it) }
+            PointFeature.Kind.ThreePlanes -> if (planes.size < 3) null else PointFeature(id, name, x, y, z, kind, null, planes)
+        }
+        override fun missing() = if (kind == PointFeature.Kind.At) "Tap a corner or round edge" else "Tap three flat faces or planes"
     }
 
     inner class AxisDraft(editing: AxisFeature?) : FeatureDraft() {
@@ -1131,8 +1243,21 @@ class DesignEditor(
         var y by mutableStateOf(editing?.y ?: 0.0)
         var z by mutableStateOf(editing?.z ?: 0.0)
         var along by mutableStateOf(editing?.along ?: Axis3.Z)
-        override fun feature() = AxisFeature(id, name, x, y, z, along)
-        override fun missing() = ""
+        var kind by mutableStateOf(editing?.kind ?: AxisFeature.Kind.Fixed)
+        var edge by mutableStateOf(editing?.edge)
+        var face by mutableStateOf(editing?.face)
+        var points by mutableStateOf(editing?.points ?: emptyList())
+        override fun feature(): Feature? = when (kind) {
+            AxisFeature.Kind.Fixed -> AxisFeature(id, name, x, y, z, along)
+            AxisFeature.Kind.Edge -> edge?.let { AxisFeature(id, name, x, y, z, along, kind, it) }
+            AxisFeature.Kind.Round -> if (face == null && edge == null) null else AxisFeature(id, name, x, y, z, along, kind, edge, face)
+            AxisFeature.Kind.TwoPoints -> if (points.size < 2) null else AxisFeature(id, name, x, y, z, along, kind, points = points)
+        }
+        override fun missing() = when (kind) {
+            AxisFeature.Kind.Edge -> "Tap a straight edge"
+            AxisFeature.Kind.Round -> "Tap a cylinder's face or a round edge"
+            else -> "Tap two corners or round edges"
+        }
     }
 
     inner class EdgeDraft(editing: Feature?, val chamfer: Boolean) : FeatureDraft() {

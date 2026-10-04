@@ -26,6 +26,8 @@ struct DisplayMesh {
         std::vector<float> points;  // x, y, z per point; empty for edges not drawn, such as seams
     };
     std::vector<Edge> edges;
+    /** Corners that can be picked: x, y, z each. Solids only. */
+    std::vector<float> corners;
 
     uint32_t faceCount = 0;
 

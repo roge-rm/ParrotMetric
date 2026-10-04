@@ -92,6 +92,9 @@ class CoreKernel(private val core: NativeCore) : Kernel {
     override fun properties(body: Long) = call { core.properties(body) }
     override fun splitBy(id: Int, body: Long, tool: Long) = call { core.splitBy(id, body, tool).toList() }
     override fun overlapVolume(a: Long, b: Long) = call { core.overlapVolume(a, b) }
+    override fun corner(body: Long, name: String) = core.corner(body, name)?.let { Vec3(it[0], it[1], it[2]) }
+    override fun shapeOf(body: Long, name: String, edge: Boolean) = core.shapeOf(body, name, edge)
+    override fun alongEdge(body: Long, name: String, t: Double) = core.alongEdge(body, name, t)
     override fun signature(body: Long, name: String, edge: Boolean) = core.signature(body, name, edge)
     override fun relocate(body: Long, signature: DoubleArray) = core.relocate(body, signature)
     override fun retain(body: Long) = core.retain(body)
@@ -137,11 +140,12 @@ class CoreViewport(private val core: NativeCore, private val gl: (() -> Unit) ->
     }
 
     override fun selectedEdges() = core.selectedEdges().toList()
+    override fun selectedCorners() = core.selectedCorners().toList()
     override fun selectedFaces() = core.selectedFaces().map { s -> s.substringBefore('\t').toInt() to s.substringAfter('\t') }
     override fun selectedRegions() = core.selectedRegions().let { r -> List(r.size / 2) { r[2 * it] to r[2 * it + 1] } }
 
-    override fun select(edges: List<String>, regions: List<Pair<Int, Int>>, faces: List<String>) {
-        core.select(edges.toTypedArray(), regions.flatMap { listOf(it.first, it.second) }.toIntArray(), faces.toTypedArray())
+    override fun select(edges: List<String>, regions: List<Pair<Int, Int>>, faces: List<String>, corners: List<String>) {
+        core.select(edges.toTypedArray(), regions.flatMap { listOf(it.first, it.second) }.toIntArray(), faces.toTypedArray(), corners.toTypedArray())
         gl {}
     }
 

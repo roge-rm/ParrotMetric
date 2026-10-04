@@ -7,6 +7,8 @@
 #include <TopoDS_Shape.hxx>
 
 #include <string>
+#include <gp_Pnt.hxx>
+#include <optional>
 #include <vector>
 
 class BRepBuilderAPI_MakeShape;
@@ -34,6 +36,13 @@ struct NamedShape {
     /** Names of every face and edge, in OCCT map order, as the display numbers them. */
     std::vector<std::string> faceNames() const;
     std::vector<std::string> edgeNames() const;
+    /**
+     * Names of every corner, in OCCT map order as the display numbers them:
+     * the names of two edges that meet there, "a & b".
+     */
+    std::vector<std::string> cornerNames() const;
+    /** Where a corner named by cornerNames is, if it's still there. */
+    std::optional<gp_Pnt> findCorner(const std::string& name) const;
 };
 
 /**

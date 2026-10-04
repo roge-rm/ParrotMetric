@@ -56,6 +56,7 @@ struct Shown {
     bool sketch = false;
     int plane = -1;                                 // Construction planes: which of those passed to show.
     std::vector<std::string> faceNames, edgeNames;  // Bodies: names by face and edge number.
+    std::vector<std::string> cornerNames;           // Solids: names by corner number.
     int sketchIndex = 0;                            // Sketches: which of the sketches passed to show.
     std::shared_ptr<pm::DisplayMesh> mesh;          // Mesh bodies: what was drawn, for finding a picked flat area.
 };
@@ -187,7 +188,7 @@ pm::Tessellation displayTessellation() {
 struct DisplayCached {
     int detail = 0;
     std::shared_ptr<const pm::DisplayMesh> mesh;
-    std::vector<std::string> faceNames, edgeNames;
+    std::vector<std::string> faceNames, edgeNames, cornerNames;
     size_t triangles = 0;  // Mesh bodies' own triangles.
 };
 std::unordered_map<jlong, DisplayCached> displayCache;  // Only show() uses it, one call at a time.
@@ -201,6 +202,7 @@ const DisplayCached& displayOf(jlong handle, const pm::Body& b) {
     if (b.solid) {
         c.faceNames = b.solid->faceNames();
         c.edgeNames = b.solid->edgeNames();
+        c.cornerNames = b.solid->cornerNames();
         c.mesh = std::make_shared<pm::DisplayMesh>(pm::Solid::fromShape(b.solid->shape).display(displayTessellation()));
     } else {
         pm::Mesh m = b.mesh->toMesh();
@@ -221,6 +223,7 @@ pm::DisplayMesh displaySketch(const gp_Ax3& plane, const std::vector<pm::SketchC
     for (const auto& r : pm::buildRegionFaces(curves)) builder.Add(faces, r.face.Moved(loc));
     pm::DisplayMesh d = pm::Solid::fromShape(faces).display();
     d.edges.clear();
+    d.corners.clear();
     for (const auto& c : curves) {
         pm::DisplayMesh::Edge e;
         auto add = [&](double u, double v) {
@@ -265,14 +268,16 @@ pm::Pick pickable(pm::Pick p) {
 }
 
 jintArray selectionCounts(JNIEnv* env) {
-    jint counts[4] = {0, 0, 0, 0};
+    // Faces, edges, sketch areas, construction planes, corners.
+    jint counts[5] = {0, 0, 0, 0, 0};
     for (const auto& p : selection) {
         if (shown[p.body].plane >= 0) counts[3]++;
         else if (shown[p.body].sketch) counts[2] += p.kind == pm::Pick::Face ? 1 : 0;
+        else if (p.kind == pm::Pick::Vertex) counts[4]++;
         else counts[p.kind == pm::Pick::Edge ? 1 : 0]++;
     }
-    jintArray out = env->NewIntArray(4);
-    env->SetIntArrayRegion(out, 0, 4, counts);
+    jintArray out = env->NewIntArray(5);
+    env->SetIntArrayRegion(out, 0, 5, counts);
     return out;
 }
 
@@ -464,6 +469,113 @@ JNIEXPORT jdoubleArray JNICALL Java_com_rm_parrotmetric_Core_facePlane(JNIEnv* e
         return out;
     } catch (const std::exception& e) {
         fail(env, e.what());
+        return nullptr;
+    }
+}
+
+/** Where a named corner of a solid is, or null if it hasn't got it. */
+JNIEXPORT jdoubleArray JNICALL Java_com_rm_parrotmetric_Core_corner(JNIEnv* env, jobject, jlong body, jstring name) {
+    const char* c = env->GetStringUTFChars(name, nullptr);
+    std::string n(c);
+    env->ReleaseStringUTFChars(name, c);
+    try {
+        std::unique_lock<std::mutex> g(lock);
+        pm::NamedShape s = solidOf(body);
+        g.unlock();
+        auto p = s.findCorner(n);
+        if (!p) return nullptr;
+        double v[3] = {p->X(), p->Y(), p->Z()};
+        jdoubleArray out = env->NewDoubleArray(3);
+        env->SetDoubleArrayRegion(out, 0, 3, v);
+        return out;
+    } catch (const std::exception&) {
+        return nullptr;
+    }
+}
+
+/**
+ * What shape a named edge or face is, for construction geometry: kind, then
+ * a point, a direction and a size. 0 a straight edge (its start, along it,
+ * its length); 1 a round edge (centre, its axis, radius); 2 a cylinder or
+ * cone face (a point on its axis, the axis, radius); 3 a sphere (centre, 0,
+ * radius); 4 a flat face (its middle, its normal, 0). Null if it's none of
+ * these or not there.
+ */
+JNIEXPORT jdoubleArray JNICALL Java_com_rm_parrotmetric_Core_shapeOf(JNIEnv* env, jobject, jlong body, jstring name, jboolean edge) {
+    const char* c = env->GetStringUTFChars(name, nullptr);
+    std::string n(c);
+    env->ReleaseStringUTFChars(name, c);
+    try {
+        std::unique_lock<std::mutex> g(lock);
+        pm::NamedShape s = solidOf(body);
+        g.unlock();
+        double v[8] = {-1, 0, 0, 0, 0, 0, 0, 0};
+        auto put = [&](double kind, const gp_Pnt& p, const gp_Dir& d, double size) {
+            v[0] = kind; v[1] = p.X(); v[2] = p.Y(); v[3] = p.Z(); v[4] = d.X(); v[5] = d.Y(); v[6] = d.Z(); v[7] = size;
+        };
+        if (edge) {
+            for (const auto& e : s.findEdges(n)) {
+                BRepAdaptor_Curve curve(e);
+                if (curve.GetType() == GeomAbs_Line) {
+                    gp_Pnt a = curve.Value(curve.FirstParameter()), b = curve.Value(curve.LastParameter());
+                    if (a.Distance(b) > 1e-9) put(0, a, gp_Dir(gp_Vec(a, b)), a.Distance(b));
+                } else if (curve.GetType() == GeomAbs_Circle) {
+                    gp_Circ circ = curve.Circle();
+                    put(1, circ.Location(), circ.Axis().Direction(), circ.Radius());
+                }
+                break;
+            }
+        } else {
+            for (const auto& f : s.findFaces(n)) {
+                BRepAdaptor_Surface surface(f);
+                switch (surface.GetType()) {
+                    case GeomAbs_Cylinder: put(2, surface.Cylinder().Location(), surface.Cylinder().Axis().Direction(), surface.Cylinder().Radius()); break;
+                    case GeomAbs_Cone: put(2, surface.Cone().Location(), surface.Cone().Axis().Direction(), surface.Cone().RefRadius()); break;
+                    case GeomAbs_Sphere: put(3, surface.Sphere().Location(), gp::DZ(), surface.Sphere().Radius()); break;
+                    case GeomAbs_Plane: {
+                        gp_Ax3 ax = pm::facePlane(s, n);
+                        put(4, ax.Location(), ax.Direction(), 0);
+                        break;
+                    }
+                    default: break;
+                }
+                break;
+            }
+        }
+        if (v[0] < 0) return nullptr;
+        jdoubleArray out = env->NewDoubleArray(8);
+        env->SetDoubleArrayRegion(out, 0, 8, v);
+        return out;
+    } catch (const std::exception&) {
+        return nullptr;
+    }
+}
+
+/** The point a fraction t (0 to 1) along a named edge, and which way the edge runs there: x, y, z, then a unit direction. */
+JNIEXPORT jdoubleArray JNICALL Java_com_rm_parrotmetric_Core_alongEdge(JNIEnv* env, jobject, jlong body, jstring name, jdouble t) {
+    const char* c = env->GetStringUTFChars(name, nullptr);
+    std::string n(c);
+    env->ReleaseStringUTFChars(name, c);
+    try {
+        std::unique_lock<std::mutex> g(lock);
+        pm::NamedShape s = solidOf(body);
+        g.unlock();
+        for (const auto& e : s.findEdges(n)) {
+            BRepAdaptor_Curve curve(e);
+            double u = curve.FirstParameter() + std::clamp(double(t), 0.0, 1.0) * (curve.LastParameter() - curve.FirstParameter());
+            gp_Pnt p;
+            gp_Vec d;
+            curve.D1(u, p, d);
+            if (d.Magnitude() < 1e-12) return nullptr;
+            if (e.Orientation() == TopAbs_REVERSED) d.Reverse();
+            d.Normalize();
+            double v[6] = {p.X(), p.Y(), p.Z(), d.X(), d.Y(), d.Z()};
+            jdoubleArray out = env->NewDoubleArray(6);
+            env->SetDoubleArrayRegion(out, 0, 6, v);
+            return out;
+        }
+        return nullptr;
+    } catch (const std::exception&) {
         return nullptr;
     }
 }
@@ -998,6 +1110,7 @@ JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_show(JNIEnv* env, jobject, 
         Shown s;
         s.faceNames = c.faceNames;
         s.edgeNames = c.edgeNames;
+        s.cornerNames = c.cornerNames;
         triangles += c.triangles;
         meshes.push_back(*c.mesh);
         if (i < tints.size() && tints[i] >= 0) {
@@ -1138,6 +1251,16 @@ JNIEXPORT jobjectArray JNICALL Java_com_rm_parrotmetric_Core_selectedEdges(JNIEn
     for (const auto& p : selection)
         if (p.kind == pm::Pick::Edge && !shown[p.body].sketch && p.index < shown[p.body].edgeNames.size())
             out.push_back(shown[p.body].edgeNames[p.index]);
+    return stringArray(env, out);
+}
+
+/** The names of the selected corners (NamedShape::cornerNames). */
+JNIEXPORT jobjectArray JNICALL Java_com_rm_parrotmetric_Core_selectedCorners(JNIEnv* env, jobject) {
+    std::lock_guard<std::mutex> g(lock);
+    std::vector<std::string> out;
+    for (const auto& p : selection)
+        if (p.kind == pm::Pick::Vertex && p.index < shown[p.body].cornerNames.size() && !shown[p.body].cornerNames[p.index].empty())
+            out.push_back(shown[p.body].cornerNames[p.index]);
     return stringArray(env, out);
 }
 
@@ -1361,9 +1484,11 @@ JNIEXPORT jintArray JNICALL Java_com_rm_parrotmetric_Core_selectedRegions(JNIEnv
 }
 
 /** Selects edges and faces by name and sketch regions by (sketch, region) pairs, as when editing a feature. */
-JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_select(JNIEnv* env, jobject, jobjectArray edges, jintArray regions, jobjectArray faces) {
+JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_select(JNIEnv* env, jobject, jobjectArray edges, jintArray regions, jobjectArray faces,
+                                                            jobjectArray corners) {
     auto names = strings(env, edges);
     auto faceNames = strings(env, faces);
+    auto cornerNames = strings(env, corners);
     auto r = ints(env, regions);
     std::lock_guard<std::mutex> g(lock);
     selection.clear();
@@ -1378,6 +1503,9 @@ JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_select(JNIEnv* env, jobject
                 if (std::find(names.begin(), names.end(), s.edgeNames[e]) != names.end()) selection.push_back({pm::Pick::Edge, b, e});
             for (uint32_t f = 0; f < s.faceNames.size(); ++f)
                 if (std::find(faceNames.begin(), faceNames.end(), s.faceNames[f]) != faceNames.end()) selection.push_back({pm::Pick::Face, b, f});
+            for (uint32_t c = 0; c < s.cornerNames.size(); ++c)
+                if (!s.cornerNames[c].empty() && std::find(cornerNames.begin(), cornerNames.end(), s.cornerNames[c]) != cornerNames.end())
+                    selection.push_back({pm::Pick::Vertex, b, c});
         }
     }
     renderer.setSelection(selection);

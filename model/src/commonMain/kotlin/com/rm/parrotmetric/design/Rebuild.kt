@@ -151,17 +151,75 @@ class Rebuilder(private val kernel: Kernel) {
                     val gap = (other.origin - base.origin).dot(base.normal)
                     base.copy(name = f.name, origin = base.origin + base.normal * (gap / 2))
                 }
+                PlaneFeature.Kind.ThreePoints -> {
+                    if (f.points.size < 3) throw KernelException("Pick three points")
+                    val (a, b, c) = f.points.take(3).map { pointOf(it, bodies, f) }
+                    planeFrom(f.name, a, b - a, (b - a).cross(c - a)) ?: throw KernelException("The points are in a line")
+                }
+                PlaneFeature.Kind.TwoEdges -> {
+                    if (f.edges.size < 2) throw KernelException("Pick two straight edges")
+                    val (p1, d1) = straightEdge(f.edges[0], bodies, f)
+                    val (p2, d2) = straightEdge(f.edges[1], bodies, f)
+                    var n = d1.cross(d2)
+                    if (n.dot(n) < 1e-12) n = d1.cross(p2 - p1)
+                    val plane = planeFrom(f.name, p1, d1, n) ?: throw KernelException("The edges are in a line")
+                    if (kotlin.math.abs((p2 - p1).dot(plane.normal)) > 1e-6) throw KernelException("The edges aren't in one plane")
+                    plane
+                }
+                PlaneFeature.Kind.Tangent -> {
+                    val faceName = ref(f, f.face ?: throw KernelException("Pick a round face"), false, bodies)
+                    val s = bodies.firstNotNullOfOrNull { kernel.shapeOf(it.handle, faceName, false) }?.takeIf { it[0] == 2.0 }
+                        ?: throw KernelException("Pick a cylinder's face")
+                    val p = Vec3(s[1], s[2], s[3])
+                    val d = Vec3(s[4], s[5], s[6])
+                    // Out from the axis towards where the base plane faces, then turned round the axis.
+                    var w = base.normal - d * base.normal.dot(d)
+                    if (w.dot(w) < 1e-12) w = squareTo(d)
+                    w = turn(w * (1 / sqrt(w.dot(w))), d, f.angle)
+                    planeFrom(f.name, p + w * s[7], d, w)!!
+                }
+                PlaneFeature.Kind.AlongEdge -> {
+                    val edge = ref(f, f.edges.firstOrNull() ?: throw KernelException("Pick an edge"), true, bodies)
+                    val a = bodies.firstNotNullOfOrNull { kernel.alongEdge(it.handle, edge, f.along) } ?: throw KernelException("Its edge isn't there any more")
+                    val t = Vec3(a[3], a[4], a[5])
+                    planeFrom(f.name, Vec3(a[0], a[1], a[2]), squareTo(t), t)!!
+                }
             }
             keep(bodies)
             Step(f.key(), bodies, planes + (f.id to plane), null, made)
         }
         is PointFeature -> {
+            val at = when (f.kind) {
+                PointFeature.Kind.Fixed -> Vec3(f.x, f.y, f.z)
+                PointFeature.Kind.At -> pointOf(f.ref ?: throw KernelException("Pick a corner or round edge"), bodies, f)
+                PointFeature.Kind.ThreePlanes -> {
+                    if (f.planes.size < 3) throw KernelException("Pick three planes or flat faces")
+                    meet(f.planes.take(3).map { resolvePlane(it, bodies, f, planes) }) ?: throw KernelException("The planes don't meet at one point")
+                }
+            }
             keep(bodies)
-            Step(f.key(), bodies, planes, null, made, points = mapOf(f.id to Vec3(f.x, f.y, f.z)))
+            Step(f.key(), bodies, planes, null, made, points = mapOf(f.id to at))
         }
         is AxisFeature -> {
+            val axis = when (f.kind) {
+                AxisFeature.Kind.Fixed -> Vec3(f.x, f.y, f.z) to Transforms.unit(f.along)
+                AxisFeature.Kind.Edge -> straightEdge(f.edge ?: throw KernelException("Pick a straight edge"), bodies, f)
+                AxisFeature.Kind.Round -> {
+                    val s = f.face?.let { n -> ref(f, n, false, bodies).let { r -> bodies.firstNotNullOfOrNull { kernel.shapeOf(it.handle, r, false) } } }
+                        ?: f.edge?.let { n -> ref(f, n, true, bodies).let { r -> bodies.firstNotNullOfOrNull { kernel.shapeOf(it.handle, r, true) } } }
+                    if (s == null || (s[0] != 1.0 && s[0] != 2.0)) throw KernelException("Pick a cylinder's face or a round edge")
+                    Vec3(s[1], s[2], s[3]) to Vec3(s[4], s[5], s[6])
+                }
+                AxisFeature.Kind.TwoPoints -> {
+                    if (f.points.size < 2) throw KernelException("Pick two points")
+                    val a = pointOf(f.points[0], bodies, f)
+                    val d = pointOf(f.points[1], bodies, f) - a
+                    if (d.dot(d) < 1e-12) throw KernelException("The points are in the same place")
+                    a to d * (1 / sqrt(d.dot(d)))
+                }
+            }
             keep(bodies)
-            Step(f.key(), bodies, planes, null, made, mapOf(f.id to (Vec3(f.x, f.y, f.z) to Transforms.unit(f.along))))
+            Step(f.key(), bodies, planes, null, made, mapOf(f.id to axis))
         }
         is ExtrudeFeature -> {
             val sketch = sketchOf(f.sketchId, all)
@@ -312,6 +370,59 @@ class Rebuilder(private val kernel: Kernel) {
             }
         }
         else -> throw KernelException("This version can't build ${f.name}")
+    }
+
+    /** Where a point construction geometry goes through is, now. */
+    private fun pointOf(r: PointRef, bodies: List<BodyState>, owner: Feature): Vec3 = when (r) {
+        is PointRef.Corner -> bodies.firstNotNullOfOrNull { kernel.corner(it.handle, r.name) } ?: throw KernelException("Its corner isn't there any more")
+        is PointRef.CentreOf -> {
+            val edge = ref(owner, r.edge, true, bodies)
+            bodies.firstNotNullOfOrNull { kernel.shapeOf(it.handle, edge, true) }?.takeIf { it[0] == 1.0 }?.let { Vec3(it[1], it[2], it[3]) }
+                ?: throw KernelException("Its round edge isn't there any more")
+        }
+        is PointRef.Construction -> steps.firstNotNullOfOrNull { it.points[r.featureId] } ?: throw KernelException("Its point has been deleted")
+    }
+
+    /** A straight edge's start and unit direction. */
+    private fun straightEdge(name: String, bodies: List<BodyState>, owner: Feature): Pair<Vec3, Vec3> {
+        val edge = ref(owner, name, true, bodies)
+        val s = bodies.firstNotNullOfOrNull { kernel.shapeOf(it.handle, edge, true) }?.takeIf { it[0] == 0.0 }
+            ?: throw KernelException("Pick straight edges")
+        return Vec3(s[1], s[2], s[3]) to Vec3(s[4], s[5], s[6])
+    }
+
+    /** A plane at origin with normal n and its x as near x as it can be; null if n or x is nothing or they're parallel. */
+    private fun planeFrom(name: String, origin: Vec3, x: Vec3, n: Vec3): SketchPlane? {
+        val nl = sqrt(n.dot(n))
+        if (nl < 1e-9) return null
+        val normal = n * (1 / nl)
+        val flat = x - normal * x.dot(normal)
+        val xl = sqrt(flat.dot(flat))
+        if (xl < 1e-9) return null
+        val ux = flat * (1 / xl)
+        return SketchPlane(name, origin, ux, normal.cross(ux))
+    }
+
+    /** Some unit vector square to d. */
+    private fun squareTo(d: Vec3): Vec3 {
+        val other = if (abs(d.x) < 0.9) Vec3(1.0, 0.0, 0.0) else Vec3(0.0, 1.0, 0.0)
+        val s = d.cross(other)
+        return s * (1 / sqrt(s.dot(s)))
+    }
+
+    /** v turned round the unit axis d by angle radians. */
+    private fun turn(v: Vec3, d: Vec3, angle: Double): Vec3 {
+        val c = kotlin.math.cos(angle); val s = kotlin.math.sin(angle)
+        return v * c + d.cross(v) * s + d * (d.dot(v) * (1 - c))
+    }
+
+    /** Where three planes meet, or null if they don't at one point. */
+    private fun meet(p: List<SketchPlane>): Vec3? {
+        val (a, b, c) = p.map { it.normal }
+        val det = a.dot(b.cross(c))
+        if (abs(det) < 1e-9) return null
+        val (da, db, dc) = p.map { it.normal.dot(it.origin) }
+        return (b.cross(c) * da + c.cross(a) * db + a.cross(b) * dc) * (1 / det)
     }
 
     private fun bodyWithFace(face: String?, bodies: List<BodyState>): BodyState? =

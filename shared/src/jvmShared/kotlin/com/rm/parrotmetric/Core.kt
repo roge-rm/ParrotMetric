@@ -39,6 +39,10 @@ object Core : NativeCore {
     override external fun bounds(body: Long): DoubleArray
     override external fun splitBy(id: Int, body: Long, tool: Long): LongArray
     override external fun overlapVolume(a: Long, b: Long): Double
+    override external fun selectedCorners(): Array<String>
+    override external fun corner(body: Long, name: String): DoubleArray?
+    override external fun shapeOf(body: Long, name: String, edge: Boolean): DoubleArray?
+    override external fun alongEdge(body: Long, name: String, t: Double): DoubleArray?
     override external fun properties(body: Long): DoubleArray
     /** Where bodies cross a plane, as sketch curves; see jni.cpp. */
     override external fun section(bodies: LongArray, plane: DoubleArray): DoubleArray
@@ -74,7 +78,7 @@ object Core : NativeCore {
     override external fun selectedFaces(): Array<String>
     /** Pairs of sketch number and region number. */
     override external fun selectedRegions(): IntArray
-    override external fun select(edges: Array<String>, regions: IntArray, faces: Array<String>)
+    override external fun select(edges: Array<String>, regions: IntArray, faces: Array<String>, corners: Array<String>)
 
     /** A sketch's closed regions; see jni.cpp for the layouts. */
     override external fun findRegions(kinds: IntArray, ids: IntArray, numbers: DoubleArray): FloatArray
