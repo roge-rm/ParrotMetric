@@ -2,7 +2,11 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 
+#include <BRepAdaptor_Curve.hxx>
+#include <BRepAdaptor_Surface.hxx>
 #include <BRepGProp.hxx>
+#include <TopExp_Explorer.hxx>
+#include <TopoDS.hxx>
 #include <GProp_GProps.hxx>
 
 #include <algorithm>
@@ -214,4 +218,48 @@ TEST_CASE("a solid scaled unevenly about its middle") {
     const double m[12] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 3, -10};
     NamedShape out = transformed(2, box, m, "t");
     CHECK(volume(out) == Catch::Approx(12 * 9 * 30));
+}
+
+TEST_CASE("uneven scaling works on rounded, bevelled, tapered and curved solids") {
+    const double m[12] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 3, -10};  // Three times as tall about z = 5.
+    NamedShape box = extrude(1, top, rectangle(20, 20), {{{1, 2, 3, 4}, 5, 5}}, 10, 0);
+    std::vector<std::pair<const char*, NamedShape>> shapes = {
+        {"chamfered", chamfer(2, box, {"F1.end|F1.s1"}, 2)},
+        {"two-distance chamfer", chamfer(2, box, {"F1.end|F1.s1", "F1.end|F1.s2"}, 1, ChamferKind::TwoDistances, 3)},
+        {"filleted", fillet(2, box, {"F1.end|F1.s1", "F1.end|F1.s2"}, 3)},
+        {"tapered", extrude(1, top, rectangle(20, 20), {{{1, 2, 3, 4}, 5, 5}}, 10, 0, 0.1)},
+        {"cylinder", extrude(1, top, {circle(1, 0, 0, 8)}, {{{1}, 0, 0}}, 10, 0)},
+        {"with a hole", combine(3, box, extrude(2, top, {circle(1, 10, 10, 4)}, {{{1}, 10, 10}}, 10, 0), Combine::Cut)},
+    };
+    for (auto& [what, shape] : shapes) {
+        INFO(what);
+        NamedShape out = transformed(9, shape, m, "s");
+        // Measured closely: the scaled shape's curved faces are splines.
+        GProp_GProps props;
+        BRepGProp::VolumeProperties(out.shape, props, 1e-7);
+        CHECK(props.Mass() == Catch::Approx(3 * volume(shape)).epsilon(1e-3));
+    }
+}
+
+TEST_CASE("scaling unevenly keeps flat faces flat") {
+    NamedShape box = extrude(1, top, rectangle(20, 20), {{{1, 2, 3, 4}, 5, 5}}, 10, 0);
+    const double m[12] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 3, -10};
+    NamedShape out = transformed(9, box, m, "s");
+    int flat = 0, faces = 0;
+    for (TopExp_Explorer f(out.shape, TopAbs_FACE); f.More(); f.Next()) {
+        faces++;
+        if (BRepAdaptor_Surface(TopoDS::Face(f.Current())).GetType() == GeomAbs_Plane) flat++;
+    }
+    CHECK(faces == 6);
+    CHECK(flat == 6);
+    int straight = 0;
+    for (TopExp_Explorer e(out.shape, TopAbs_EDGE); e.More(); e.Next())
+        if (BRepAdaptor_Curve(TopoDS::Edge(e.Current())).GetType() == GeomAbs_Line) straight++;
+    CHECK(straight == 24);  // Each of the 12 edges, seen from both its faces.
+
+    // What comes after still works: a fillet on it, and a sketch on its top.
+    NamedShape rounded = fillet(10, out, {"F9.s(F1.end)|F9.s(F1.s1)"}, 2);
+    CHECK(volume(rounded) < volume(out));
+    gp_Ax3 onTop = facePlane(out, "F9.s(F1.end)");
+    CHECK(onTop.Location().Z() == Catch::Approx(20));
 }

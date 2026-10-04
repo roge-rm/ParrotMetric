@@ -17,6 +17,19 @@
 #include <gp_Circ.hxx>
 #include <BRepBuilderAPI_MakeFace.hxx>
 #include <BRepBuilderAPI_GTransform.hxx>
+#include <BRepTools.hxx>
+#include <BRepTools_Modification.hxx>
+#include <BRepTools_Modifier.hxx>
+#include <ElCLib.hxx>
+#include <GeomConvert_CurveToAnaCurve.hxx>
+#include <GeomConvert_SurfToAnaSurf.hxx>
+#include <GeomLProp_SLProps.hxx>
+#include <GeomProjLib.hxx>
+#include <Geom_BSplineCurve.hxx>
+#include <Geom_BSplineSurface.hxx>
+#include <Geom_Line.hxx>
+#include <Geom_Plane.hxx>
+#include <Geom_TrimmedCurve.hxx>
 #include <BRepBuilderAPI_NurbsConvert.hxx>
 #include <ShapeFix_Shape.hxx>
 #include <BRepBuilderAPI_Transform.hxx>
@@ -372,6 +385,140 @@ bool similarity(const double m[12]) {
     return true;
 }
 
+/**
+ * Turns spline faces that are flat back into planes, and spline edges that
+ * are straight, with planes on both sides, back into lines. An uneven scale
+ * leaves everything as splines, which later steps can't sketch on, measure
+ * or project neatly.
+ */
+class Flatten : public BRepTools_Modification {
+public:
+    Flatten(const TopoDS_Shape& shape, double tol) {
+        for (TopExp_Explorer f(shape, TopAbs_FACE); f.More(); f.Next()) {
+            const TopoDS_Face& face = TopoDS::Face(f.Current());
+            if (auto plane = planeFor(face, tol)) planes_.Bind(face, plane);
+        }
+        TopTools_IndexedDataMapOfShapeListOfShape edgeFaces;
+        TopExp::MapShapesAndAncestors(shape, TopAbs_EDGE, TopAbs_FACE, edgeFaces);
+        for (int i = 1; i <= edgeFaces.Extent(); ++i) {
+            const TopoDS_Edge& e = TopoDS::Edge(edgeFaces.FindKey(i));
+            bool flatAround = !edgeFaces(i).IsEmpty();
+            for (const auto& face : edgeFaces(i)) flatAround = flatAround && planes_.IsBound(face);
+            if (!flatAround || BRep_Tool::Degenerated(e)) continue;
+            if (auto line = lineFor(e, tol)) lines_.Bind(e, line);
+        }
+    }
+
+    bool changed() const { return !planes_.IsEmpty(); }
+
+    bool NewSurface(const TopoDS_Face& F, occ::handle<Geom_Surface>& S, TopLoc_Location& L, double& Tol, bool& RevWires,
+                    bool& RevFace) override {
+        if (!planes_.IsBound(F)) return false;
+        BRep_Tool::Surface(F, L);
+        S = planes_.Find(F);
+        Tol = BRep_Tool::Tolerance(F);
+        RevWires = RevFace = false;
+        return true;
+    }
+
+    bool NewCurve(const TopoDS_Edge& E, occ::handle<Geom_Curve>& C, TopLoc_Location& L, double& Tol) override {
+        if (!lines_.IsBound(E)) return false;
+        double f, l;
+        BRep_Tool::Curve(E, L, f, l);
+        C = lines_.Find(E);
+        Tol = BRep_Tool::Tolerance(E);
+        return true;
+    }
+
+    bool NewPoint(const TopoDS_Vertex&, gp_Pnt&, double&) override { return false; }
+
+    bool NewCurve2d(const TopoDS_Edge& E, const TopoDS_Face& F, const TopoDS_Edge&, const TopoDS_Face&, occ::handle<Geom2d_Curve>& C,
+                    double& Tol) override {
+        if (!planes_.IsBound(F)) return false;
+        double f, l;
+        TopLoc_Location loc;
+        occ::handle<Geom_Curve> curve;
+        if (lines_.IsBound(E)) {
+            curve = lines_.Find(E);
+            TopoDS_Vertex v1, v2;
+            TopExp::Vertices(E, v1, v2);
+            gp_Lin lin = occ::down_cast<Geom_Line>(curve)->Lin();
+            f = ElCLib::Parameter(lin, BRep_Tool::Pnt(v1));
+            l = ElCLib::Parameter(lin, BRep_Tool::Pnt(v2));
+        } else {
+            curve = BRep_Tool::Curve(E, loc, f, l);
+            if (curve.IsNull()) return false;
+        }
+        C = GeomProjLib::Curve2d(curve, f, l, planes_.Find(F));
+        Tol = BRep_Tool::Tolerance(E);
+        return !C.IsNull();
+    }
+
+    bool NewParameter(const TopoDS_Vertex& V, const TopoDS_Edge& E, double& P, double& Tol) override {
+        if (!lines_.IsBound(E)) return false;
+        P = ElCLib::Parameter(occ::down_cast<Geom_Line>(lines_.Find(E))->Lin(), BRep_Tool::Pnt(V));
+        Tol = BRep_Tool::Tolerance(V);
+        return true;
+    }
+
+    GeomAbs_Shape Continuity(const TopoDS_Edge& E, const TopoDS_Face& F1, const TopoDS_Face& F2, const TopoDS_Edge&, const TopoDS_Face&,
+                             const TopoDS_Face&) override {
+        return BRep_Tool::Continuity(E, F1, F2);
+    }
+
+private:
+    /** The plane a flat spline face lies in, facing the same way, or null. */
+    static occ::handle<Geom_Plane> planeFor(const TopoDS_Face& face, double tol) {
+        TopLoc_Location loc;
+        occ::handle<Geom_Surface> s = BRep_Tool::Surface(face, loc);
+        if (s.IsNull() || !s->IsKind(STANDARD_TYPE(Geom_BSplineSurface))) return nullptr;
+        GeomConvert_SurfToAnaSurf convert(s);
+        auto plane = occ::down_cast<Geom_Plane>(convert.ConvertToAnalytical(tol));
+        if (plane.IsNull()) return nullptr;
+        double u0, u1, v0, v1;
+        BRepTools::UVBounds(face, u0, u1, v0, v1);
+        GeomLProp_SLProps props(s, (u0 + u1) / 2, (v0 + v1) / 2, 1, tol);
+        if (props.IsNormalDefined() && props.Normal().Dot(plane->Axis().Direction()) < 0) plane->UReverse();
+        return plane;
+    }
+
+    /** The line a straight spline edge lies on, running the same way, or null. */
+    static occ::handle<Geom_Line> lineFor(const TopoDS_Edge& edge, double tol) {
+        double f, l;
+        TopLoc_Location loc;
+        occ::handle<Geom_Curve> c = BRep_Tool::Curve(edge, loc, f, l);
+        if (auto trimmed = occ::down_cast<Geom_TrimmedCurve>(c)) c = trimmed->BasisCurve();
+        if (c.IsNull() || !c->IsKind(STANDARD_TYPE(Geom_BSplineCurve))) return nullptr;
+        double cf, cl, gap = 0;
+        auto line = occ::down_cast<Geom_Line>(GeomConvert_CurveToAnaCurve::ComputeCurve(c, tol, f, l, cf, cl, gap, GeomConvert_MinGap, GeomAbs_Line));
+        if (line.IsNull() || gap > tol) return nullptr;
+        gp_Lin lin = line->Lin();
+        if (ElCLib::Parameter(lin, c->Value(f)) > ElCLib::Parameter(lin, c->Value(l))) line->Reverse();
+        return line;
+    }
+
+    NCollection_DataMap<TopoDS_Shape, occ::handle<Geom_Plane>, TopTools_ShapeMapHasher> planes_;
+    NCollection_DataMap<TopoDS_Shape, occ::handle<Geom_Line>, TopTools_ShapeMapHasher> lines_;
+};
+
+/** body with its flat spline faces made planes again (see Flatten), or as it was if that doesn't come out valid. */
+NamedShape flattened(const NamedShape& body) {
+    try {
+        occ::handle<Flatten> flatten = new Flatten(body.shape, 1e-6);
+        if (!flatten->changed()) return body;
+        BRepTools_Modifier modifier(body.shape, flatten);
+        if (!modifier.IsDone()) return body;
+        NamedShape out;
+        out.shape = modifier.ModifiedShape(body.shape);
+        if (out.shape.IsNull() || !BRepCheck_Analyzer(out.shape).IsValid()) return body;
+        for (TopExp_Explorer f(body.shape, TopAbs_FACE); f.More(); f.Next())
+            out.names.Bind(modifier.ModifiedShape(f.Current()), body.faceName(f.Current()));
+        return out;
+    } catch (const Standard_Failure&) {
+        return body;
+    }
+}
+
 template <class Op>
 NamedShape named(int id, const NamedShape& body, Op& op, const std::string& tag) {
     NamedShape out;
@@ -419,7 +566,7 @@ NamedShape transformed(int id, const NamedShape& body, const double m[12], const
                 }
             }
             check(out.shape, "The body couldn't be scaled that way");
-            return out;
+            return flattened(out);
         }
         gp_Trsf t;
         t.SetValues(m[0], m[1], m[2], m[3], m[4], m[5], m[6], m[7], m[8], m[9], m[10], m[11]);

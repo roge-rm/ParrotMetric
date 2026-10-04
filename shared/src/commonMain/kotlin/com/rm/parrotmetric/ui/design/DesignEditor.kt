@@ -366,9 +366,10 @@ class DesignEditor(
 
     /** For projecting into a sketch on a plane: where the shown bodies cross it. */
     fun sectionThrough(plane: SketchPlane): List<ProfileCurve>? = try {
-        // A hair inside, so a sketch on a body's flat top still finds the body's outline.
-        val inside = plane.copy(origin = plane.origin - plane.normal * 0.01)
-        viewport.section(shownBodies.map { it.handle }, inside).ifEmpty { null }
+        // Each body a hair behind the plane, so a sketch on a body's flat top still finds its
+        // outline; else a hair in front, for a body standing on the plane.
+        fun at(body: Long, offset: Double) = viewport.section(listOf(body), plane.copy(origin = plane.origin + plane.normal * offset))
+        shownBodies.flatMap { b -> at(b.handle, -0.01).ifEmpty { at(b.handle, 0.01) } }.ifEmpty { null }
     } catch (e: RuntimeException) {
         null
     }
