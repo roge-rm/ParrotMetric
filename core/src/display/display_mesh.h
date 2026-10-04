@@ -30,6 +30,8 @@ struct DisplayMesh {
 
     // Edge colour, RGBA. Sketches show light on the dark ground; bodies' edges are dark.
     float edgeColour[4] = {0.13f, 0.18f, 0.17f, 0.9f};
+    // Face colour, RGBA. Below 1 alpha the faces are see-through and drawn after the solid ones.
+    float faceColour[4] = {0.80f, 0.82f, 0.80f, 1.0f};
 
     size_t vertexCount() const { return positions.size() / 3; }
 };

@@ -42,6 +42,7 @@ add_library(pmcore STATIC
         src/sketch/regions.cpp
         src/model/named_shape.cpp
         src/model/operations.cpp
+        src/model/store.cpp
         src/solid/solid.cpp)
 # The renderer needs OpenGL ES 3, which only the Android build has for now.
 if(ANDROID)

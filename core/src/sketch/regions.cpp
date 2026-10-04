@@ -8,6 +8,7 @@
 #include <BRepBuilderAPI_MakeFace.hxx>
 #include <BRepGProp.hxx>
 #include <BRepTools.hxx>
+#include <BRepTopAdaptor_FClass2d.hxx>
 #include <BRepTools_WireExplorer.hxx>
 #include <Bnd_Box.hxx>
 #include <GCPnts_QuasiUniformDeflection.hxx>
@@ -128,6 +129,20 @@ std::vector<RegionFace> buildRegionFaces(const std::vector<SketchCurve>& curves)
             GProp_GProps props;
             BRepGProp::SurfaceProperties(face, props);
             r.area = std::abs(props.Mass());
+            // A point inside: the middle of the bounds if it's in, else the first of a finer and finer grid that is.
+            BRepTopAdaptor_FClass2d classify(face, 1e-7);
+            double u0, u1, v0, v1;
+            BRepTools::UVBounds(face, u0, u1, v0, v1);
+            bool found = false;
+            for (int n = 1; n <= 64 && !found; n *= 2) {
+                for (int i = 0; i < n && !found; ++i)
+                    for (int j = 0; j < n && !found; ++j) {
+                        double u = u0 + (u1 - u0) * (i + 0.5) / n, v = v0 + (v1 - v0) * (j + 0.5) / n;
+                        if (classify.Perform(gp_Pnt2d(u, v)) == TopAbs_IN) {
+                            r.insideU = u; r.insideV = v; found = true;
+                        }
+                    }
+            }
             regions.push_back(std::move(rf));
         }
     } catch (const Standard_Failure&) {

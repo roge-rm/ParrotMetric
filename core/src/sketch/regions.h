@@ -25,6 +25,7 @@ struct Region {
     std::vector<Loop> loops;       // The outline first, then any holes, as points round each.
     std::vector<int> curveIds;     // Every curve along its edges, sorted, once each.
     double area = 0;               // mm²
+    double insideU = 0, insideV = 0;  // A point inside it, for telling apart regions with the same curves round them.
 };
 
 std::vector<Region> findRegions(const std::vector<SketchCurve>& curves);

@@ -35,6 +35,7 @@ const char* kFaceFragment = R"(#version 300 es
 precision mediump float;
 in vec3 eyeNormal;
 flat in float chosen;
+uniform vec4 faceColour;
 out vec4 colour;
 void main() {
     vec3 n = normalize(eyeNormal);
@@ -44,8 +45,9 @@ void main() {
     vec3 ambient = mix(vec3(0.20, 0.19, 0.18), vec3(0.34, 0.40, 0.40), up);
     float key = max(dot(n, normalize(vec3(-0.45, 0.65, 0.62))), 0.0);
     float rim = pow(1.0 - max(n.z, 0.0), 3.0) * 0.18;
-    vec3 base = mix(vec3(0.80, 0.82, 0.80), vec3(1.0, 0.48, 0.24), chosen * 0.55);
-    colour = vec4(base * (ambient + 0.72 * key) + rim * (1.0 - chosen), 1.0);
+    vec3 base = mix(faceColour.rgb, vec3(1.0, 0.48, 0.24), chosen * 0.55);
+    float alpha = faceColour.a < 1.0 ? mix(faceColour.a, 0.55, chosen) : 1.0;
+    colour = vec4(base * (ambient + 0.72 * key) + rim * (1.0 - chosen), alpha);
 })";
 
 const char* kEdgeVertex = R"(#version 300 es
@@ -226,6 +228,7 @@ void Renderer::upload() {
         Gpu g;
         g.faceCount = b.faceCount;
         std::copy(b.edgeColour, b.edgeColour + 4, g.edgeColour);
+        std::copy(b.faceColour, b.faceColour + 4, g.faceColour);
         g.edgeCount = uint32_t(b.edges.size());
 
         glGenVertexArrays(1, &g.faceVao);
@@ -410,13 +413,28 @@ void Renderer::drawScene(bool ids, const float* vp, const float* normal) {
         glUniformMatrix3fv(glGetUniformLocation(faceProgram, "view"), 1, GL_FALSE, normal);
         glUniform1i(glGetUniformLocation(faceProgram, "selected"), 0);
     }
-    for (uint32_t i = 0; i < gpu_.size(); ++i) {
-        const Gpu& g = gpu_[i];
-        if (ids) glUniform1ui(glGetUniformLocation(faceProgram, "base"), i << 20);
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, g.faceSelected);
-        glBindVertexArray(g.faceVao);
-        glDrawElements(GL_TRIANGLES, g.faceIndices, GL_UNSIGNED_INT, nullptr);
+    // Solid faces first, then see-through ones over them without hiding what's behind.
+    for (int pass = 0; pass < 2; ++pass) {
+        bool seeThrough = pass == 1;
+        if (seeThrough && !ids) {
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            glDepthMask(GL_FALSE);
+        }
+        for (uint32_t i = 0; i < gpu_.size(); ++i) {
+            const Gpu& g = gpu_[i];
+            if ((g.faceColour[3] < 1.0f) != seeThrough || g.faceIndices == 0) continue;
+            if (ids) glUniform1ui(glGetUniformLocation(faceProgram, "base"), i << 20);
+            else glUniform4fv(glGetUniformLocation(faceProgram, "faceColour"), 1, g.faceColour);
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, g.faceSelected);
+            glBindVertexArray(g.faceVao);
+            glDrawElements(GL_TRIANGLES, g.faceIndices, GL_UNSIGNED_INT, nullptr);
+        }
+        if (seeThrough && !ids) {
+            glDepthMask(GL_TRUE);
+            glDisable(GL_BLEND);
+        }
     }
     glDisable(GL_POLYGON_OFFSET_FILL);
 

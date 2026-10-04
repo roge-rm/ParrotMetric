@@ -22,7 +22,7 @@ import kotlin.math.hypot
 class ModelView(
     context: Context,
     private val onCamera: (state: FloatArray) -> Unit,
-    private val onSelection: (faces: Int, edges: Int) -> Unit,
+    private val onSelection: (counts: IntArray) -> Unit,
 ) : GLSurfaceView(context) {
     private val slop = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
     private var downX = 0f
@@ -116,7 +116,7 @@ class ModelView(
         lastTapTime = if (double) 0 else time
         gl {
             val counts = Core.tap(x, y)
-            post { onSelection(counts[0], counts[1]) }
+            post { onSelection(counts) }
             if (double) Core.fit()
         }
     }

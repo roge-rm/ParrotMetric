@@ -23,80 +23,81 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.lifecycleScope
-import com.rm.parrotmetric.ui.HistoryItem
+import com.rm.parrotmetric.design.PlaneRef
+import com.rm.parrotmetric.design.SketchFeature
+import com.rm.parrotmetric.sketch.Sketch
+import com.rm.parrotmetric.sketch.SketchPlane
+import com.rm.parrotmetric.sketch.Vec3
 import com.rm.parrotmetric.ui.ModelActions
 import com.rm.parrotmetric.ui.ModelScreen
 import com.rm.parrotmetric.ui.ModelState
-import com.rm.parrotmetric.ui.ToolGroup
-import com.rm.parrotmetric.sketch.Sketch
-import com.rm.parrotmetric.sketch.SketchPlane
+import com.rm.parrotmetric.ui.design.DesignEditor
 import com.rm.parrotmetric.ui.sketch.CameraState
 import com.rm.parrotmetric.ui.sketch.SketchEditor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlin.math.sqrt
 
 class MainActivity : ComponentActivity() {
     private var state by mutableStateOf(ModelState())
     private var view: ModelView? = null
+    private lateinit var design: DesignEditor
 
-    // The history bar's steps; sketches keep their records here so they can be opened again.
-    private val steps = mutableListOf<Pair<HistoryItem, SketchRecord?>>()
-    private var editingRecord: SketchRecord? = null
-
-    private fun setSteps(items: List<Pair<HistoryItem, SketchRecord?>>) {
-        steps.clear()
-        steps += items
-        state = state.copy(history = steps.map { it.first })
-        Core.setSketches(sketchLines(steps.mapNotNull { it.second }))
-        view?.requestRender()
-    }
+    /** A new sketch waiting for Finish to go into the history. */
+    private var newSketch: Pair<PlaneRef, String>? = null
 
     private val openFile = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
-            val name = displayName(uri)
-            val format = Core.Format.forName(name)
-            if (format == null) {
-                state = state.copy(status = "Open an STL, STEP or IGES file")
-                return@registerForActivityResult
+        if (uri == null) return@registerForActivityResult
+        val name = displayName(uri)
+        val format = Core.Format.forName(name)
+        if (format == null) {
+            design.message = "Open an STL, STEP or IGES file"
+            return@registerForActivityResult
+        }
+        lifecycleScope.launch {
+            val bytes = withContext(Dispatchers.IO) { contentResolver.openInputStream(uri)?.use { it.readBytes() } }
+            if (bytes == null) {
+                design.message = "Couldn't read the file"
+                return@launch
             }
-            inBackground(onDone = {
-                setSteps(listOf(HistoryItem(name, ToolGroup.Create) to null))
-                state.copy(title = name.substringBeforeLast('.'), isMesh = format == Core.Format.Stl)
-            }) {
-                val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return@inBackground "Couldn't read the file"
-                Core.importFile(bytes, format)
-            }
+            if (design.design.features.isEmpty()) state = state.copy(title = name.substringBeforeLast('.'))
+            design.importFile(name, bytes, format.ordinal)
         }
     }
 
     private var exportFormat = Core.Format.Stl
     private val saveFile = registerForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
-        if (uri != null) inBackground(onDone = { state.copy(status = "Saved ${displayName(uri)}") }) {
-            val bytes = Core.exportFile(exportFormat) ?: return@inBackground "A mesh can only be exported as STL"
-            contentResolver.openOutputStream(uri)?.use { it.write(bytes) } ?: return@inBackground "Couldn't write the file"
-            null
+        if (uri == null) return@registerForActivityResult
+        val bodies = design.bodies().toLongArray()
+        lifecycleScope.launch {
+            val error = withContext(Dispatchers.Default) {
+                try {
+                    val bytes = Core.exportBodies(bodies, exportFormat.ordinal)
+                        ?: return@withContext if (exportFormat == Core.Format.Stl) "There's nothing to export" else "Meshes can only be exported as STL"
+                    contentResolver.openOutputStream(uri)?.use { it.write(bytes) } ?: return@withContext "Couldn't write the file"
+                    null
+                } catch (e: RuntimeException) {
+                    e.message ?: "Couldn't export"
+                }
+            }
+            design.message = error ?: "Saved ${displayName(uri)}"
         }
     }
 
     private val actions = object : ModelActions {
-        override fun newBox() = inBackground(onDone = {
-            setSteps(listOf(HistoryItem("Box", ToolGroup.Create) to null, HistoryItem("Fillet", ToolGroup.Modify) to null))
-            state.copy(title = "Untitled", isMesh = false)
-        }) { Core.showFilletedBox(20.0, 2.0) }
-
         override fun openFile() = this@MainActivity.openFile.launch(arrayOf("*/*"))
         override fun exportStl() = export(Core.Format.Stl)
         override fun exportStep() = export(Core.Format.Step)
 
-        override fun cutHole() = inBackground(onDone = {
-            setSteps(steps + (HistoryItem("Cut", ToolGroup.Modify) to null))
-            state.copy(isMesh = true)
-        }) { Core.cutHole() }
-
         override fun clearSelection() {
-            view?.gl { Core.clearSelection() }
-            state = state.copy(selectedFaces = 0, selectedEdges = 0)
+            Core.clearSelection()
+            view?.requestRender()
+            state = state.copy(selectedFaces = 0, selectedEdges = 0, selectedAreas = 0)
+            design.selectionChanged()
         }
 
         override fun fit() {
@@ -116,43 +117,71 @@ class MainActivity : ComponentActivity() {
         }
 
         override fun startSketch(plane: SketchPlane?) {
-            val name = "Sketch ${steps.count { it.second != null } + 1}"
-            val p = plane ?: Core.selectedFacePlane()?.let { facePlane(it, state.yaw, "Face") } ?: return
-            editingRecord = null
-            openSketch(SketchRecord(name, p, Sketch()))
+            val name = design.nextSketchName()
+            val ref: PlaneRef
+            val p: SketchPlane
+            if (plane != null) {
+                ref = PlaneRef.Fixed(plane)
+                p = plane
+            } else {
+                ref = design.faceUnderSelection(state.yaw) ?: return
+                p = planeOnSelectedFace(ref as PlaneRef.OnFace, name) ?: return
+            }
+            newSketch = ref to name
+            openSketch(SketchEditor(p, name, Sketch(), coreRegionFinder))
         }
 
         override fun finishSketch() {
             val editor = state.sketch ?: return
             editor.endDrawing()
-            val existing = editingRecord
-            if (existing == null) {
+            val pending = newSketch
+            if (pending != null) {
                 if (editor.sketch.curves.isNotEmpty()) {
-                    setSteps(steps + (HistoryItem(editor.name, ToolGroup.Sketch) to SketchRecord(editor.name, editor.plane, editor.sketch)))
+                    design.checkpoint()
+                    design.addSketch(pending.second, pending.first, editor.sketch)
                 }
             } else {
-                setSteps(steps.toList())
+                design.sketchChanged()
             }
-            editingRecord = null
+            newSketch = null
             state = state.copy(sketch = null)
         }
 
-        override fun openHistory(index: Int) {
-            val record = steps.getOrNull(index)?.second ?: return
-            editingRecord = record
-            openSketch(record)
+        override fun openHistory(id: Int) {
+            val f = design.design.feature(id)
+            if (f is SketchFeature) {
+                val plane = design.planeOf(f) ?: return
+                design.checkpoint()
+                newSketch = null
+                openSketch(SketchEditor(plane, f.name, f.sketch, coreRegionFinder))
+            } else {
+                design.edit(id)
+            }
         }
     }
 
-    private fun openSketch(record: SketchRecord) {
-        view?.gl { Core.clearSelection() }
-        val (yaw, pitch) = viewOf(record.plane)
+    /** The plane a new sketch on the selected face gets: as the rebuild will place it. */
+    private fun planeOnSelectedFace(ref: PlaneRef.OnFace, name: String): SketchPlane? {
+        val (bodyIndex, face) = Core.selectedFaces().firstOrNull()?.let { it.substringBefore('\t').toInt() to it.substringAfter('\t') } ?: return null
+        val body = design.bodies().getOrNull(bodyIndex) ?: return null
+        val d = try {
+            Core.facePlane(body, face)
+        } catch (e: RuntimeException) {
+            design.message = e.message
+            return null
+        }
+        val n = Vec3(d[3], d[4], d[5])
+        var x = ref.x - n * ref.x.dot(n)
+        if (x.dot(x) < 1e-12) x = if (abs(n.z) < 0.9) Vec3(0.0, 0.0, 1.0).cross(n) else Vec3(1.0, 0.0, 0.0).cross(n)
+        x = x * (1 / sqrt(x.dot(x)))
+        return SketchPlane(name, Vec3(d[0], d[1], d[2]), x, n.cross(x))
+    }
+
+    private fun openSketch(editor: SketchEditor) {
+        Core.clearSelection()
+        val (yaw, pitch) = viewOf(editor.plane)
         view?.gl { Core.viewFrom(yaw, pitch) }
-        state = state.copy(
-            sketch = SketchEditor(record.plane, record.name, record.sketch, coreRegionFinder),
-            selectedFaces = 0,
-            selectedEdges = 0,
-        )
+        state = state.copy(sketch = editor, selectedFaces = 0, selectedEdges = 0, selectedAreas = 0)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -162,6 +191,8 @@ class MainActivity : ComponentActivity() {
         )
         super.onCreate(savedInstanceState)
         Core.setScratchDirectory(cacheDir.absolutePath)
+        design = DesignEditor(CoreKernel, coreRegionFinder, CoreViewport { work -> view?.gl(work) }, lifecycleScope)
+        design.onShown = { state = state.copy(selectedFaces = 0, selectedEdges = 0, selectedAreas = 0) }
         setContent {
             ModelScreen(
                 viewport = {
@@ -173,7 +204,10 @@ class MainActivity : ComponentActivity() {
                                     val camera = CameraState.from(c)
                                     state = state.copy(yaw = camera.yaw, pitch = camera.pitch, camera = camera)
                                 },
-                                onSelection = { faces, edges -> state = state.copy(selectedFaces = faces, selectedEdges = edges) },
+                                onSelection = { counts ->
+                                    state = state.copy(selectedFaces = counts[0], selectedEdges = counts[1], selectedAreas = counts[2])
+                                    design.selectionChanged()
+                                },
                             ).also { view = it }
                         },
                         modifier = Modifier.fillMaxSize(),
@@ -192,10 +226,10 @@ class MainActivity : ComponentActivity() {
                     }
                 },
                 state = state,
+                design = design,
                 actions = actions,
             )
         }
-        actions.newBox()
     }
 
     override fun onResume() {
@@ -217,21 +251,4 @@ class MainActivity : ComponentActivity() {
         contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
             if (it.moveToFirst()) it.getString(0) else null
         } ?: uri.lastPathSegment.orEmpty()
-
-    /**
-     * Runs a core call off the main thread. On success the state becomes what
-     * [onDone] makes of it; on failure the status shows the reason.
-     */
-    private fun inBackground(onDone: () -> ModelState = { state }, work: suspend () -> String?) {
-        lifecycleScope.launch {
-            state = state.copy(busy = true, status = "")
-            val error = withContext(Dispatchers.Default) { work() }
-            state = if (error == null) {
-                onDone().copy(busy = false, triangles = Core.triangleCount(), selectedFaces = 0, selectedEdges = 0)
-            } else {
-                state.copy(busy = false, status = error)
-            }
-            view?.requestRender()
-        }
-    }
 }

@@ -66,6 +66,7 @@ private:
         uint32_t faceSelected = 0, edgeSelected = 0;  // R8 textures, one texel per face or edge.
         int faceIndices = 0, edgeIndices = 0;
         float edgeColour[4];
+        float faceColour[4];
         uint32_t faceCount = 0, edgeCount = 0;
     };
 
