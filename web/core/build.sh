@@ -13,6 +13,15 @@ toolchain=$EMSDK/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake
 jdk=${JAVA_HOME:-$(dirname "$(dirname "$(readlink -f "$(command -v javac)")")")}
 launcher=
 command -v ccache >/dev/null && launcher="-DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache"
+# In a throwaway checkout (a git worktree, as the F-Droid publisher makes), OCCT is
+# copied from the main checkout rather than built again. build-occt.sh still builds
+# it if the copy was made from a different OCCT.
+top=$(cd "$root" && pwd -P)
+main=$(dirname "$(git -C "$top" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || echo "$top/.git")")
+if [ "$main" != "$top" ] && [ ! -f "$top/core/build/occt/wasm/.rev" ] && [ -f "$main/core/build/occt/wasm/.rev" ]; then
+    mkdir -p "$top/core/build/occt"
+    cp -a "$main/core/build/occt/wasm" "$top/core/build/occt/"
+fi
 OCCT_FLAGS=-fexceptions OCCT_CMAKE_ARGS="$launcher" "$root/core/scripts/build-occt.sh" wasm "$toolchain"
 B=$here/build
 cmake -S "$here" -B "$B" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE="$toolchain" \
