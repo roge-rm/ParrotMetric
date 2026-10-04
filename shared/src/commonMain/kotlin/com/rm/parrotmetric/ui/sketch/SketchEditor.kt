@@ -78,6 +78,8 @@ class SketchEditor(
     private val finder: RegionFinder,
     /** The edges of the face it's on, for Project; null for a sketch that isn't on a face. */
     val outline: (() -> List<ProfileCurve>?)? = null,
+    /** The design's parameters, for dimensions typed with names. */
+    private val names: () -> Map<String, Double> = { emptyMap() },
 ) {
     /** Goes up whenever anything changes, so the overlay redraws. */
     var version by mutableIntStateOf(0)
@@ -591,7 +593,8 @@ class SketchEditor(
     /** Applies the typed text. False, with a message, if it can't be read or met. */
     fun commitDimension(text: String): Boolean {
         val edit = editing ?: return false
-        val typed = Expression.evaluate(text)
+        val typed = Expression.evaluate(text, names())
+        val expression = if (Expression.usesNames(text)) text.trim() else null
         if (typed == null || typed <= 0 && !edit.isAngle) {
             message = "That isn't a number"
             return false
@@ -604,9 +607,9 @@ class SketchEditor(
             why == null
         } else if (edit.existing != null) {
             val d = edit.existing
-            sketch.setDimension(d, if (d is Constraint.Angle && d.value < 0) -value else value)
+            sketch.setDimension(d, if (d is Constraint.Angle && d.value < 0) -value else value).also { if (it) d.expression = expression }
         } else {
-            when (sketch.add(edit.make!!(value))) {
+            when (sketch.add(edit.make!!(value).also { it.expression = expression })) {
                 Sketch.Added.Yes -> true
                 Sketch.Added.AlreadySet -> { message = "That's already set by other constraints"; false }
                 Sketch.Added.Conflicts -> { message = "That doesn't fit the other constraints"; false }

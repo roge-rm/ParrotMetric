@@ -57,6 +57,10 @@ interface Viewport {
     )
     /** Selected construction planes, by their place in the list shown. */
     fun selectedPlanes(): List<Int>
+    /** Lines describing what's selected, for Measure. */
+    fun measure(): List<String>
+    /** Hides what's behind a plane through origin facing normal, or shows everything again. */
+    fun setSection(on: Boolean, origin: Vec3, normal: Vec3)
     /** A face's edges as curves on a plane, for projecting into a sketch. Throws if the face is gone. */
     fun faceOutline(body: Long, face: String, plane: SketchPlane): List<ProfileCurve>
     fun selectedEdges(): List<String>
@@ -108,6 +112,9 @@ class DesignEditor(
     /** Called on the main thread after each rebuild is shown, which clears the view's selection. */
     var onShown: () -> Unit = {}
 
+    /** The bodies shown, in the order the viewport numbers them. Hidden ones aren't. */
+    private var shownBodies: List<com.rm.parrotmetric.design.BodyState> = emptyList()
+
     /** The construction planes shown, in the order the viewport numbers them. */
     private var shownPlanes: List<PlaneFeature> = emptyList()
 
@@ -133,8 +140,83 @@ class DesignEditor(
         }
     }
 
-    /** Every body there is now, for export. */
-    fun bodies(): List<Long> = built?.bodies?.map { it.handle } ?: emptyList()
+    /** Every body there is now, labels and handles, hidden ones too. */
+    fun allBodies(): List<com.rm.parrotmetric.design.BodyState> = built?.bodies ?: emptyList()
+
+    /** The bodies that aren't hidden, for export. */
+    fun bodies(): List<Long> = shownBodies.map { it.handle }
+
+    // Measure and section, which change only what's shown.
+
+    var measuring by mutableStateOf(false)
+        private set
+    var measureLines by mutableStateOf<List<String>>(emptyList())
+        private set
+
+    fun startMeasuring() {
+        measuring = true
+        measureLines = viewport.measure()
+    }
+
+    fun stopMeasuring() {
+        measuring = false
+    }
+
+    var sectionOn by mutableStateOf(false)
+        private set
+    var sectionPlane by mutableStateOf<PlaneRef>(PlaneRef.Fixed(SketchPlane.Front))
+    var sectionOffset by mutableStateOf(0.0)
+    var sectionFlip by mutableStateOf(false)
+    var sectionPlanes: List<Pair<String, PlaneRef>> = emptyList()
+        private set
+
+    fun startSection() {
+        sectionPlanes = planeChoices()
+        sectionOn = true
+        updateSection()
+    }
+
+    fun stopSection() {
+        sectionOn = false
+        viewport.setSection(false, Vec3(0.0, 0.0, 0.0), Vec3(0.0, 0.0, 1.0))
+    }
+
+    fun updateSection() {
+        if (!sectionOn) return
+        val plane = resolve(sectionPlane) ?: return
+        val n = if (sectionFlip) -plane.normal else plane.normal
+        viewport.setSection(true, plane.origin + plane.normal * sectionOffset, n)
+    }
+
+    /** Where a plane reference is now: fixed planes as they are, construction planes and faces as last built. */
+    private fun resolve(ref: PlaneRef): SketchPlane? = when (ref) {
+        is PlaneRef.Fixed -> ref.plane
+        is PlaneRef.Construction -> built?.sketchPlanes?.get(ref.featureId)
+        is PlaneRef.OnFace -> {
+            val body = shownBodies.firstOrNull { ref.face in kernel.faceNames(it.handle) }
+            val d = body?.let { try { kernel.facePlane(it.handle, ref.face) } catch (e: Exception) { null } }
+            d?.let {
+                val n = Vec3(it[3], it[4], it[5])
+                val x = if (kotlin.math.abs(n.z) < 0.9) Vec3(0.0, 0.0, 1.0).cross(n) else Vec3(1.0, 0.0, 0.0).cross(n)
+                SketchPlane("Face", Vec3(it[0], it[1], it[2]), x, n.cross(x))
+            }
+        }
+    }
+
+    // The parts list.
+
+    private fun setInfo(label: String, change: (Design.BodyInfo) -> Design.BodyInfo) {
+        checkpoint()
+        design.bodies[label] = change(design.info(label))
+        changed()
+    }
+
+    fun setHidden(label: String, hidden: Boolean) = setInfo(label) { it.copy(hidden = hidden) }
+    fun rename(label: String, name: String) = setInfo(label) { it.copy(name = name.trim().ifEmpty { null }) }
+    fun setComponent(label: String, component: String?) = setInfo(label) { it.copy(component = component) }
+
+    /** Components in use, in the order their first body comes. */
+    fun components(): List<String> = allBodies().mapNotNull { design.info(it.label).component }.distinct()
 
     // Changing the history.
 
@@ -236,7 +318,7 @@ class DesignEditor(
         }
         val ref = faceUnderSelection(yaw) as? PlaneRef.OnFace ?: return null
         val (bodyIndex, _) = viewport.selectedFaces().first()
-        val body = built?.bodies?.getOrNull(bodyIndex) ?: return null
+        val body = shownBodies.getOrNull(bodyIndex) ?: return null
         val d = try {
             kernel.facePlane(body.handle, ref.face)
         } catch (e: com.rm.parrotmetric.design.KernelException) {
@@ -303,8 +385,10 @@ class DesignEditor(
                         val shown = sketches.mapNotNull { s -> b.sketchPlanes[s.id]?.let { s to it } }
                         val refit = refitNow || (!hadBodies && b.bodies.isNotEmpty())
                         val planeFeatures = features.filterIsInstance<PlaneFeature>().filter { b.sketchPlanes.containsKey(it.id) }
+                        val visible = b.bodies.filter { !design.info(it.label).hidden }
+                        shownBodies = visible
                         viewport.show(
-                            b.bodies.map { it.handle }, shown.map { it.second to it.first.sketch.profileCurves() },
+                            visible.map { it.handle }, shown.map { it.second to it.first.sketch.profileCurves() },
                             planeFeatures.map { b.sketchPlanes.getValue(it.id) }, b.axes.values.toList(), refit,
                         )
                         shownPlanes = planeFeatures
@@ -321,7 +405,19 @@ class DesignEditor(
         }
     }
 
-    private fun featuresToBuild(): List<Feature> {
+    /** The parameters' values, for number fields. */
+    fun names(): Map<String, Double> = com.rm.parrotmetric.design.Parametrics.values(design.parameters)
+
+    fun setParameters(list: List<com.rm.parrotmetric.design.Parameter>) {
+        checkpoint()
+        design.parameters.clear()
+        design.parameters += list
+        changed()
+    }
+
+    private fun featuresToBuild(): List<Feature> = com.rm.parrotmetric.design.Parametrics.apply(design, rawFeatures())
+
+    private fun rawFeatures(): List<Feature> {
         val active = design.active
         val draft = panel ?: return active
         // Fillets and chamfers pick edges on the body before them, so they're left out while being picked.
@@ -416,10 +512,8 @@ class DesignEditor(
     }
 
     /** Bodies under the selected faces, in the order they were tapped. */
-    private fun pickedBodies(): List<String> {
-        val bodies = built?.bodies ?: return emptyList()
-        return viewport.selectedFaces().mapNotNull { bodies.getOrNull(it.first)?.label }.distinct()
-    }
+    private fun pickedBodies(): List<String> =
+        viewport.selectedFaces().mapNotNull { shownBodies.getOrNull(it.first)?.label }.distinct()
 
     /** Planes to mirror or split across: the origin planes, and the selected flat face if there is one. */
     private fun planeChoices(): List<Pair<String, PlaneRef>> {
@@ -459,6 +553,7 @@ class DesignEditor(
             is AxisFeature -> AxisDraft(f)
             else -> return f
         }
+        design.expressions[id]?.let { d.exprs.putAll(it) }
         if (d is BodyDraft) d.planes = planeChoices().let { choices ->
             val own = (f as? MirrorFeature)?.plane ?: (f as? SplitFeature)?.plane
             if (own != null && choices.none { it.second == own }) choices + ("Its face" to own) else choices
@@ -468,8 +563,9 @@ class DesignEditor(
         return f
     }
 
-    /** The selection in the view changed while a panel is open. */
+    /** The selection in the view changed. */
     fun selectionChanged() {
+        if (measuring) measureLines = viewport.measure()
         when (val d = panel) {
             is AreaDraft -> {
                 val picked = viewport.selectedRegions()
@@ -540,6 +636,7 @@ class DesignEditor(
         }
         checkpoint()
         if (design.feature(f.id) != null) design.replace(f) else design.add(f)
+        if (d.exprs.isEmpty()) design.expressions.remove(f.id) else design.expressions[f.id] = d.exprs.toMap()
         panel = null
         changed()
         return true
@@ -549,6 +646,9 @@ class DesignEditor(
     internal fun newId() = design.newId()
 
     abstract inner class FeatureDraft {
+        /** Fields typed as expressions, by the names Parametrics.withValue uses. */
+        val exprs = androidx.compose.runtime.mutableStateMapOf<String, String>()
+
         /** The feature as set up so far, or null if something's missing. */
         abstract fun feature(): Feature?
         abstract fun missing(): String

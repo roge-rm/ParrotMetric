@@ -112,11 +112,11 @@ private fun ExtrudeSettings(editor: DesignEditor, d: DesignEditor.ExtrudeDraft) 
         d.direction = DesignEditor.Direction.entries[it]
         editor.draftChanged()
     }
-    NumberRow(if (d.direction == DesignEditor.Direction.TwoSides) "Front" else "Distance", d.distance, "mm", allowNegative = true) {
+    Field(editor, d, if (d.direction == DesignEditor.Direction.Symmetric) "both" else "forward", if (d.direction == DesignEditor.Direction.TwoSides) "Front" else "Distance", d.distance, "mm", allowNegative = true) {
         d.distance = it
         editor.draftChanged()
     }
-    if (d.direction == DesignEditor.Direction.TwoSides) NumberRow("Back", d.other, "mm", allowNegative = true) {
+    if (d.direction == DesignEditor.Direction.TwoSides) Field(editor, d, "back", "Back", d.other, "mm", allowNegative = true) {
         d.other = it
         editor.draftChanged()
     }
@@ -138,7 +138,7 @@ private fun RevolveSettings(editor: DesignEditor, d: DesignEditor.RevolveDraft) 
         d.axis = axes[it]
         editor.draftChanged()
     }
-    NumberRow("Angle", d.degrees, "°", allowNegative = true) {
+    Field(editor, d, "angle", "Angle", d.degrees, "°", allowNegative = true) {
         d.degrees = it
         editor.draftChanged()
     }
@@ -156,7 +156,7 @@ private fun EdgeSettings(editor: DesignEditor, d: DesignEditor.EdgeDraft) {
         Palette.modify,
         if (d.edges.isEmpty()) null else count(d.edges.size, "edge", "edges"),
     )
-    NumberRow(if (d.chamfer) "Distance" else "Radius", d.size, "mm", allowNegative = false) {
+    Field(editor, d, "size", if (d.chamfer) "Distance" else "Radius", d.size, "mm", allowNegative = false) {
         d.size = it
         editor.draftChanged()
     }
@@ -167,14 +167,34 @@ private fun OperationRow(op: Operation, onPick: (Operation) -> Unit) {
     Segmented(listOf("New body", "Join", "Cut", "Intersect"), op.ordinal) { onPick(Operation.entries[it]) }
 }
 
+/** A number field tied to a draft's field: what's typed with parameter names in it is kept as an expression. */
+@Composable
+internal fun Field(
+    editor: DesignEditor, d: DesignEditor.FeatureDraft, key: String, label: String, value: Double, unit: String,
+    allowNegative: Boolean, onChange: (Double) -> Unit,
+) {
+    NumberRow(label, value, unit, allowNegative, d.exprs[key], editor.names()) { v, text ->
+        if (text != null && com.rm.parrotmetric.sketch.Expression.usesNames(text)) d.exprs[key] = text else d.exprs.remove(key)
+        onChange(v)
+    }
+}
+
 /** A labelled number field that takes sums and units, applied on Done from the keyboard or when it loses focus. */
 @Composable
-fun NumberRow(label: String, value: Double, unit: String, allowNegative: Boolean, onChange: (Double) -> Unit) {
+fun NumberRow(label: String, value: Double, unit: String, allowNegative: Boolean, onChange: (Double) -> Unit) =
+    NumberRow(label, value, unit, allowNegative, null, emptyMap()) { v, _ -> onChange(v) }
+
+/** As above, showing [expression] when there is one and reading parameter [names]. */
+@Composable
+fun NumberRow(
+    label: String, value: Double, unit: String, allowNegative: Boolean, expression: String?, names: Map<String, Double>,
+    onChange: (Double, String?) -> Unit,
+) {
     fun text(v: Double): String {
         val r = round(v * 1000) / 1000
         return if (r == floor(r)) r.toLong().toString() else r.toString()
     }
-    var field by remember(value) { mutableStateOf(TextFieldValue(text(value))) }
+    var field by remember(value, expression) { mutableStateOf(TextFieldValue(expression ?: text(value))) }
     var bad by remember { mutableStateOf(false) }
     var focused by remember { mutableStateOf(false) }
     // Select it all once focused, after the tap has placed the cursor, so typing replaces it.
@@ -185,9 +205,9 @@ fun NumberRow(label: String, value: Double, unit: String, allowNegative: Boolean
         }
     }
     fun apply() {
-        val v = Expression.evaluate(field.text)
+        val v = Expression.evaluate(field.text, names)
         bad = v == null || (!allowNegative && v <= 0)
-        if (!bad && v != value) onChange(v!!)
+        if (!bad && (v != value || field.text != (expression ?: text(value)))) onChange(v!!, field.text)
     }
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(label, Modifier.width(80.dp), fontSize = 14.sp, color = Palette.muted)
@@ -263,9 +283,9 @@ internal fun FaceSettings(editor: DesignEditor, d: DesignEditor.FaceDraft) {
     Header(if (d.tilt) "Draft" else "Shell", if (d.tilt) Icons.draft else Icons.shell, Palette.modify, if (d.faces.isEmpty()) null else count(d.faces.size, "face", "faces"))
     if (d.tilt) {
         Segmented(listOf("Faces to tilt", "Pivot face"), if (d.pickingPivot) 1 else 0) { d.pickingPivot = it == 1 }
-        NumberRow("Angle", d.size, "°", allowNegative = true) { d.size = it; editor.draftChanged() }
+        Field(editor, d, "size", "Angle", d.size, "°", allowNegative = true) { d.size = it; editor.draftChanged() }
     } else {
-        NumberRow("Walls", d.size, "mm", allowNegative = false) { d.size = it; editor.draftChanged() }
+        Field(editor, d, "size", "Walls", d.size, "mm", allowNegative = false) { d.size = it; editor.draftChanged() }
     }
 }
 
@@ -278,11 +298,11 @@ internal fun HoleSettings(editor: DesignEditor, d: DesignEditor.HoleDraft) {
         editor.draftChanged()
     }
     Segmented(listOf("Simple", "Counterbore", "Countersink"), d.kind.ordinal) { d.kind = com.rm.parrotmetric.design.HoleKind.entries[it]; editor.draftChanged() }
-    NumberRow("Diameter", d.diameter, "mm", allowNegative = false) { d.diameter = it; editor.draftChanged() }
+    Field(editor, d, "diameter", "Diameter", d.diameter, "mm", allowNegative = false) { d.diameter = it; editor.draftChanged() }
     Toggle("All the way through", d.through) { d.through = it; editor.draftChanged() }
-    if (!d.through) NumberRow("Depth", d.depth, "mm", allowNegative = false) { d.depth = it; editor.draftChanged() }
-    if (d.kind != com.rm.parrotmetric.design.HoleKind.Simple) NumberRow("Top", d.topDiameter, "mm", allowNegative = false) { d.topDiameter = it; editor.draftChanged() }
-    if (d.kind == com.rm.parrotmetric.design.HoleKind.Counterbore) NumberRow("Top depth", d.topDepth, "mm", allowNegative = false) { d.topDepth = it; editor.draftChanged() }
+    if (!d.through) Field(editor, d, "depth", "Depth", d.depth, "mm", allowNegative = false) { d.depth = it; editor.draftChanged() }
+    if (d.kind != com.rm.parrotmetric.design.HoleKind.Simple) Field(editor, d, "topDiameter", "Top", d.topDiameter, "mm", allowNegative = false) { d.topDiameter = it; editor.draftChanged() }
+    if (d.kind == com.rm.parrotmetric.design.HoleKind.Counterbore) Field(editor, d, "topDepth", "Top depth", d.topDepth, "mm", allowNegative = false) { d.topDepth = it; editor.draftChanged() }
 }
 
 @Composable
@@ -321,15 +341,15 @@ internal fun PatternSettings(editor: DesignEditor, d: DesignEditor.PatternDraft)
         }
     }
     if (!d.circular || d.axisFeature == null) AxisRow(if (d.circular) "Round" else "Along", d.axis, false) { d.axis = it!!; editor.draftChanged() }
-    NumberRow("Count", d.count, "", allowNegative = false) { d.count = it; editor.draftChanged() }
+    Field(editor, d, "count", "Count", d.count, "", allowNegative = false) { d.count = it; editor.draftChanged() }
     if (d.circular) {
-        NumberRow("Angle", d.degrees, "°", allowNegative = true) { d.degrees = it; editor.draftChanged() }
+        Field(editor, d, "angle", "Angle", d.degrees, "°", allowNegative = true) { d.degrees = it; editor.draftChanged() }
     } else {
-        NumberRow("Spacing", d.spacing, "mm", allowNegative = true) { d.spacing = it; editor.draftChanged() }
+        Field(editor, d, "spacing", "Spacing", d.spacing, "mm", allowNegative = true) { d.spacing = it; editor.draftChanged() }
         AxisRow("And along", d.axis2, true) { d.axis2 = it; editor.draftChanged() }
         if (d.axis2 != null) {
-            NumberRow("Count", d.count2, "", allowNegative = false) { d.count2 = it; editor.draftChanged() }
-            NumberRow("Spacing", d.spacing2, "mm", allowNegative = true) { d.spacing2 = it; editor.draftChanged() }
+            Field(editor, d, "count2", "Count", d.count2, "", allowNegative = false) { d.count2 = it; editor.draftChanged() }
+            Field(editor, d, "spacing2", "Spacing", d.spacing2, "mm", allowNegative = true) { d.spacing2 = it; editor.draftChanged() }
         }
     }
     Toggle("Join to the original", d.join) { d.join = it; editor.draftChanged() }
@@ -354,11 +374,11 @@ internal fun SplitSettings(editor: DesignEditor, d: DesignEditor.SplitDraft) {
 @Composable
 internal fun MoveSettings(editor: DesignEditor, d: DesignEditor.MoveDraft) {
     Header("Move", Icons.move, Palette.modify, bodiesLabel(d.bodies, "All bodies"))
-    NumberRow("X", d.dx, "mm", allowNegative = true) { d.dx = it; editor.draftChanged() }
-    NumberRow("Y", d.dy, "mm", allowNegative = true) { d.dy = it; editor.draftChanged() }
-    NumberRow("Z", d.dz, "mm", allowNegative = true) { d.dz = it; editor.draftChanged() }
+    Field(editor, d, "dx", "X", d.dx, "mm", allowNegative = true) { d.dx = it; editor.draftChanged() }
+    Field(editor, d, "dy", "Y", d.dy, "mm", allowNegative = true) { d.dy = it; editor.draftChanged() }
+    Field(editor, d, "dz", "Z", d.dz, "mm", allowNegative = true) { d.dz = it; editor.draftChanged() }
     AxisRow("Turn round", d.axis, false) { d.axis = it!!; editor.draftChanged() }
-    NumberRow("By", d.degrees, "°", allowNegative = true) { d.degrees = it; editor.draftChanged() }
+    Field(editor, d, "angle", "By", d.degrees, "°", allowNegative = true) { d.degrees = it; editor.draftChanged() }
     Toggle("Move a copy", d.copy) { d.copy = it; editor.draftChanged() }
 }
 
@@ -374,10 +394,10 @@ internal fun PlaneSettings(editor: DesignEditor, d: DesignEditor.PlaneDraft) {
     Segmented(d.planes.map { it.first }, d.planes.indexOfFirst { it.second == d.base }.coerceAtLeast(0)) { d.base = d.planes[it].second; editor.draftChanged() }
     when (d.kind) {
         com.rm.parrotmetric.design.PlaneFeature.Kind.Offset ->
-            NumberRow("Distance", d.offset, "mm", allowNegative = true) { d.offset = it; editor.draftChanged() }
+            Field(editor, d, "offset", "Distance", d.offset, "mm", allowNegative = true) { d.offset = it; editor.draftChanged() }
         com.rm.parrotmetric.design.PlaneFeature.Kind.Angle -> {
             Segmented(listOf("Round its x", "Round its y"), if (d.turnRoundY) 1 else 0) { d.turnRoundY = it == 1; editor.draftChanged() }
-            NumberRow("Angle", d.degrees, "°", allowNegative = true) { d.degrees = it; editor.draftChanged() }
+            Field(editor, d, "angle", "Angle", d.degrees, "°", allowNegative = true) { d.degrees = it; editor.draftChanged() }
         }
         com.rm.parrotmetric.design.PlaneFeature.Kind.Midway -> {
             Text("And", fontSize = 13.sp, color = Palette.muted)
@@ -391,7 +411,7 @@ internal fun PlaneSettings(editor: DesignEditor, d: DesignEditor.PlaneDraft) {
 internal fun AxisSettings(editor: DesignEditor, d: DesignEditor.AxisDraft) {
     Header("Axis", Icons.axis, Palette.construct, null)
     AxisRow("Along", d.along, false) { d.along = it!!; editor.draftChanged() }
-    NumberRow("Through X", d.x, "mm", allowNegative = true) { d.x = it; editor.draftChanged() }
-    NumberRow("Y", d.y, "mm", allowNegative = true) { d.y = it; editor.draftChanged() }
-    NumberRow("Z", d.z, "mm", allowNegative = true) { d.z = it; editor.draftChanged() }
+    Field(editor, d, "x", "Through X", d.x, "mm", allowNegative = true) { d.x = it; editor.draftChanged() }
+    Field(editor, d, "y", "Y", d.y, "mm", allowNegative = true) { d.y = it; editor.draftChanged() }
+    Field(editor, d, "z", "Z", d.z, "mm", allowNegative = true) { d.z = it; editor.draftChanged() }
 }

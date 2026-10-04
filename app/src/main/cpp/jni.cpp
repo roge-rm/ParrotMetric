@@ -5,6 +5,12 @@
 #include <jni.h>
 
 #include <BRepAdaptor_Curve.hxx>
+#include <BRepAdaptor_Surface.hxx>
+#include <BRepExtrema_DistShapeShape.hxx>
+#include <BRepGProp.hxx>
+#include <GProp_GProps.hxx>
+#include <Standard_Failure.hxx>
+#include <cstdio>
 #include <BRepBndLib.hxx>
 #include <BRepBuilderAPI_Transform.hxx>
 #include <BRep_Tool.hxx>
@@ -25,6 +31,7 @@
 
 #include "display/display_mesh.h"
 #include "io/exchange.h"
+#include "io/mesh_formats.h"
 #include "mesh/mesh_body.h"
 #include "mesh/stl.h"
 #include "model/operations.h"
@@ -48,6 +55,7 @@ struct Shown {
     int sketchIndex = 0;                            // Sketches: which of the sketches passed to show.
 };
 std::vector<Shown> shown;
+std::vector<pm::Body> shownBodies;  // The bodies of the last show(), in order, for measuring.
 std::vector<pm::Pick> selection;
 size_t shownTriangles = 0;
 
@@ -239,6 +247,7 @@ pm::DisplayMesh displayPlane(const double* p, double half) {
     const float face[4] = {1.0f, 0.82f, 0.25f, 0.12f};
     std::copy(edge, edge + 4, d.edgeColour);
     std::copy(face, face + 4, d.faceColour);
+    d.behind = true;
     return d;
 }
 
@@ -389,13 +398,26 @@ JNIEXPORT jdoubleArray JNICALL Java_com_rm_parrotmetric_Core_facePlane(JNIEnv* e
     }
 }
 
-/** Reads a file into a body. format: 0 STL (a mesh), 1 STEP, 2 IGES (solids). Faces are named F<id>.i<k>. */
+/**
+ * Reads a file into a body. format: 0 STL, 3 OBJ, 4 3MF (meshes; a 3MF's
+ * objects become one body), 1 STEP, 2 IGES (solids, faces named F<id>.i<k>).
+ */
 JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_importBody(JNIEnv* env, jobject, jint id, jbyteArray data, jint format) {
     try {
         auto bytes = bytesOf(env, data);
         pm::Body b;
         if (format == 0) {
             b.mesh = pm::MeshBody::fromMesh(pm::readStl(bytes));
+        } else if (format == 3) {
+            b.mesh = pm::MeshBody::fromMesh(pm::readObj(std::string(bytes.begin(), bytes.end())));
+        } else if (format == 4) {
+            pm::Mesh all;
+            for (const auto& o : pm::read3mf(bytes)) {
+                uint32_t base = uint32_t(all.vertices.size());
+                all.vertices.insert(all.vertices.end(), o.mesh.vertices.begin(), o.mesh.vertices.end());
+                for (auto t : o.mesh.triangles) all.triangles.push_back({t[0] + base, t[1] + base, t[2] + base});
+            }
+            b.mesh = pm::MeshBody::fromMesh(all);
         } else {
             pm::Solid s = pm::readSolid(bytes, format == 1 ? pm::SolidFormat::Step : pm::SolidFormat::Iges);
             pm::NamedShape named;
@@ -554,20 +576,35 @@ JNIEXPORT jboolean JNICALL Java_com_rm_parrotmetric_Core_isMesh(JNIEnv*, jobject
 }
 
 /**
- * Bodies as a file: format 0 STL (everything, merged), 1 STEP, 2 IGES
- * (solids only). Null if there's nothing that format can hold.
+ * Bodies as a file: format 0 STL (merged), 3 OBJ or 4 3MF (a named object
+ * each), 1 STEP or 2 IGES (solids only). quality 0 fine, 1 medium, 2 coarse
+ * sets how closely solids are followed by triangles. Null if there's
+ * nothing that format can hold.
  */
-JNIEXPORT jbyteArray JNICALL Java_com_rm_parrotmetric_Core_exportBodies(JNIEnv* env, jobject, jlongArray handles, jint format) {
+JNIEXPORT jbyteArray JNICALL Java_com_rm_parrotmetric_Core_exportBodies(JNIEnv* env, jobject, jlongArray handles, jobjectArray names,
+                                                                       jint format, jint quality) {
     try {
         std::vector<pm::Body> bodies;
         {
             std::lock_guard<std::mutex> g(lock);
             for (jlong h : longs(env, handles)) bodies.push_back(store.get(h));
         }
+        auto labels = strings(env, names);
+        const double chords[3] = {0.005, 0.02, 0.1}, angles[3] = {0.1, 0.25, 0.5};
+        int q = std::clamp(int(quality), 0, 2);
+        if (format == 3 || format == 4) {
+            std::vector<pm::NamedMesh> objects;
+            for (size_t i = 0; i < bodies.size(); ++i)
+                objects.push_back({i < labels.size() ? labels[i] : "Body", bodies[i].asMesh(chords[q], angles[q]).toMesh()});
+            if (objects.empty()) return nullptr;
+            if (format == 4) return array(env, pm::write3mf(objects));
+            std::string text = pm::writeObj(objects);
+            return array(env, std::vector<uint8_t>(text.begin(), text.end()));
+        }
         if (format == 0) {
             pm::Mesh all;
             for (const auto& b : bodies) {
-                pm::Mesh m = b.asMesh().toMesh();
+                pm::Mesh m = b.asMesh(chords[q], angles[q]).toMesh();
                 uint32_t base = uint32_t(all.vertices.size());
                 all.vertices.insert(all.vertices.end(), m.vertices.begin(), m.vertices.end());
                 for (auto t : m.triangles) all.triangles.push_back({t[0] + base, t[1] + base, t[2] + base});
@@ -645,6 +682,7 @@ JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_show(JNIEnv* env, jobject, 
     }
     std::lock_guard<std::mutex> g(lock);
     shown = std::move(nextShown);
+    shownBodies = bodies;
     shownTriangles = triangles;
     selection.clear();
     renderer.setBodies(std::move(meshes), refit);
@@ -706,6 +744,120 @@ JNIEXPORT jobjectArray JNICALL Java_com_rm_parrotmetric_Core_selectedFaces(JNIEn
         if (p.kind == pm::Pick::Face && !shown[p.body].sketch && p.index < shown[p.body].faceNames.size())
             out.push_back(std::to_string(p.body) + "\t" + shown[p.body].faceNames[p.index]);
     return stringArray(env, out);
+}
+
+/** Shows a section: everything behind the plane through (ox, oy, oz) facing (nx, ny, nz) is hidden. */
+JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_setSection(JNIEnv*, jobject, jboolean on, jdouble ox, jdouble oy, jdouble oz, jdouble nx, jdouble ny, jdouble nz) {
+    std::lock_guard<std::mutex> g(lock);
+    renderer.setClip(float(nx), float(ny), float(nz), float(-(nx * ox + ny * oy + nz * oz)), on);
+}
+
+namespace {
+
+std::string mm(double v) {
+    char b[48];
+    std::snprintf(b, sizeof b, "%.2f", v);
+    std::string s(b);
+    while (s.back() == '0') s.pop_back();
+    if (s.back() == '.') s.pop_back();
+    return s;
+}
+
+}  // namespace
+
+/**
+ * Measurements of what's selected, as lines to show: an edge's length (and
+ * radius), a face's area (and radius), the gap and angle between two
+ * things, and the volume and size of the body they're on.
+ */
+JNIEXPORT jobjectArray JNICALL Java_com_rm_parrotmetric_Core_measure(JNIEnv* env, jobject) {
+    std::vector<TopoDS_Shape> picked;
+    std::vector<pm::Body> owners;
+    // The bodies shown come from the last show(); the picked shapes are found by name in them.
+    std::vector<std::string> lines;
+    try {
+        std::vector<std::pair<int, std::string>> faces, edges;
+        {
+            std::lock_guard<std::mutex> g(lock);
+            for (const auto& p : selection) {
+                const Shown& s = shown[p.body];
+                if (s.sketch || s.plane != -1) continue;
+                if (p.kind == pm::Pick::Face && p.index < s.faceNames.size()) faces.push_back({int(p.body), s.faceNames[p.index]});
+                if (p.kind == pm::Pick::Edge && p.index < s.edgeNames.size()) edges.push_back({int(p.body), s.edgeNames[p.index]});
+            }
+            for (size_t b = 0; b < shownBodies.size(); ++b) owners.push_back(shownBodies[b]);
+        }
+        for (const auto& [b, n] : edges) {
+            if (size_t(b) >= owners.size() || !owners[size_t(b)].solid) continue;
+            for (const auto& e : owners[size_t(b)].solid->findEdges(n)) {
+                picked.push_back(e);
+                GProp_GProps props;
+                BRepGProp::LinearProperties(e, props);
+                std::string line = "Edge " + mm(props.Mass()) + " mm long";
+                BRepAdaptor_Curve c(e);
+                if (c.GetType() == GeomAbs_Circle) line += ", radius " + mm(c.Circle().Radius());
+                lines.push_back(line);
+                break;
+            }
+        }
+        for (const auto& [b, n] : faces) {
+            if (size_t(b) >= owners.size() || !owners[size_t(b)].solid) continue;
+            for (const auto& f : owners[size_t(b)].solid->findFaces(n)) {
+                picked.push_back(f);
+                GProp_GProps props;
+                BRepGProp::SurfaceProperties(f, props);
+                std::string line = "Face " + mm(props.Mass()) + " mm²";
+                BRepAdaptor_Surface su(f);
+                if (su.GetType() == GeomAbs_Cylinder) line += ", radius " + mm(su.Cylinder().Radius());
+                lines.push_back(line);
+                break;
+            }
+        }
+        if (picked.size() == 2) {
+            BRepExtrema_DistShapeShape dist(picked[0], picked[1]);
+            if (dist.IsDone()) lines.push_back("Apart " + mm(dist.Value()) + " mm");
+            // The angle between two flat faces or two straight edges.
+            auto direction = [](const TopoDS_Shape& s, gp_Dir& d) {
+                if (s.ShapeType() == TopAbs_FACE) {
+                    BRepAdaptor_Surface su(TopoDS::Face(s));
+                    if (su.GetType() != GeomAbs_Plane) return false;
+                    d = su.Plane().Axis().Direction();
+                    return true;
+                }
+                BRepAdaptor_Curve c(TopoDS::Edge(s));
+                if (c.GetType() != GeomAbs_Line) return false;
+                d = c.Line().Direction();
+                return true;
+            };
+            gp_Dir d1, d2;
+            if (picked[0].ShapeType() == picked[1].ShapeType() && direction(picked[0], d1) && direction(picked[1], d2)) {
+                double a = d1.Angle(d2) * 180 / M_PI;
+                if (a > 90) a = 180 - a;
+                lines.push_back("At " + mm(a) + "°");
+            }
+        }
+        // The body under the first pick.
+        int body = !faces.empty() ? faces[0].first : !edges.empty() ? edges[0].first : -1;
+        if (body >= 0 && size_t(body) < owners.size()) {
+            const pm::Body& b = owners[size_t(body)];
+            Bnd_Box box;
+            double vol = 0;
+            if (b.solid) {
+                GProp_GProps props;
+                BRepGProp::VolumeProperties(b.solid->shape, props);
+                vol = props.Mass();
+                BRepBndLib::AddOptimal(b.solid->shape, box, false, false);
+            }
+            if (!box.IsVoid()) {
+                double x0, y0, z0, x1, y1, z1;
+                box.Get(x0, y0, z0, x1, y1, z1);
+                lines.push_back("Body " + mm(vol / 1000) + " cm³, " + mm(x1 - x0) + " × " + mm(y1 - y0) + " × " + mm(z1 - z0) + " mm");
+            }
+        }
+    } catch (const Standard_Failure&) {
+        lines.push_back("That couldn't be measured");
+    }
+    return stringArray(env, lines);
 }
 
 /** The selected construction planes, by their place in the list passed to show. */

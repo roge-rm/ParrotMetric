@@ -6,8 +6,9 @@ package com.rm.parrotmetric.sketch
  * come out in mm and angles in degrees. Null if it isn't something it can read.
  */
 object Expression {
-    fun evaluate(text: String): Double? = try {
-        Parser(text.trim()).run {
+    /** Reads an expression; names in it are looked up in [names]. */
+    fun evaluate(text: String, names: Map<String, Double> = emptyMap()): Double? = try {
+        Parser(text.trim(), names).run {
             val v = sum()
             skipSpace()
             if (pos == s.length) v else null
@@ -16,7 +17,16 @@ object Expression {
         null
     }
 
-    private class Parser(val s: String) {
+    /** Whether the text uses any names, so it's more than a plain number. */
+    fun usesNames(text: String) = Regex("[A-Za-z_][A-Za-z0-9_]*").findAll(text).any { m ->
+        val w = m.value.lowercase()
+        w !in setOf("mm", "cm", "m", "in", "deg")
+    }
+
+    /** A name a parameter can have: a letter or _, then letters, digits or _, and not a unit. */
+    fun isName(text: String) = Regex("[A-Za-z_][A-Za-z0-9_]*").matches(text) && text.lowercase() !in setOf("mm", "cm", "m", "in", "deg")
+
+    private class Parser(val s: String, val names: Map<String, Double>) {
         var pos = 0
 
         fun skipSpace() {
@@ -61,6 +71,11 @@ object Expression {
                 require(s.getOrNull(pos) == ')')
                 pos++
                 return v * unit()
+            }
+            if (pos < s.length && (s[pos].isLetter() || s[pos] == '_')) {
+                val from = pos
+                while (pos < s.length && (s[pos].isLetterOrDigit() || s[pos] == '_')) pos++
+                return requireNotNull(names[s.substring(from, pos)]) * unit()
             }
             val start = pos
             while (pos < s.length && (s[pos].isDigit() || s[pos] == '.' || s[pos] == ',')) pos++

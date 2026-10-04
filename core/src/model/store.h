@@ -16,8 +16,8 @@ struct Body {
     std::optional<MeshBody> mesh;
 
     bool isMesh() const { return mesh.has_value(); }
-    /** As a mesh, tessellating a solid if need be. */
-    MeshBody asMesh() const;
+    /** As a mesh, tessellating a solid if need be: chord tolerance in mm, angle in radians. */
+    MeshBody asMesh(double chord = 0.01, double angle = 0.25) const;
 };
 
 /**

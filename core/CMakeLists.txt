@@ -39,6 +39,7 @@ add_library(pmcore STATIC
         src/mesh/stl.cpp
         src/mesh/mesh_body.cpp
         src/io/exchange.cpp
+        src/io/mesh_formats.cpp
         src/sketch/regions.cpp
         src/model/named_shape.cpp
         src/model/operations.cpp
@@ -51,14 +52,14 @@ if(ANDROID)
 endif()
 target_include_directories(pmcore PUBLIC src)
 target_include_directories(pmcore SYSTEM PUBLIC ${OpenCASCADE_INCLUDE_DIR} ${third_party}/eigen)
-target_link_libraries(pmcore PUBLIC manifold
+target_link_libraries(pmcore PUBLIC manifold z
         TKDESTEP TKDEIGES TKXSBase TKDE
         TKOffset TKFillet TKBool TKBO TKPrim TKMesh TKShHealing TKTopAlgo TKGeomAlgo
         TKBRep TKGeomBase TKG3d TKG2d TKMath TKernel)
 
 if(PM_TESTS)
     add_subdirectory(${third_party}/catch2 ${CMAKE_BINARY_DIR}/catch2 EXCLUDE_FROM_ALL)
-    add_executable(pmcore_tests tests/stl_test.cpp tests/mesh_body_test.cpp tests/solid_test.cpp tests/exchange_test.cpp tests/display_test.cpp tests/regions_test.cpp tests/operations_test.cpp)
+    add_executable(pmcore_tests tests/stl_test.cpp tests/mesh_body_test.cpp tests/solid_test.cpp tests/exchange_test.cpp tests/display_test.cpp tests/regions_test.cpp tests/operations_test.cpp tests/mesh_formats_test.cpp)
     target_link_libraries(pmcore_tests PRIVATE pmcore Catch2::Catch2WithMain)
     include(CTest)
     add_test(NAME pmcore_tests COMMAND pmcore_tests)

@@ -20,6 +20,7 @@ import com.rm.parrotmetric.design.Feature
 import com.rm.parrotmetric.design.FilletFeature
 import com.rm.parrotmetric.design.ImportFeature
 import com.rm.parrotmetric.design.Operation
+import com.rm.parrotmetric.design.Parameter
 import com.rm.parrotmetric.design.PlaneRef
 import com.rm.parrotmetric.design.RegionRef
 import com.rm.parrotmetric.design.RevolveFeature
@@ -60,6 +61,9 @@ object DesignFile {
         "title" to title,
         "marker" to design.marker,
         "features" to design.features.map { feature(it) },
+        "bodies" to design.bodies.mapValues { (_, b) -> mapOf("name" to b.name, "component" to b.component, "hidden" to b.hidden) },
+        "parameters" to design.parameters.map { mapOf("name" to it.name, "expression" to it.expression) },
+        "expressions" to design.expressions.mapKeys { it.key.toString() },
     ).toString()
 
     /** Reads a file into the design. Returns its title. Throws IllegalArgumentException if it can't. */
@@ -68,7 +72,15 @@ object DesignFile {
         if (root["format"] != Json.Str("parrotmetric")) throw IllegalArgumentException("Not a design file")
         if (root.int("version") > VERSION) throw IllegalArgumentException("This file was saved by a newer ParrotMetric")
         val features = root.arr("features").map { feature(it as Json.Obj) }
-        into.load(features, root.int("marker"))
+        val bodies = (root["bodies"] as? Json.Obj)?.fields?.mapValues { (_, v) ->
+            v as Json.Obj
+            Design.BodyInfo((v["name"] as? Json.Str)?.value, (v["component"] as? Json.Str)?.value, v.bool("hidden"))
+        } ?: emptyMap()
+        val parameters = root.arr("parameters").map { p -> p as Json.Obj; Parameter(p.str("name"), p.str("expression")) }
+        val expressions = (root["expressions"] as? Json.Obj)?.fields?.map { (k, v) ->
+            k.toInt() to (v as Json.Obj).fields.mapValues { (it.value as Json.Str).value }
+        }?.toMap() ?: emptyMap()
+        into.load(features, root.int("marker"), bodies, parameters, expressions)
         return (root["title"] as? Json.Str)?.value ?: "Untitled"
     }
 
@@ -228,12 +240,12 @@ object DesignFile {
         is Constraint.TangentLine -> mapOf("type" to "tangentLine", "line" to c.line.id, "curve" to c.curve.id)
         is Constraint.TangentCircles -> mapOf("type" to "tangentCircles", "c1" to c.c1.id, "c2" to c.c2.id, "inside" to c.inside)
         is Constraint.Symmetric -> mapOf("type" to "symmetric", "p" to c.p.id, "q" to c.q.id, "line" to c.line.id)
-        is Constraint.Distance -> mapOf("type" to "distance", "p" to c.p.id, "q" to c.q.id, "value" to c.value)
-        is Constraint.Length -> mapOf("type" to "length", "line" to c.line.id, "value" to c.value)
-        is Constraint.AxisDistance -> mapOf("type" to "axisDistance", "p" to c.p.id, "q" to c.q.id, "vertical" to c.vertical, "value" to c.value)
-        is Constraint.PointLineDistance -> mapOf("type" to "pointLineDistance", "p" to c.p.id, "line" to c.line.id, "value" to c.value)
-        is Constraint.Radius -> mapOf("type" to "radius", "curve" to c.curve.id, "diameter" to c.diameter, "value" to c.value)
-        is Constraint.Angle -> mapOf("type" to "angle", "l1" to c.l1.id, "l2" to c.l2.id, "value" to c.value)
+        is Constraint.Distance -> mapOf("type" to "distance", "p" to c.p.id, "q" to c.q.id, "value" to c.value, "expression" to c.expression)
+        is Constraint.Length -> mapOf("type" to "length", "line" to c.line.id, "value" to c.value, "expression" to c.expression)
+        is Constraint.AxisDistance -> mapOf("type" to "axisDistance", "p" to c.p.id, "q" to c.q.id, "vertical" to c.vertical, "value" to c.value, "expression" to c.expression)
+        is Constraint.PointLineDistance -> mapOf("type" to "pointLineDistance", "p" to c.p.id, "line" to c.line.id, "value" to c.value, "expression" to c.expression)
+        is Constraint.Radius -> mapOf("type" to "radius", "curve" to c.curve.id, "diameter" to c.diameter, "value" to c.value, "expression" to c.expression)
+        is Constraint.Angle -> mapOf("type" to "angle", "l1" to c.l1.id, "l2" to c.l2.id, "value" to c.value, "expression" to c.expression)
     }
 
     private fun sketch(o: Json.Obj): Sketch {
@@ -282,6 +294,7 @@ object DesignFile {
                 "angle" -> Constraint.Angle(line(c, "l1"), line(c, "l2"), c.num("value"))
                 else -> continue
             }
+            if (k is Constraint.Dimension) k.expression = (c["expression"] as? Json.Str)?.value
             s.loadConstraint(k)
         }
         return s

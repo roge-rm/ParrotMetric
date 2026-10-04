@@ -83,8 +83,7 @@ interface ModelActions {
     fun save()
     fun saveAs()
     fun openFile()
-    fun exportStl()
-    fun exportStep()
+    fun export(request: com.rm.parrotmetric.ui.design.ExportRequest)
     fun clearSelection()
     fun fit()
     fun viewFrom(yaw: Float, pitch: Float)
@@ -112,6 +111,8 @@ fun ModelScreen(
     actions: ModelActions,
 ) {
     var openGroup by remember { mutableStateOf<ToolGroup?>(null) }
+    // A sheet over the bottom: the parts list or export.
+    var sheet by remember { mutableStateOf<String?>(null) }
     MaterialTheme(colorScheme = Palette.scheme) {
         val sketch = state.sketch
         // The view stays put while the controls over it change, so it keeps its GL context.
@@ -127,7 +128,7 @@ fun ModelScreen(
                     SketchBottom(sketch)
                 }
             } else Column(Modifier.fillMaxSize().safeDrawingPadding()) {
-                TopBar(logo, state, design, actions)
+                TopBar(logo, state, design, actions, onParts = { sheet = if (sheet == "parts") null else "parts" }, onExport = { sheet = "export" })
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     Column(
                         Modifier.align(Alignment.TopEnd).padding(top = 6.dp, end = 12.dp),
@@ -149,13 +150,23 @@ fun ModelScreen(
                 Column(Modifier.imePadding().padding(start = 10.dp, end = 10.dp, bottom = 10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     if (design.panel != null) {
                         FeaturePanel(design)
+                    } else if (sheet == "parts") {
+                        com.rm.parrotmetric.ui.design.PartsSheet(design) { sheet = null }
+                    } else if (sheet == "measure") {
+                        com.rm.parrotmetric.ui.design.MeasureSheet(design) { design.stopMeasuring(); sheet = null }
+                    } else if (sheet == "section") {
+                        com.rm.parrotmetric.ui.design.SectionSheet(design) { design.stopSection(); sheet = null }
+                    } else if (sheet == "parameters") {
+                        com.rm.parrotmetric.ui.design.ParametersSheet(design) { sheet = null }
+                    } else if (sheet == "export") {
+                        com.rm.parrotmetric.ui.design.ExportSheet(design, { sheet = null }) { actions.export(it); sheet = null }
                     } else {
                         AnimatedVisibility(
                             visible = openGroup != null,
                             enter = expandVertically(tween(220)) + fadeIn(tween(220)),
                             exit = shrinkVertically(tween(180)) + fadeOut(tween(180)),
                         ) {
-                            openGroup?.let { ToolSheet(it, state, design, actions) { openGroup = null } }
+                            openGroup?.let { ToolSheet(it, state, design, actions, onSheet = { name -> sheet = name }) { openGroup = null } }
                         }
                         if (openGroup == null) HistoryBar(design, actions)
                         GroupBar(openGroup) { openGroup = if (openGroup == it) null else it }
@@ -167,7 +178,7 @@ fun ModelScreen(
 }
 
 @Composable
-private fun TopBar(logo: @Composable () -> Unit, state: ModelState, design: DesignEditor, actions: ModelActions) {
+private fun TopBar(logo: @Composable () -> Unit, state: ModelState, design: DesignEditor, actions: ModelActions, onParts: () -> Unit, onExport: () -> Unit) {
     var menu by remember { mutableStateOf(false) }
     design.version
     val bodies = design.built?.bodies?.size ?: 0
@@ -179,8 +190,7 @@ private fun TopBar(logo: @Composable () -> Unit, state: ModelState, design: Desi
                 DropdownMenuItem({ Text("Open…") }, onClick = { menu = false; actions.openFile() }, leadingIcon = { Icon(Icons.open, null, tint = Palette.mint) })
                 DropdownMenuItem({ Text("Save") }, onClick = { menu = false; actions.save() }, leadingIcon = { Icon(Icons.save, null, tint = Palette.mint) })
                 DropdownMenuItem({ Text("Save as…") }, onClick = { menu = false; actions.saveAs() }, leadingIcon = { Icon(Icons.save, null, tint = Palette.mint) })
-                DropdownMenuItem({ Text("Export STL…") }, onClick = { menu = false; actions.exportStl() }, leadingIcon = { Icon(Icons.export, null, tint = Palette.mint) })
-                DropdownMenuItem({ Text("Export STEP…") }, onClick = { menu = false; actions.exportStep() }, leadingIcon = { Icon(Icons.export, null, tint = Palette.mint) })
+                DropdownMenuItem({ Text("Export…") }, onClick = { menu = false; onExport() }, leadingIcon = { Icon(Icons.export, null, tint = Palette.mint) })
             }
         }
         Column(Modifier.weight(1f).padding(start = 2.dp)) {
@@ -197,7 +207,7 @@ private fun TopBar(logo: @Composable () -> Unit, state: ModelState, design: Desi
                 maxLines = 1,
             )
         }
-        IconButton(onClick = {}, enabled = false) { Icon(Icons.parts, "Parts list", tint = Palette.faint) }
+        IconButton(onClick = onParts) { Icon(Icons.parts, "Parts list", tint = Palette.text) }
         IconButton(onClick = design::undo, enabled = design.canUndo) { Icon(Icons.undo, "Undo", tint = if (design.canUndo) Palette.text else Palette.faint) }
         IconButton(onClick = design::redo, enabled = design.canRedo) { Icon(Icons.redo, "Redo", tint = if (design.canRedo) Palette.text else Palette.faint) }
     }
@@ -334,7 +344,7 @@ private fun GroupBar(open: ToolGroup?, onGroup: (ToolGroup) -> Unit) {
 private class Tool(val label: String, val icon: ImageVector, val action: (() -> Unit)?)
 
 @Composable
-private fun ToolSheet(group: ToolGroup, state: ModelState, design: DesignEditor, actions: ModelActions, close: () -> Unit) {
+private fun ToolSheet(group: ToolGroup, state: ModelState, design: DesignEditor, actions: ModelActions, onSheet: (String) -> Unit, close: () -> Unit) {
     var meshTools by remember(group) { mutableStateOf(false) }
     val oneFace = (state.selectedFaces == 1 && state.selectedPlanes == 0 || state.selectedPlanes == 1 && state.selectedFaces == 0) && state.selectedEdges == 0
     val tools = when (group) {
@@ -374,7 +384,11 @@ private fun ToolSheet(group: ToolGroup, state: ModelState, design: DesignEditor,
             Tool("Midplane", Icons.plane) { design.startPlane(com.rm.parrotmetric.design.PlaneFeature.Kind.Midway) },
             Tool("Axis", Icons.axis) { design.startAxis() },
         )
-        ToolGroup.Inspect -> listOf(Tool("Measure", Icons.measure, null), Tool("Section", Icons.section, null))
+        ToolGroup.Inspect -> listOf(
+            Tool("Measure", Icons.measure) { design.startMeasuring(); onSheet("measure") },
+            Tool("Section", Icons.section) { design.startSection(); onSheet("section") },
+            Tool("Parameters", Icons.parameters) { onSheet("parameters") },
+        )
     }
     Surface(color = Palette.surface, shape = RoundedCornerShape(26.dp)) {
         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {

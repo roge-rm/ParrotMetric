@@ -103,6 +103,11 @@ class CoreViewport(private val gl: (() -> Unit) -> Unit) : Viewport {
     }
 
     override fun selectedPlanes() = Core.selectedPlanes().toList()
+    override fun measure() = Core.measure().toList()
+    override fun setSection(on: Boolean, origin: Vec3, normal: Vec3) {
+        Core.setSection(on, origin.x, origin.y, origin.z, normal.x, normal.y, normal.z)
+        gl {}
+    }
 
     override fun faceOutline(body: Long, face: String, plane: SketchPlane): List<ProfileCurve> {
         val d = Core.faceOutline(body, face, plane.numbers())

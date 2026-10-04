@@ -32,6 +32,8 @@ struct DisplayMesh {
     float edgeColour[4] = {0.13f, 0.18f, 0.17f, 0.9f};
     // Face colour, RGBA. Below 1 alpha the faces are see-through and drawn after the solid ones.
     float faceColour[4] = {0.80f, 0.82f, 0.80f, 1.0f};
+    // Drawn a touch behind its true place, so sketches on it are seen and tapped first (construction planes).
+    bool behind = false;
 
     size_t vertexCount() const { return positions.size() / 3; }
 };

@@ -31,6 +31,12 @@ public:
     /** Draws a frame. True if it's moving and wants another frame soon. */
     bool draw();
 
+    /** Hides everything on the back side of a plane (ax + by + cz + d < 0), for a section view. Off when off is true. */
+    void setClip(float a, float b, float c, float d, bool on) {
+        clip_[0] = a; clip_[1] = b; clip_[2] = c; clip_[3] = d;
+        clipping_ = on;
+    }
+
     /** Screen pixels per density-independent pixel, for line widths. */
     void setDensity(float density) { density_ = density; }
 
@@ -67,6 +73,7 @@ private:
         int faceIndices = 0, edgeIndices = 0;
         float edgeColour[4];
         float faceColour[4];
+        bool behind = false;
         uint32_t faceCount = 0, edgeCount = 0;
     };
 
@@ -86,6 +93,8 @@ private:
 
     int width_ = 1, height_ = 1;
     float lastViewProjection_[16] = {};
+    float clip_[4] = {0, 0, 1, 0};
+    bool clipping_ = false;
     float density_ = 1;
 
     std::vector<DisplayMesh> bodies_;

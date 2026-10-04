@@ -24,9 +24,11 @@ uniform mat4 viewProjection;
 uniform mat3 view;
 uniform sampler2D selected;
 out vec3 eyeNormal;
+out vec3 world;
 flat out float chosen;
 void main() {
     eyeNormal = view * normal;
+    world = position;
     chosen = texelFetch(selected, ivec2(int(face) % 1024, int(face) / 1024), 0).r;
     gl_Position = viewProjection * vec4(position, 1.0);
 })";
@@ -34,10 +36,19 @@ void main() {
 const char* kFaceFragment = R"(#version 300 es
 precision mediump float;
 in vec3 eyeNormal;
+in vec3 world;
 flat in float chosen;
 uniform vec4 faceColour;
+uniform vec4 clip;
+uniform bool clipping;
 out vec4 colour;
 void main() {
+    if (clipping && dot(vec4(world, 1.0), clip) < 0.0) discard;
+    // With a section cut, the inside shows through the cut: flat and warm, like a cut face.
+    if (clipping && !gl_FrontFacing && faceColour.a >= 1.0) {
+        colour = vec4(0.85, 0.55, 0.38, 1.0);
+        return;
+    }
     vec3 n = normalize(eyeNormal);
     if (!gl_FrontFacing) n = -n;
     // Sky above and warm floor below, a key light from the upper left and a soft rim.
@@ -62,7 +73,9 @@ uniform float selectedWidth;
 uniform sampler2D selected;
 flat out float chosen;
 flat out uint id;
+out vec3 world;
 void main() {
+    world = corner.x < 0.5 ? a : b;
     vec4 pa = viewProjection * vec4(a, 1.0);
     vec4 pb = viewProjection * vec4(b, 1.0);
     vec4 p = corner.x < 0.5 ? pa : pb;
@@ -82,9 +95,13 @@ const char* kEdgeFragment = R"(#version 300 es
 precision mediump float;
 flat in float chosen;
 flat in uint id;
+in vec3 world;
 uniform vec4 edgeColour;
+uniform vec4 clip;
+uniform bool clipping;
 out vec4 colour;
 void main() {
+    if (clipping && dot(vec4(world, 1.0), clip) < 0.0) discard;
     colour = mix(edgeColour, vec4(1.0, 0.48, 0.24, 1.0), chosen);
 })";
 
@@ -94,17 +111,23 @@ layout(location = 0) in vec3 position;
 layout(location = 2) in uint face;
 uniform mat4 viewProjection;
 flat out uint id;
+out vec3 world;
 void main() {
     id = face;
+    world = position;
     gl_Position = viewProjection * vec4(position, 1.0);
 })";
 
 const char* kIdFragment = R"(#version 300 es
 precision highp float;
 flat in uint id;
+in vec3 world;
 uniform uint base;
+uniform vec4 clip;
+uniform bool clipping;
 out vec4 colour;
 void main() {
+    if (clipping && dot(vec4(world, 1.0), clip) < 0.0) discard;
     uint v = base + id + 1u;
     colour = vec4(float(v & 255u), float((v >> 8) & 255u), float((v >> 16) & 255u), 255.0) / 255.0;
 })";
@@ -229,6 +252,7 @@ void Renderer::upload() {
         g.faceCount = b.faceCount;
         std::copy(b.edgeColour, b.edgeColour + 4, g.edgeColour);
         std::copy(b.faceColour, b.faceColour + 4, g.faceColour);
+        g.behind = b.behind;
         g.edgeCount = uint32_t(b.edges.size());
 
         glGenVertexArrays(1, &g.faceVao);
@@ -409,6 +433,8 @@ void Renderer::drawScene(bool ids, const float* vp, const float* normal) {
     glPolygonOffset(1.5f, 2.0f);
     glUseProgram(faceProgram);
     glUniformMatrix4fv(glGetUniformLocation(faceProgram, "viewProjection"), 1, GL_FALSE, vp);
+    glUniform4fv(glGetUniformLocation(faceProgram, "clip"), 1, clip_);
+    glUniform1i(glGetUniformLocation(faceProgram, "clipping"), clipping_ ? 1 : 0);
     if (!ids) {
         glUniformMatrix3fv(glGetUniformLocation(faceProgram, "view"), 1, GL_FALSE, normal);
         glUniform1i(glGetUniformLocation(faceProgram, "selected"), 0);
@@ -427,6 +453,7 @@ void Renderer::drawScene(bool ids, const float* vp, const float* normal) {
         for (uint32_t i = 0; i < gpu_.size(); ++i) {
             const Gpu& g = gpu_[i];
             if ((g.faceColour[3] < 1.0f) != seeThrough || g.faceIndices == 0) continue;
+            if (seeThrough) glPolygonOffset(g.behind ? 2.0f : 0.0f, g.behind ? 4.0f : 0.0f);
             if (ids) glUniform1ui(glGetUniformLocation(faceProgram, "base"), i << 20);
             else glUniform4fv(glGetUniformLocation(faceProgram, "faceColour"), 1, g.faceColour);
             glActiveTexture(GL_TEXTURE0);
@@ -447,6 +474,8 @@ void Renderer::drawScene(bool ids, const float* vp, const float* normal) {
     }
     glUseProgram(edgeProgram);
     glUniformMatrix4fv(glGetUniformLocation(edgeProgram, "viewProjection"), 1, GL_FALSE, vp);
+    glUniform4fv(glGetUniformLocation(edgeProgram, "clip"), 1, clip_);
+    glUniform1i(glGetUniformLocation(edgeProgram, "clipping"), clipping_ ? 1 : 0);
     glUniform2f(glGetUniformLocation(edgeProgram, "viewport"), float(width_), float(height_));
     // Edges are easier to hit than to see: the id pass draws them a finger wide.
     glUniform1f(glGetUniformLocation(edgeProgram, "width"), (ids ? 14.0f : 1.6f) * density_);

@@ -67,7 +67,7 @@ class MainActivity : ComponentActivity() {
         }
         val format = Core.Format.forName(name)
         if (format == null) {
-            design.message = "Open a design, or an STL, STEP or IGES file"
+            design.message = "Open a design, or an STL, 3MF, OBJ, STEP or IGES file"
             return@registerForActivityResult
         }
         lifecycleScope.launch {
@@ -126,15 +126,21 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private var exportFormat = Core.Format.Stl
+    private var exportRequest = com.rm.parrotmetric.ui.design.ExportRequest("STL", 0, emptyList())
     private val saveFile = registerForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
         if (uri == null) return@registerForActivityResult
-        val bodies = design.bodies().toLongArray()
+        val request = exportRequest
+        val format = formatOf(request.format)
+        val chosen = design.allBodies().filter { b ->
+            if (request.labels.isEmpty()) !design.design.info(b.label).hidden else b.label in request.labels
+        }
+        val bodies = chosen.map { it.handle }.toLongArray()
+        val names = chosen.map { design.design.nameOf(it.label) }.toTypedArray()
         lifecycleScope.launch {
             val error = withContext(Dispatchers.Default) {
                 try {
-                    val bytes = Core.exportBodies(bodies, exportFormat.ordinal)
-                        ?: return@withContext if (exportFormat == Core.Format.Stl) "There's nothing to export" else "Meshes can only be exported as STL"
+                    val bytes = Core.exportBodies(bodies, names, format.ordinal, request.quality)
+                        ?: return@withContext if (format == Core.Format.Step || format == Core.Format.Iges) "Meshes can't be saved as ${request.format}" else "There's nothing to export"
                     contentResolver.openOutputStream(uri)?.use { it.write(bytes) } ?: return@withContext "Couldn't write the file"
                     null
                 } catch (e: RuntimeException) {
@@ -159,8 +165,10 @@ class MainActivity : ComponentActivity() {
         override fun saveAs() = saveDesign.launch(state.title + ".pmet")
 
         override fun openFile() = this@MainActivity.openFile.launch(arrayOf("*/*"))
-        override fun exportStl() = export(Core.Format.Stl)
-        override fun exportStep() = export(Core.Format.Step)
+        override fun export(request: com.rm.parrotmetric.ui.design.ExportRequest) {
+            exportRequest = request
+            saveFile.launch(state.title + "." + formatOf(request.format).extensions.first())
+        }
 
         override fun clearSelection() {
             Core.clearSelection()
@@ -189,7 +197,7 @@ class MainActivity : ComponentActivity() {
             val name = design.nextSketchName()
             val (ref, p) = if (plane != null) PlaneRef.Fixed(plane) to plane else design.sketchPlaneUnderSelection(state.yaw, name) ?: return
             newSketch = ref to name
-            openSketch(SketchEditor(p, name, Sketch(), coreRegionFinder, outlineFor(ref, p)))
+            openSketch(SketchEditor(p, name, Sketch(), coreRegionFinder, outlineFor(ref, p), design::names))
         }
 
         override fun finishSketch() {
@@ -214,7 +222,7 @@ class MainActivity : ComponentActivity() {
                 val plane = design.planeOf(f) ?: return
                 design.checkpoint()
                 newSketch = null
-                openSketch(SketchEditor(plane, f.name, f.sketch, coreRegionFinder, outlineFor(f.plane, plane)))
+                openSketch(SketchEditor(plane, f.name, f.sketch, coreRegionFinder, outlineFor(f.plane, plane), design::names))
             } else {
                 design.edit(id)
             }
@@ -315,9 +323,12 @@ class MainActivity : ComponentActivity() {
         view?.onPause()
     }
 
-    private fun export(format: Core.Format) {
-        exportFormat = format
-        saveFile.launch(state.title + "." + format.extensions.first())
+    private fun formatOf(name: String) = when (name) {
+        "3MF" -> Core.Format.ThreeMf
+        "OBJ" -> Core.Format.Obj
+        "STEP" -> Core.Format.Step
+        "IGES" -> Core.Format.Iges
+        else -> Core.Format.Stl
     }
 
     private fun displayName(uri: Uri): String =

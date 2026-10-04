@@ -8,6 +8,24 @@ import com.rm.parrotmetric.sketch.Sketch
  */
 class Design {
     private val list = mutableListOf<Feature>()
+
+    /**
+     * How each body is shown and grouped, by the label the history gives it
+     * ("Body 3"): the name it's shown by, its component, and whether it's
+     * hidden. Bodies not in here have their label as name and no component.
+     */
+    val bodies = mutableMapOf<String, BodyInfo>()
+
+    data class BodyInfo(val name: String? = null, val component: String? = null, val hidden: Boolean = false)
+
+    fun info(label: String) = bodies[label] ?: BodyInfo()
+
+    /** The parameters, in order; each can use those above it. */
+    val parameters = mutableListOf<Parameter>()
+
+    /** Fields typed as expressions, by feature id and then field name (see [Parametrics.withValue]). */
+    val expressions = mutableMapOf<Int, Map<String, String>>()
+    fun nameOf(label: String) = info(label).name ?: label
     val features: List<Feature> get() = list
 
     /** How many features are built; the marker sits after this many. */
@@ -19,7 +37,16 @@ class Design {
     fun newId() = nextId++
 
     /** Puts features read from a file in place of what's here. */
-    fun load(features: List<Feature>, marker: Int) {
+    fun load(
+        features: List<Feature>, marker: Int, bodyInfo: Map<String, BodyInfo> = emptyMap(),
+        parameters: List<Parameter> = emptyList(), expressions: Map<Int, Map<String, String>> = emptyMap(),
+    ) {
+        bodies.clear()
+        bodies.putAll(bodyInfo)
+        this.parameters.clear()
+        this.parameters += parameters
+        this.expressions.clear()
+        this.expressions.putAll(expressions)
         list.clear()
         list += features
         this.marker = marker.coerceIn(0, features.size)
@@ -60,11 +87,20 @@ class Design {
         internal val marker: Int,
         internal val nextId: Int,
         internal val sketches: Map<Sketch, Sketch.Snapshot>,
+        internal val bodies: Map<String, BodyInfo>,
+        internal val parameters: List<Parameter>,
+        internal val expressions: Map<Int, Map<String, String>>,
+        internal val dimensionExpressions: Map<com.rm.parrotmetric.sketch.Constraint.Dimension, String?>,
     )
 
     fun snapshot() = Snapshot(
         list.toList(), marker, nextId,
         list.filterIsInstance<SketchFeature>().associate { it.sketch to it.sketch.snapshot() },
+        bodies.toMap(),
+        parameters.toList(),
+        expressions.toMap(),
+        list.filterIsInstance<SketchFeature>().flatMap { f -> f.sketch.constraints.filterIsInstance<com.rm.parrotmetric.sketch.Constraint.Dimension>() }
+            .associateWith { it.expression },
     )
 
     fun restore(s: Snapshot) {
@@ -73,5 +109,12 @@ class Design {
         marker = s.marker
         nextId = s.nextId
         for ((sketch, snap) in s.sketches) sketch.restore(snap)
+        bodies.clear()
+        bodies.putAll(s.bodies)
+        parameters.clear()
+        parameters += s.parameters
+        expressions.clear()
+        expressions.putAll(s.expressions)
+        for ((d, e) in s.dimensionExpressions) d.expression = e
     }
 }

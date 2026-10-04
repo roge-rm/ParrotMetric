@@ -27,6 +27,8 @@ sealed class Constraint {
     /** A constraint with a number you can change: a dimension. */
     sealed class Dimension : Constraint() {
         abstract var value: Double
+        /** What was typed, when it uses parameters; the value is worked out from it before each rebuild. */
+        var expression: String? = null
     }
 
     // Shorthands for reading positions.

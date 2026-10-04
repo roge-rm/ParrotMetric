@@ -6,9 +6,12 @@
 
 namespace pm {
 
-MeshBody Body::asMesh() const {
+MeshBody Body::asMesh(double chord, double angle) const {
     if (mesh) return *mesh;
-    return MeshBody::fromMesh(Solid::fromShape(solid->shape).tessellate());
+    Tessellation t;
+    t.chord = chord;
+    t.angle = angle;
+    return MeshBody::fromMesh(Solid::fromShape(solid->shape).tessellate(t));
 }
 
 BodyStore::Handle BodyStore::add(Body b) {

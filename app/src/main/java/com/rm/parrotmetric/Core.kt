@@ -14,7 +14,9 @@ object Core {
     enum class Format(val extensions: List<String>) {
         Stl(listOf("stl")),
         Step(listOf("step", "stp")),
-        Iges(listOf("iges", "igs"));
+        Iges(listOf("iges", "igs")),
+        Obj(listOf("obj")),
+        ThreeMf(listOf("3mf"));
 
         companion object {
             fun forName(name: String): Format? = entries.firstOrNull { name.substringAfterLast('.').lowercase() in it.extensions }
@@ -43,13 +45,16 @@ object Core {
     external fun retain(body: Long)
     external fun release(body: Long)
     external fun isMesh(body: Long): Boolean
-    /** format as [Format]'s ordinal; null if nothing shown can go in that format. */
-    external fun exportBodies(bodies: LongArray, format: Int): ByteArray?
+    /** format as [Format]'s ordinal, quality 0 fine to 2 coarse; null if none of them can go in that format. */
+    external fun exportBodies(bodies: LongArray, names: Array<String>, format: Int, quality: Int): ByteArray?
 
     // What's shown and selected.
     /** Bodies, then sketches (a plane each and their curves), then construction planes (nine numbers each) and axes (six each). */
     external fun show(bodies: LongArray, planes: DoubleArray, curveCounts: IntArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, constructionPlanes: DoubleArray, axes: DoubleArray, refit: Boolean)
     external fun selectedPlanes(): IntArray
+    /** Lines describing what's selected: lengths, areas, gaps, angles, the body's volume and size. */
+    external fun measure(): Array<String>
+    external fun setSection(on: Boolean, ox: Double, oy: Double, oz: Double, nx: Double, ny: Double, nz: Double)
     /** A face's edges as sketch curves on a plane; see jni.cpp. */
     external fun faceOutline(body: Long, face: String, plane: DoubleArray): DoubleArray
     external fun shownTriangles(): Int

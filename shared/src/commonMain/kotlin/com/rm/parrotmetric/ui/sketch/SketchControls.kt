@@ -240,7 +240,7 @@ private fun androidx.compose.foundation.layout.RowScope.ToolRow(editor: SketchEd
 private fun DimensionEntry(editor: SketchEditor, edit: DimensionEdit) {
     val start = remember(edit) {
         val v = round(edit.initial * 100) / 100
-        val text = if (v == kotlin.math.floor(v)) v.toLong().toString() else v.toString()
+        val text = edit.existing?.expression ?: if (v == kotlin.math.floor(v)) v.toLong().toString() else v.toString()
         TextFieldValue(text, TextRange(0, text.length))
     }
     var value by remember(edit) { mutableStateOf(start) }

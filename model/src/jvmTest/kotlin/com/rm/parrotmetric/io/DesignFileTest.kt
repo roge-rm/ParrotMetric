@@ -35,11 +35,13 @@ class DesignFileTest {
         d.add(SketchFeature(d.newId(), "Sketch 2", PlaneRef.OnFace("F2.end", Vec3(1.0, 0.0, 0.0)), Sketch()))
         d.add(ImportFeature(d.newId(), "part.stl", byteArrayOf(1, 2, 3, -1), 0))
         d.moveMarker(3)
+        d.bodies["Body 1"] = Design.BodyInfo("Lid", "Case", hidden = true)
 
         val text = DesignFile.write(d, "Bracket")
         val back = Design()
         assertEquals("Bracket", DesignFile.read(text, back))
         assertEquals(3, back.marker)
+        assertEquals(Design.BodyInfo("Lid", "Case", hidden = true), back.bodies["Body 1"])
         assertEquals(d.features.size, back.features.size)
         for (i in 0 until 4) assertEquals(d.features[i].key(), back.features[i].key(), "feature $i")
         assertContentEquals(byteArrayOf(1, 2, 3, -1), (back.features[4] as ImportFeature).data)

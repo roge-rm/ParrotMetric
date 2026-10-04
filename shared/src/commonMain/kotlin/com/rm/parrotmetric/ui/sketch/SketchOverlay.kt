@@ -373,7 +373,7 @@ private fun annotations(editor: SketchEditor, proj: PlaneProjection, dp: Float):
             is Constraint.ArcRadius -> {}
             is Constraint.Length -> {
                 val a = screen(c.line.a, editor, proj); val b = screen(c.line.b, editor, proj)
-                out += Annotation(item, (a + b) / 2f + outward(a, b) * (22 * dp), format(c.value), c)
+                out += Annotation(item, (a + b) / 2f + outward(a, b) * (22 * dp), c.expression ?: format(c.value), c)
             }
             is Constraint.Distance -> {
                 val a = screen(c.p, editor, proj); val b = screen(c.q, editor, proj)
