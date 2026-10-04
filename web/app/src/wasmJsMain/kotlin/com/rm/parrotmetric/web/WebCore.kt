@@ -11,7 +11,7 @@ object WebCore : NativeCore {
         call(0, args)
     }
 
-    override fun extrude(id: Int, plane: DoubleArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, pickCounts: IntArray, pickIds: IntArray, pickPoints: DoubleArray, forward: Double, back: Double, taper: Double): Long {
+    override fun extrude(id: Int, plane: DoubleArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, pickCounts: IntArray, pickIds: IntArray, pickPoints: DoubleArray, forward: Double, back: Double, taper: Double, thin: Double): Long {
         val args = Args()
         args.int(id)
         args.doubles(plane)
@@ -24,6 +24,7 @@ object WebCore : NativeCore {
         args.double(forward)
         args.double(back)
         args.double(taper)
+        args.double(thin)
         return call(1, args).long()
     }
 
@@ -187,34 +188,53 @@ object WebCore : NativeCore {
         return call(19, args).doubles()!!
     }
 
+    override fun primitive(id: Int, plane: DoubleArray, kind: Int, u: Double, v: Double, a: Double, b: Double, c: Double): Long {
+        val args = Args()
+        args.int(id)
+        args.doubles(plane)
+        args.int(kind)
+        args.double(u)
+        args.double(v)
+        args.double(a)
+        args.double(b)
+        args.double(c)
+        return call(20, args).long()
+    }
+
+    override fun bounds(body: Long): DoubleArray {
+        val args = Args()
+        args.long(body)
+        return call(21, args).doubles()!!
+    }
+
     override fun section(bodies: LongArray, plane: DoubleArray): DoubleArray {
         val args = Args()
         args.longs(bodies)
         args.doubles(plane)
-        return call(20, args).doubles()!!
+        return call(22, args).doubles()!!
     }
 
     override fun selectedMeshPlane(): DoubleArray? {
         val args = Args()
-        return call(21, args).doubles()
+        return call(23, args).doubles()
     }
 
     override fun retain(body: Long) {
         val args = Args()
         args.long(body)
-        call(22, args)
+        call(24, args)
     }
 
     override fun release(body: Long) {
         val args = Args()
         args.long(body)
-        call(23, args)
+        call(25, args)
     }
 
     override fun isMesh(body: Long): Boolean {
         val args = Args()
         args.long(body)
-        return call(24, args).boolean()
+        return call(26, args).boolean()
     }
 
     override fun exportBodies(bodies: LongArray, names: Array<String>, format: Int, quality: Int): ByteArray? {
@@ -223,7 +243,7 @@ object WebCore : NativeCore {
         args.strings(names)
         args.int(format)
         args.int(quality)
-        return call(25, args).bytes()
+        return call(27, args).bytes()
     }
 
     override fun show(bodies: LongArray, planes: DoubleArray, curveCounts: IntArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, constructionPlanes: DoubleArray, axes: DoubleArray, points: DoubleArray, refit: Boolean) {
@@ -238,17 +258,17 @@ object WebCore : NativeCore {
         args.doubles(axes)
         args.doubles(points)
         args.boolean(refit)
-        call(26, args)
+        call(28, args)
     }
 
     override fun selectedPlanes(): IntArray {
         val args = Args()
-        return call(27, args).ints()!!
+        return call(29, args).ints()!!
     }
 
     override fun measure(): Array<String> {
         val args = Args()
-        return call(28, args).strings()!!
+        return call(30, args).strings()!!
     }
 
     override fun setSection(on: Boolean, ox: Double, oy: Double, oz: Double, nx: Double, ny: Double, nz: Double) {
@@ -260,7 +280,7 @@ object WebCore : NativeCore {
         args.double(nx)
         args.double(ny)
         args.double(nz)
-        call(29, args)
+        call(31, args)
     }
 
     override fun faceOutline(body: Long, face: String, plane: DoubleArray): DoubleArray {
@@ -268,30 +288,30 @@ object WebCore : NativeCore {
         args.long(body)
         args.string(face)
         args.doubles(plane)
-        return call(30, args).doubles()!!
+        return call(32, args).doubles()!!
     }
 
     override fun shownTriangles(): Int {
         val args = Args()
-        return call(31, args).int()
+        return call(33, args).int()
     }
 
     override fun setDisplayDetail(level: Int) {
         val args = Args()
         args.int(level)
-        call(32, args)
+        call(34, args)
     }
 
     override fun speedTest(): Double {
         val args = Args()
-        return call(33, args).double()
+        return call(35, args).double()
     }
 
     override fun tap(x: Float, y: Float): IntArray {
         val args = Args()
         args.float(x)
         args.float(y)
-        return call(34, args).ints()!!
+        return call(36, args).ints()!!
     }
 
     override fun click(x: Float, y: Float, add: Boolean): IntArray {
@@ -299,7 +319,7 @@ object WebCore : NativeCore {
         args.float(x)
         args.float(y)
         args.boolean(add)
-        return call(35, args).ints()!!
+        return call(37, args).ints()!!
     }
 
     override fun selectBox(x0: Float, y0: Float, x1: Float, y1: Float, crossing: Boolean, add: Boolean): IntArray {
@@ -310,27 +330,27 @@ object WebCore : NativeCore {
         args.float(y1)
         args.boolean(crossing)
         args.boolean(add)
-        return call(36, args).ints()!!
+        return call(38, args).ints()!!
     }
 
     override fun clearSelection() {
         val args = Args()
-        call(37, args)
+        call(39, args)
     }
 
     override fun selectedEdges(): Array<String> {
         val args = Args()
-        return call(38, args).strings()!!
+        return call(40, args).strings()!!
     }
 
     override fun selectedFaces(): Array<String> {
         val args = Args()
-        return call(39, args).strings()!!
+        return call(41, args).strings()!!
     }
 
     override fun selectedRegions(): IntArray {
         val args = Args()
-        return call(40, args).ints()!!
+        return call(42, args).ints()!!
     }
 
     override fun select(edges: Array<String>, regions: IntArray, faces: Array<String>) {
@@ -338,7 +358,7 @@ object WebCore : NativeCore {
         args.strings(edges)
         args.ints(regions)
         args.strings(faces)
-        call(41, args)
+        call(43, args)
     }
 
     override fun findRegions(kinds: IntArray, ids: IntArray, numbers: DoubleArray): FloatArray {
@@ -346,50 +366,50 @@ object WebCore : NativeCore {
         args.ints(kinds)
         args.ints(ids)
         args.doubles(numbers)
-        return call(42, args).floats()!!
+        return call(44, args).floats()!!
     }
 
     override fun surfaceCreated() {
         val args = Args()
-        call(43, args)
+        call(45, args)
     }
 
     override fun surfaceChanged(width: Int, height: Int) {
         val args = Args()
         args.int(width)
         args.int(height)
-        call(44, args)
+        call(46, args)
     }
 
     override fun drawFrame(): Boolean {
         val args = Args()
-        return call(45, args).boolean()
+        return call(47, args).boolean()
     }
 
     override fun setDensity(density: Float) {
         val args = Args()
         args.float(density)
-        call(46, args)
+        call(48, args)
     }
 
     override fun orbit(dx: Float, dy: Float) {
         val args = Args()
         args.float(dx)
         args.float(dy)
-        call(47, args)
+        call(49, args)
     }
 
     override fun pan(dx: Float, dy: Float) {
         val args = Args()
         args.float(dx)
         args.float(dy)
-        call(48, args)
+        call(50, args)
     }
 
     override fun zoom(factor: Float) {
         val args = Args()
         args.float(factor)
-        call(49, args)
+        call(51, args)
     }
 
     override fun zoomAt(factor: Float, x: Float, y: Float) {
@@ -397,23 +417,23 @@ object WebCore : NativeCore {
         args.float(factor)
         args.float(x)
         args.float(y)
-        call(50, args)
+        call(52, args)
     }
 
     override fun fit() {
         val args = Args()
-        call(51, args)
+        call(53, args)
     }
 
     override fun viewFrom(yaw: Float, pitch: Float) {
         val args = Args()
         args.float(yaw)
         args.float(pitch)
-        call(52, args)
+        call(54, args)
     }
 
     override fun cameraState(): FloatArray {
         val args = Args()
-        return call(53, args).floats()!!
+        return call(55, args).floats()!!
     }
 }

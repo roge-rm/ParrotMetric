@@ -2,6 +2,7 @@
 
 #include <gp_Ax3.hxx>
 
+#include <array>
 #include <string>
 #include <vector>
 
@@ -28,10 +29,11 @@ struct RegionPick {
  * behind the plane to `forward` in front of it (mm; either may be negative,
  * but not both ending where they start). Sides are named F<id>.s<curve>,
  * the ends F<id>.start and F<id>.end. A taper (radians) leans the sides in
- * going forward, pivoting at the plane.
+ * going forward, pivoting at the plane. A thin extrude (thin > 0, mm) keeps
+ * only a wall that thick inside each region's edges.
  */
 NamedShape extrude(int id, const gp_Ax3& plane, const std::vector<SketchCurve>& curves, const std::vector<RegionPick>& picks,
-                   double forward, double back, double taper = 0);
+                   double forward, double back, double taper = 0, double thin = 0);
 
 /**
  * Turns sketch regions round an axis in the sketch plane, from (ax, ay)
@@ -80,6 +82,22 @@ std::vector<NamedShape> split(int id, const NamedShape& body, const gp_Pnt& orig
 
 /** How a hole's top is shaped. */
 enum class HoleKind { Simple, Counterbore, Countersink };
+
+enum class Primitive { Box, Cylinder, Sphere, Torus, Cone };
+
+/**
+ * A simple solid standing on a plane, centred on (u, v) in it. Sizes (mm):
+ * box width a (along the plane's x), depth b and height c; cylinder
+ * diameter a and height b; sphere diameter a; torus diameter a across the
+ * middle of its tube, and tube diameter b; cone base diameter a, top
+ * diameter b (0 for a point) and height c. Flat faces are named by side:
+ * F<id>.start (on the plane), .end (the top), and the box's .x0, .x1, .y0,
+ * .y1; curved faces F<id>.side.
+ */
+NamedShape primitive(int id, const gp_Ax3& plane, Primitive kind, double u, double v, double a, double b, double c);
+
+/** The box round a body: x, y, z low, then x, y, z high. */
+std::array<double, 6> bounds(const NamedShape& body);
 
 /**
  * The shape a set of holes takes out: one per (u, v) on the plane, going in

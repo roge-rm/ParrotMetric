@@ -60,6 +60,16 @@ object Parametrics {
                 "back" -> f.copy(back = v)
                 "both" -> f.copy(forward = v / 2, back = v / 2)
                 "taper" -> f.copy(taper = rad)
+                "offset" -> f.copy(offset = v)
+                "thin" -> f.copy(thin = v)
+                else -> f
+            }
+            is PrimitiveFeature -> when (field) {
+                "a" -> f.copy(a = v)
+                "b" -> f.copy(b = v)
+                "c" -> f.copy(c = v)
+                "u" -> f.copy(u = v)
+                "v" -> f.copy(v = v)
                 else -> f
             }
             is RevolveFeature -> if (field == "angle") f.copy(angle = rad) else f

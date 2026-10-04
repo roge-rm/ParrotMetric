@@ -12,6 +12,8 @@ import com.rm.parrotmetric.design.HoleKind
 import com.rm.parrotmetric.design.MirrorFeature
 import com.rm.parrotmetric.design.MoveFeature
 import com.rm.parrotmetric.design.PatternFeature
+import com.rm.parrotmetric.design.PrimitiveFeature
+import com.rm.parrotmetric.design.PrimitiveKind
 import com.rm.parrotmetric.design.ShellFeature
 import com.rm.parrotmetric.design.SplitFeature
 import com.rm.parrotmetric.design.ChamferFeature
@@ -149,6 +151,11 @@ object DesignFile {
                 "type" to "extrude", "sketch" to f.sketchId, "regions" to writeRegions(f.regions),
                 "forward" to f.forward, "back" to f.back, "operation" to f.operation.name,
                 "taper" to f.taper, "upTo" to f.upTo?.let { plane(it) },
+                "throughAll" to f.throughAll, "offset" to f.offset, "thin" to f.thin,
+            )
+            is PrimitiveFeature -> mapOf(
+                "type" to "primitive", "kind" to f.kind.name, "plane" to plane(f.plane), "u" to f.u, "v" to f.v,
+                "a" to f.a, "b" to f.b, "c" to f.c, "operation" to f.operation.name,
             )
             is RevolveFeature -> mapOf(
                 "type" to "revolve", "sketch" to f.sketchId, "regions" to writeRegions(f.regions),
@@ -203,6 +210,11 @@ object DesignFile {
             "extrude" -> ExtrudeFeature(
                 id, name, o.int("sketch"), readRegions(o.arr("regions")), o.num("forward"), o.num("back"), Operation.valueOf(o.str("operation")),
                 o.numOr("taper", 0.0), (o["upTo"] as? Json.Obj)?.let { plane(it) },
+                o.bool("throughAll"), o.numOr("offset", 0.0), o.numOr("thin", 0.0),
+            )
+            "primitive" -> PrimitiveFeature(
+                id, name, PrimitiveKind.valueOf(o.str("kind")), plane(o["plane"] as Json.Obj), o.num("u"), o.num("v"),
+                o.num("a"), o.num("b"), o.num("c"), Operation.valueOf(o.str("operation")),
             )
             "revolve" -> {
                 val axis = when (val a = o.str("axis")) {

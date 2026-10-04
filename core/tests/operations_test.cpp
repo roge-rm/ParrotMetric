@@ -273,3 +273,32 @@ TEST_CASE("a line poking into a rectangle doesn't stop it extruding") {
     NamedShape body = extrude(1, top, curves, {{regions[0].curveIds, 30, 15}}, 10, 0);
     CHECK(volume(body) == Catch::Approx(8000));
 }
+
+TEST_CASE("primitives have the sizes asked for and stand on their plane") {
+    const double pi = 3.14159265358979;
+    CHECK(volume(primitive(1, top, Primitive::Box, 0, 0, 10, 20, 30)) == Catch::Approx(6000));
+    CHECK(volume(primitive(1, top, Primitive::Cylinder, 0, 0, 10, 20, 0)) == Catch::Approx(pi * 25 * 20));
+    CHECK(volume(primitive(1, top, Primitive::Sphere, 0, 0, 10, 0, 0)) == Catch::Approx(4.0 / 3 * pi * 125).epsilon(1e-4));
+    CHECK(volume(primitive(1, top, Primitive::Torus, 0, 0, 40, 10, 0)) == Catch::Approx(2 * pi * pi * 20 * 25).epsilon(1e-4));
+    CHECK(volume(primitive(1, top, Primitive::Cone, 0, 0, 10, 0, 12)) == Catch::Approx(pi * 25 * 12 / 3).epsilon(1e-4));
+
+    NamedShape box = primitive(3, top, Primitive::Box, 5, 7, 10, 20, 30);
+    auto b = bounds(box);
+    CHECK(b[0] == Catch::Approx(0).margin(1e-6));
+    CHECK(b[1] == Catch::Approx(-3).margin(1e-6));
+    CHECK(b[2] == Catch::Approx(0).margin(1e-6));
+    CHECK(b[5] == Catch::Approx(30).margin(1e-6));
+    auto names = box.faceNames();
+    std::sort(names.begin(), names.end());
+    CHECK(names == std::vector<std::string>{"F3.end", "F3.start", "F3.x0", "F3.x1", "F3.y0", "F3.y1"});
+    CHECK_THROWS(primitive(1, top, Primitive::Torus, 0, 0, 10, 10, 0));
+}
+
+TEST_CASE("a thin extrude keeps only a wall inside the sketch's edges") {
+    NamedShape wall = extrude(1, top, rectangle(40, 20), {{{1, 2, 3, 4}, 5, 5}}, 10, 0, 0, 2);
+    CHECK(volume(wall) == Catch::Approx((800 - 36 * 16) * 10));
+    // The outside keeps its names.
+    auto names = wall.faceNames();
+    CHECK(std::count(names.begin(), names.end(), "F1.s1") == 1);
+    CHECK_THROWS(extrude(1, top, rectangle(40, 20), {{{1, 2, 3, 4}, 5, 5}}, 10, 0, 0, 15));
+}

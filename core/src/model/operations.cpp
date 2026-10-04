@@ -38,6 +38,12 @@
 #include <BRepOffsetAPI_DraftAngle.hxx>
 #include <BRepOffsetAPI_MakeThickSolid.hxx>
 #include <BRepPrimAPI_MakeCone.hxx>
+#include <Precision.hxx>
+#include <ShapeFix_Face.hxx>
+#include <BRepPrimAPI_MakeTorus.hxx>
+#include <BRepPrimAPI_MakeSphere.hxx>
+#include <BRepPrimAPI_MakeBox.hxx>
+#include <BRepOffsetAPI_MakeOffset.hxx>
 #include <BRepPrimAPI_MakeCylinder.hxx>
 #include <BRep_Builder.hxx>
 #include <TopoDS_Compound.hxx>
@@ -202,9 +208,38 @@ NamedShape taperSides(int id, const NamedShape& body, const gp_Ax3& plane, doubl
 
 }  // namespace
 
+namespace {
+
+/** A region face with only a wall [thin] thick left inside its edges. */
+TopoDS_Face thinned(const TopoDS_Face& face, double thin) {
+    BRepOffsetAPI_MakeOffset offset(face, GeomAbs_Arc);
+    offset.Perform(-thin);
+    if (!offset.IsDone()) throw std::runtime_error("The wall is too thick for the sketch");
+    // The inside of the wall: the offset wires as a face on the same plane.
+    TopoDS_Shape wires = offset.Shape();
+    BRepBuilderAPI_MakeFace inner(BRep_Tool::Surface(face), Precision::Confusion());
+    bool any = false;
+    for (TopExp_Explorer w(wires, TopAbs_WIRE); w.More(); w.Next()) {
+        inner.Add(TopoDS::Wire(w.Current()));
+        any = true;
+    }
+    if (!any || !inner.IsDone()) throw std::runtime_error("The wall is too thick for the sketch");
+    TopoDS_Face hollow = inner.Face();
+    ShapeFix_Face fix(hollow);
+    fix.Perform();
+    hollow = fix.Face();
+    BRepAlgoAPI_Cut cut(face, hollow);
+    if (!cut.IsDone()) throw std::runtime_error("The wall is too thick for the sketch");
+    for (TopExp_Explorer f(cut.Shape(), TopAbs_FACE); f.More(); f.Next()) return TopoDS::Face(f.Current());
+    throw std::runtime_error("The wall is too thick for the sketch");
+}
+
+}  // namespace
+
 NamedShape extrude(int id, const gp_Ax3& plane, const std::vector<SketchCurve>& curves, const std::vector<RegionPick>& picks,
-                   double forward, double back, double taper) {
+                   double forward, double back, double taper, double thin) {
     if (std::abs(forward + back) < 1e-6) throw std::runtime_error("The extrude has no length");
+    if (thin < 0) throw std::runtime_error("The wall has to be thicker than 0");
     try {
         auto regions = buildRegionFaces(curves);
         std::vector<NamedShape> pieces;
@@ -214,7 +249,7 @@ NamedShape extrude(int id, const gp_Ax3& plane, const std::vector<SketchCurve>& 
         TopLoc_Location loc(shift * onPlane);
         gp_Vec sweep = gp_Vec(plane.Direction()) * (forward + back);
         for (const RegionFace* r : choose(regions, picks)) {
-            TopoDS_Face face = TopoDS::Face(r->face.Moved(loc));
+            TopoDS_Face face = TopoDS::Face((thin > 0 ? thinned(r->face, thin) : r->face).Moved(loc));
             BRepPrimAPI_MakePrism prism(face, sweep);
             if (!prism.IsDone()) throw std::runtime_error("The extrude couldn't be made");
             pieces.push_back(nameSweep(id, prism, *r, loc));
@@ -658,6 +693,75 @@ NamedShape holeTool(int id, const gp_Ax3& plane, const std::vector<std::pair<dou
     } catch (const Standard_Failure&) {
         throw std::runtime_error("The hole couldn't be made");
     }
+}
+
+NamedShape primitive(int id, const gp_Ax3& plane, Primitive kind, double u, double v, double a, double b, double c) {
+    auto positive = [](double x) { if (x <= 0) throw std::runtime_error("Sizes have to be more than 0"); };
+    positive(a);
+    try {
+        // Built standing on the origin, then placed.
+        TopoDS_Shape shape;
+        switch (kind) {
+            case Primitive::Box:
+                positive(b); positive(c);
+                shape = BRepPrimAPI_MakeBox(gp_Pnt(-a / 2, -b / 2, 0), a, b, c).Shape();
+                break;
+            case Primitive::Cylinder:
+                positive(b);
+                shape = BRepPrimAPI_MakeCylinder(a / 2, b).Shape();
+                break;
+            case Primitive::Sphere:
+                shape = BRepPrimAPI_MakeSphere(gp_Pnt(0, 0, a / 2), a / 2).Shape();
+                break;
+            case Primitive::Torus:
+                positive(b);
+                if (b >= a) throw std::runtime_error("The tube has to be narrower than the ring");
+                shape = BRepPrimAPI_MakeTorus(gp_Ax2(gp_Pnt(0, 0, b / 2), gp::DZ()), a / 2, b / 2).Shape();
+                break;
+            case Primitive::Cone:
+                positive(c);
+                if (b < 0) throw std::runtime_error("The top can't be less than 0");
+                if (std::abs(a - b) < 1e-9) throw std::runtime_error("Make the top and base different, or use a cylinder");
+                shape = BRepPrimAPI_MakeCone(a / 2, b / 2, c).Shape();
+                break;
+        }
+        // Names by which way each flat face looks, worked out before moving.
+        std::vector<std::string> names;
+        for (TopExp_Explorer f(shape, TopAbs_FACE); f.More(); f.Next()) {
+            const TopoDS_Face& face = TopoDS::Face(f.Current());
+            BRepAdaptor_Surface surface(face);
+            std::string side = "side";
+            if (surface.GetType() == GeomAbs_Plane) {
+                gp_Dir n = surface.Plane().Axis().Direction();
+                if (face.Orientation() == TopAbs_REVERSED) n.Reverse();
+                if (n.Z() > 0.5) side = "end";
+                else if (n.Z() < -0.5) side = "start";
+                else if (n.X() > 0.5) side = "x1";
+                else if (n.X() < -0.5) side = "x0";
+                else if (n.Y() > 0.5) side = "y1";
+                else side = "y0";
+            }
+            names.push_back(prefix(id) + "." + side);
+        }
+        gp_Trsf at;
+        at.SetTranslation(gp_Vec(u, v, 0));
+        NamedShape out;
+        out.shape = shape.Moved(TopLoc_Location(placeOn(plane) * at));
+        size_t i = 0;
+        for (TopExp_Explorer f(out.shape, TopAbs_FACE); f.More(); f.Next()) out.names.Bind(f.Current(), names[i++]);
+        return out;
+    } catch (const Standard_Failure&) {
+        throw std::runtime_error("The shape couldn't be made");
+    }
+}
+
+std::array<double, 6> bounds(const NamedShape& body) {
+    Bnd_Box box;
+    BRepBndLib::Add(body.shape, box);
+    if (box.IsVoid()) return {0, 0, 0, 0, 0, 0};
+    double x0, y0, z0, x1, y1, z1;
+    box.Get(x0, y0, z0, x1, y1, z1);
+    return {x0, y0, z0, x1, y1, z1};
 }
 
 std::vector<SketchCurve> curvesOnPlane(const TopoDS_Shape& edges, const gp_Ax3& plane) {

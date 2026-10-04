@@ -71,6 +71,8 @@ class DesignFileTest {
             ChamferFeature(d.newId(), "Chamfer", listOf("F1.s1|F1.end"), 1.0, com.rm.parrotmetric.design.ChamferKind.DistanceAngle, 0.5, true),
             ExtrudeFeature(d.newId(), "Up to", 1, emptyList(), 0.0, 0.0, Operation.Join, 0.1, PlaneRef.OnFace("F1.end", Vec3(1.0, 0.0, 0.0))),
             com.rm.parrotmetric.design.PointFeature(d.newId(), "Point", 1.0, 2.0, 3.0),
+            ExtrudeFeature(d.newId(), "Through", 1, emptyList(), 5.0, 0.0, Operation.Cut, throughAll = true, offset = 2.0, thin = 1.5),
+            com.rm.parrotmetric.design.PrimitiveFeature(d.newId(), "Torus", com.rm.parrotmetric.design.PrimitiveKind.Torus, top, 1.0, 2.0, 30.0, 6.0, 0.0, Operation.Join),
         )
         features.forEach { d.add(it) }
         d.suppressed += features[1].id

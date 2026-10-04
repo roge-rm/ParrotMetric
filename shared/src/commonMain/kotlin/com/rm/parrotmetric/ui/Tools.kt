@@ -2,6 +2,7 @@ package com.rm.parrotmetric.ui
 
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.rm.parrotmetric.design.PlaneFeature
+import com.rm.parrotmetric.design.PrimitiveKind
 import com.rm.parrotmetric.sketch.SketchPlane
 import com.rm.parrotmetric.ui.design.DesignEditor
 
@@ -28,6 +29,8 @@ class ToolDef(
     val mesh: Boolean = false,
     val enabled: (ToolContext) -> Boolean = { true },
     val suggest: (ModelState) -> Boolean = { false },
+    /** Tools with the same cluster share one toolbar button, with a menu. */
+    val cluster: String? = null,
     val run: (ToolContext) -> Unit,
 )
 
@@ -37,9 +40,9 @@ object Tools {
     private fun areas(s: ModelState) = s.selectedAreas > 0
 
     val all: List<ToolDef> = listOf(
-        ToolDef("sketch.top", "Top", Icons.plane, ToolGroup.Sketch) { it.actions.startSketch(SketchPlane.Top) },
-        ToolDef("sketch.front", "Front", Icons.plane, ToolGroup.Sketch) { it.actions.startSketch(SketchPlane.Front) },
-        ToolDef("sketch.right", "Right", Icons.plane, ToolGroup.Sketch) { it.actions.startSketch(SketchPlane.Right) },
+        ToolDef("sketch.top", "Top", Icons.plane, ToolGroup.Sketch, cluster = "Sketch on a plane") { it.actions.startSketch(SketchPlane.Top) },
+        ToolDef("sketch.front", "Front", Icons.plane, ToolGroup.Sketch, cluster = "Sketch on a plane") { it.actions.startSketch(SketchPlane.Front) },
+        ToolDef("sketch.right", "Right", Icons.plane, ToolGroup.Sketch, cluster = "Sketch on a plane") { it.actions.startSketch(SketchPlane.Right) },
         ToolDef(
             "sketch.selected", "On selected", Icons.sketch, ToolGroup.Sketch, key = "N",
             enabled = { it.oneFace }, suggest = { s -> s.selectedFaces == 1 && s.selectedEdges == 0 || s.selectedPlanes == 1 },
@@ -48,6 +51,11 @@ object Tools {
         ToolDef("extrude", "Extrude", Icons.extrude, ToolGroup.Create, key = "E", suggest = ::areas) { it.design.startExtrude() },
         ToolDef("revolve", "Revolve", Icons.revolve, ToolGroup.Create, key = "Shift+E", suggest = ::areas) { it.design.startRevolve() },
         ToolDef("open", "Open", Icons.open, ToolGroup.Create) { it.actions.openFile() },
+        ToolDef("box", "Box", Icons.box, ToolGroup.Create, cluster = "Shapes") { it.design.startPrimitive(PrimitiveKind.Box) },
+        ToolDef("cylinder", "Cylinder", Icons.cylinder, ToolGroup.Create, cluster = "Shapes") { it.design.startPrimitive(PrimitiveKind.Cylinder) },
+        ToolDef("sphere", "Sphere", Icons.sphere, ToolGroup.Create, cluster = "Shapes") { it.design.startPrimitive(PrimitiveKind.Sphere) },
+        ToolDef("torus", "Torus", Icons.torus, ToolGroup.Create, cluster = "Shapes") { it.design.startPrimitive(PrimitiveKind.Torus) },
+        ToolDef("cone", "Cone", Icons.cone, ToolGroup.Create, cluster = "Shapes") { it.design.startPrimitive(PrimitiveKind.Cone) },
 
         ToolDef("fillet", "Fillet", Icons.fillet, ToolGroup.Modify, key = "F", suggest = ::edges) { it.design.startFillet() },
         ToolDef("chamfer", "Chamfer", Icons.chamfer, ToolGroup.Modify, key = "Shift+F", suggest = ::edges) { it.design.startChamfer() },
@@ -62,9 +70,9 @@ object Tools {
         ToolDef("split", "Split", Icons.cut, ToolGroup.Modify, key = "X", mesh = true) { it.design.startSplit() },
         ToolDef("move", "Move", Icons.move, ToolGroup.Modify, key = "M", mesh = true, suggest = ::faces) { it.design.startMove() },
 
-        ToolDef("plane.offset", "Offset plane", Icons.plane, ToolGroup.Construct) { it.design.startPlane(PlaneFeature.Kind.Offset) },
-        ToolDef("plane.angle", "Angled plane", Icons.plane, ToolGroup.Construct) { it.design.startPlane(PlaneFeature.Kind.Angle) },
-        ToolDef("plane.mid", "Midplane", Icons.plane, ToolGroup.Construct) { it.design.startPlane(PlaneFeature.Kind.Midway) },
+        ToolDef("plane.offset", "Offset plane", Icons.plane, ToolGroup.Construct, cluster = "Planes") { it.design.startPlane(PlaneFeature.Kind.Offset) },
+        ToolDef("plane.angle", "Angled plane", Icons.plane, ToolGroup.Construct, cluster = "Planes") { it.design.startPlane(PlaneFeature.Kind.Angle) },
+        ToolDef("plane.mid", "Midplane", Icons.plane, ToolGroup.Construct, cluster = "Planes") { it.design.startPlane(PlaneFeature.Kind.Midway) },
         ToolDef("axis", "Axis", Icons.axis, ToolGroup.Construct) { it.design.startAxis() },
         ToolDef("point", "Point", Icons.pointTool, ToolGroup.Construct) { it.design.startPoint() },
 

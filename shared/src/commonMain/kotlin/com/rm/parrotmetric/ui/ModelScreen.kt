@@ -697,8 +697,51 @@ private fun Toolbar(context: ToolContext) {
             ToolGroup.entries.forEachIndexed { i, group ->
                 Column(Modifier.padding(end = 10.dp)) {
                     Text(group.label, Modifier.padding(start = 8.dp, bottom = 2.dp), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = group.colour)
-                    Row { for (t in Tools.all.filter { it.group == group }) ToolbarButton(t, context) }
+                    Row {
+                        // Clustered tools share a button where the first of them is.
+                        val tools = Tools.all.filter { it.group == group }
+                        for ((i, t) in tools.withIndex()) {
+                            val cluster = t.cluster
+                            if (cluster == null) ToolbarButton(t, context)
+                            else if (tools.indexOfFirst { it.cluster == cluster } == i) ToolbarMenu(cluster, tools.filter { it.cluster == cluster }, context)
+                        }
+                    }
                 }
+            }
+        }
+    }
+}
+
+/** Several tools on one button: a menu of them, by name. */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun ToolbarMenu(label: String, tools: List<ToolDef>, context: ToolContext) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        androidx.compose.material3.TooltipBox(
+            positionProvider = androidx.compose.material3.TooltipDefaults.rememberTooltipPositionProvider(
+                androidx.compose.material3.TooltipAnchorPosition.Below,
+            ),
+            tooltip = { PlainTooltip { Text(label) } },
+            state = androidx.compose.material3.rememberTooltipState(),
+        ) {
+            Surface(onClick = { open = true }, modifier = Modifier.size(52.dp, 40.dp), shape = RoundedCornerShape(12.dp), color = Color.Transparent) {
+                Row(horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                    Icon(tools[0].icon, label, Modifier.size(22.dp), tint = tools[0].group.colour)
+                    Icon(Icons.more, null, Modifier.size(12.dp), tint = Palette.muted)
+                }
+            }
+        }
+        DropdownMenu(open, onDismissRequest = { open = false }, containerColor = Palette.raised) {
+            for (t in tools) {
+                val enabled = t.enabled(context)
+                DropdownMenuItem(
+                    { Text(t.label) },
+                    onClick = { open = false; Tools.run(t, context) },
+                    enabled = enabled,
+                    leadingIcon = { Icon(t.icon, null, tint = if (enabled) t.group.colour else Palette.faint) },
+                    trailingIcon = t.key?.let { k -> { KeyBadge(k) } },
+                )
             }
         }
     }

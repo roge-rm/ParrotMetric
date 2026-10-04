@@ -165,11 +165,22 @@ class Rebuilder(private val kernel: Kernel) {
         }
         is ExtrudeFeature -> {
             val sketch = sketchOf(f.sketchId, all)
-            val plane = planes[f.sketchId] ?: throw KernelException("Its sketch couldn't be built")
-            val target = f.upTo?.let { resolvePlane(it, bodies, f, planes) }
-            val tool = if (target == null) kernel.extrude(f.id, plane, sketch.curves(), f.regions, f.forward, f.back, f.taper)
-            else extrudeUpTo(f, plane, target, sketch)
+            val onSketch = planes[f.sketchId] ?: throw KernelException("Its sketch couldn't be built")
+            val plane = if (f.offset == 0.0) onSketch else onSketch.copy(origin = onSketch.origin + onSketch.normal * f.offset)
+            val target = if (f.throughAll) null else f.upTo?.let { resolvePlane(it, bodies, f, planes) }
+            val tool = when {
+                target != null -> extrudeUpTo(f, plane, target, sketch)
+                f.throughAll -> {
+                    val (forward, back) = throughAll(f, plane, bodies)
+                    kernel.extrude(f.id, plane, sketch.curves(), f.regions, forward, back, f.taper, f.thin)
+                }
+                else -> kernel.extrude(f.id, plane, sketch.curves(), f.regions, f.forward, f.back, f.taper, f.thin)
+            }
             applyTool(f, tool, f.operation, bodies, planes, made)
+        }
+        is PrimitiveFeature -> {
+            val plane = resolvePlane(f.plane, bodies, f, planes)
+            applyTool(f, kernel.primitive(f.id, plane, f.kind.ordinal, f.u, f.v, f.a, f.b, f.c), f.operation, bodies, planes, made)
         }
         is RevolveFeature -> {
             val sketch = sketchOf(f.sketchId, all)
@@ -413,8 +424,8 @@ class Rebuilder(private val kernel: Kernel) {
         if (abs(reach) < 1e-6) throw KernelException("That face or plane goes through the sketch")
         val curves = sketch.curves()
         fun extrude(length: Double) =
-            if (length > 0) kernel.extrude(f.id, plane, curves, f.regions, length, 0.0, f.taper)
-            else kernel.extrude(f.id, plane, curves, f.regions, 0.0, -length, f.taper)
+            if (length > 0) kernel.extrude(f.id, plane, curves, f.regions, length, 0.0, f.taper, f.thin)
+            else kernel.extrude(f.id, plane, curves, f.regions, 0.0, -length, f.taper, f.thin)
         if (abs(facing) > 1 - 1e-9) return extrude(reach)
         // Far enough for any part of the sketch to reach the slanted target.
         val spread = curves.maxOfOrNull { c -> maxOf(hypot(c.x1, c.y1), hypot(c.x2, c.y2), hypot(c.cx1, c.cy1), hypot(c.cx2, c.cy2)) + c.r } ?: 0.0
@@ -437,6 +448,33 @@ class Rebuilder(private val kernel: Kernel) {
             joined = next
         }
         return joined
+    }
+
+    /**
+     * How far an extrude goes to pass right through every body: forward
+     * unless [ExtrudeFeature.forward] is backwards, and back as well if it
+     * goes both ways.
+     */
+    private fun throughAll(f: ExtrudeFeature, plane: SketchPlane, bodies: List<BodyState>): Pair<Double, Double> {
+        if (bodies.isEmpty()) throw KernelException("There's nothing for it to go through")
+        var ahead = 0.0
+        var behind = 0.0
+        for (b in bodies) {
+            val box = kernel.bounds(b.handle)
+            for (i in 0 until 8) {
+                val corner = Vec3(box[if (i and 1 == 0) 0 else 3], box[if (i and 2 == 0) 1 else 4], box[if (i and 4 == 0) 2 else 5])
+                val along = (corner - plane.origin).dot(plane.normal)
+                ahead = maxOf(ahead, along)
+                behind = maxOf(behind, -along)
+            }
+        }
+        // A little past the last body, so the far face is clean.
+        val bothWays = f.back > 0 && f.forward > 0
+        return when {
+            bothWays -> (ahead + 1) to (behind + 1)
+            f.forward < 0 || (f.forward == 0.0 && f.back > 0) -> 0.0 to (behind + 1)
+            else -> (ahead + 1) to 0.0
+        }
     }
 
     private fun axisOf(a: AxisRef, s: SketchFeature): List<Double> = when (a) {

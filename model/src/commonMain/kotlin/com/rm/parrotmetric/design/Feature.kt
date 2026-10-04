@@ -52,6 +52,35 @@ data class ExtrudeFeature(
     val operation: Operation,
     val taper: Double = 0.0,
     val upTo: PlaneRef? = null,
+    /** Right through every body, in the direction(s) [forward] and [back] go. */
+    val throughAll: Boolean = false,
+    /** Starts this far (mm) in front of the sketch plane. */
+    val offset: Double = 0.0,
+    /** A wall this thick (mm) inside the areas' edges, or 0 for solid. */
+    val thin: Double = 0.0,
+) : Feature() {
+    override fun key() = this
+}
+
+enum class PrimitiveKind { Box, Cylinder, Sphere, Torus, Cone }
+
+/**
+ * A simple solid standing on a plane, centred at ([u], [v]) on it. Sizes
+ * (mm): box width [a], depth [b], height [c]; cylinder diameter [a], height
+ * [b]; sphere diameter [a]; torus ring diameter [a], tube diameter [b]; cone
+ * base diameter [a], top diameter [b], height [c].
+ */
+data class PrimitiveFeature(
+    override val id: Int,
+    override val name: String,
+    val kind: PrimitiveKind,
+    val plane: PlaneRef,
+    val u: Double,
+    val v: Double,
+    val a: Double,
+    val b: Double,
+    val c: Double,
+    val operation: Operation,
 ) : Feature() {
     override fun key() = this
 }

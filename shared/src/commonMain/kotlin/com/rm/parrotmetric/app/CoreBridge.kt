@@ -55,10 +55,10 @@ class CoreKernel(private val core: NativeCore) : Kernel {
         val points = regions.flatMap { listOf(it.u, it.v) }.toDoubleArray()
     }
 
-    override fun extrude(id: Int, plane: SketchPlane, curves: List<ProfileCurve>, regions: List<RegionRef>, forward: Double, back: Double, taper: Double): Long {
+    override fun extrude(id: Int, plane: SketchPlane, curves: List<ProfileCurve>, regions: List<RegionRef>, forward: Double, back: Double, taper: Double, thin: Double): Long {
         val c = Curves(curves)
         val p = Picks(regions)
-        return call { core.extrude(id, plane.numbers(), c.kinds, c.ids, c.nums, p.counts, p.ids, p.points, forward, back, taper) }
+        return call { core.extrude(id, plane.numbers(), c.kinds, c.ids, c.nums, p.counts, p.ids, p.points, forward, back, taper, thin) }
     }
 
     override fun revolve(id: Int, plane: SketchPlane, curves: List<ProfileCurve>, regions: List<RegionRef>, ax: Double, ay: Double, dx: Double, dy: Double, angle: Double): Long {
@@ -86,6 +86,9 @@ class CoreKernel(private val core: NativeCore) : Kernel {
         call { core.holeTool(id, plane.numbers(), at.flatMap { listOf(it.first, it.second) }.toDoubleArray(), diameter, depth, kind, topDiameter, topDepth) }
     override fun convertToSolid(id: Int, body: Long) = call { core.convertToSolid(id, body) }
     override fun centre(body: Long) = call { core.bodyCentre(body).let { Vec3(it[0], it[1], it[2]) } }
+    override fun primitive(id: Int, plane: SketchPlane, kind: Int, u: Double, v: Double, a: Double, b: Double, c: Double) =
+        call { core.primitive(id, plane.numbers(), kind, u, v, a, b, c) }
+    override fun bounds(body: Long) = call { core.bounds(body) }
     override fun signature(body: Long, name: String, edge: Boolean) = core.signature(body, name, edge)
     override fun relocate(body: Long, signature: DoubleArray) = core.relocate(body, signature)
     override fun retain(body: Long) = core.retain(body)

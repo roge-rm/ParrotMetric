@@ -554,6 +554,17 @@ class DesignEditor(
         rebuild()
     }
 
+    /** A box, cylinder, sphere, torus or cone, on the selected face or plane, else the top plane. */
+    fun startPrimitive(kind: com.rm.parrotmetric.design.PrimitiveKind) {
+        val d = PrimitiveDraft(null, kind)
+        d.planes = planeChoices()
+        val pick = viewport.selectedPlanes().firstOrNull()?.let { shownPlanes.getOrNull(it) }?.let { PlaneRef.Construction(it.id) }
+            ?: d.planes.firstOrNull { it.first == "The face" }?.second
+        if (pick != null) d.plane = pick
+        panel = d
+        rebuild()
+    }
+
     fun startPoint() {
         val d = PointDraft(null)
         // At the middle of a selected flat face, if there is one.
@@ -637,6 +648,7 @@ class DesignEditor(
             is PointFeature -> PointDraft(f)
             is PlaneFeature -> PlaneDraft(f, f.kind).also { it.planes = planeChoices().filter { c -> c.second != PlaneRef.Construction(f.id) } }
             is AxisFeature -> AxisDraft(f)
+            is com.rm.parrotmetric.design.PrimitiveFeature -> PrimitiveDraft(f, f.kind).also { it.planes = planeChoices() }
             else -> return f
         }
         design.expressions[id]?.let { d.exprs.putAll(it) }
@@ -780,6 +792,13 @@ class DesignEditor(
         var upTo by mutableStateOf<PlaneRef?>(editing?.upTo)
         /** What it can go up to: the origin planes, the tapped face and construction planes. */
         var planes by mutableStateOf<List<Pair<String, PlaneRef>>>(emptyList())
+        /** Right through every body. */
+        var throughAll by mutableStateOf(editing?.throughAll ?: false)
+        /** Through all the other way (behind the sketch). */
+        var backwards by mutableStateOf(editing != null && editing.throughAll && editing.forward < 0)
+        var offset by mutableStateOf(editing?.offset ?: 0.0)
+        var thinOn by mutableStateOf((editing?.thin ?: 0.0) > 0)
+        var thin by mutableStateOf(editing?.thin?.takeIf { it > 0 } ?: 1.0)
 
         init {
             if (editing != null) {
@@ -798,16 +817,26 @@ class DesignEditor(
             val s = sketchId ?: return null
             if (regions.isEmpty()) return null
             val taper = taperDegrees * PI / 180
+            val wall = if (thinOn) thin else 0.0
+            if (throughAll) {
+                // Only the directions count; the rebuild works out how far.
+                val (fwd, back) = when {
+                    direction != Direction.OneSide -> 1.0 to 1.0
+                    backwards -> -1.0 to 0.0
+                    else -> 1.0 to 0.0
+                }
+                return ExtrudeFeature(id, name, s, regions, fwd, back, operation, taper, null, true, offset, wall)
+            }
             if (upToOn) {
                 val target = upTo ?: return null
-                return ExtrudeFeature(id, name, s, regions, 0.0, 0.0, operation, taper, target)
+                return ExtrudeFeature(id, name, s, regions, 0.0, 0.0, operation, taper, target, false, offset, wall)
             }
             val (fwd, back) = when (direction) {
                 Direction.OneSide -> distance to 0.0
                 Direction.Symmetric -> distance / 2 to distance / 2
                 Direction.TwoSides -> distance to other
             }
-            return ExtrudeFeature(id, name, s, regions, fwd, back, operation, taper)
+            return ExtrudeFeature(id, name, s, regions, fwd, back, operation, taper, null, false, offset, wall)
         }
 
         override fun missing() = if (regions.isEmpty()) "Tap an area of a sketch" else "Tap the face to go up to"
@@ -978,6 +1007,29 @@ class DesignEditor(
             return PlaneFeature(id, name, kind, base, offset, degrees * PI / 180, turnRoundY, other)
         }
         override fun missing() = "Pick the second plane"
+    }
+
+    inner class PrimitiveDraft(editing: com.rm.parrotmetric.design.PrimitiveFeature?, kind: com.rm.parrotmetric.design.PrimitiveKind) : FeatureDraft() {
+        val id = editing?.id ?: newId()
+        val kind = editing?.kind ?: kind
+        private val name = editing?.name ?: nextName(this.kind.name, design.features.count { it is com.rm.parrotmetric.design.PrimitiveFeature && it.kind == this.kind })
+        var planes: List<Pair<String, PlaneRef>> = emptyList()
+        var plane by mutableStateOf<PlaneRef>(editing?.plane ?: PlaneRef.Fixed(SketchPlane.Top))
+        var u by mutableStateOf(editing?.u ?: 0.0)
+        var v by mutableStateOf(editing?.v ?: 0.0)
+        var a by mutableStateOf(editing?.a ?: when (this.kind) {
+            com.rm.parrotmetric.design.PrimitiveKind.Torus -> 40.0
+            else -> 20.0
+        })
+        var b by mutableStateOf(editing?.b ?: when (this.kind) {
+            com.rm.parrotmetric.design.PrimitiveKind.Torus -> 8.0
+            com.rm.parrotmetric.design.PrimitiveKind.Cone -> 0.0
+            else -> 20.0
+        })
+        var c by mutableStateOf(editing?.c ?: 20.0)
+        var operation by mutableStateOf(editing?.operation ?: Operation.NewBody)
+        override fun feature() = com.rm.parrotmetric.design.PrimitiveFeature(id, name, kind, plane, u, v, a, b, c, operation)
+        override fun missing() = ""
     }
 
     inner class PointDraft(editing: PointFeature?) : FeatureDraft() {

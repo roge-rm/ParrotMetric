@@ -343,7 +343,8 @@ JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_setScratchDirectory(JNIEnv*
 
 JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_extrude(JNIEnv* env, jobject, jint id, jdoubleArray plane, jintArray kinds,
                                                              jintArray ids, jdoubleArray nums, jintArray pickCounts, jintArray pickIds,
-                                                             jdoubleArray pickPoints, jdouble forward, jdouble back, jdouble taper) {
+                                                             jdoubleArray pickPoints, jdouble forward, jdouble back, jdouble taper,
+                                                             jdouble thin) {
     try {
         auto p = doubles(env, plane);
         auto k = ints(env, kinds), i = ints(env, ids);
@@ -351,7 +352,7 @@ JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_extrude(JNIEnv* env, jobje
         auto curves = curvesOf(k.data(), i.data(), n.data(), k.size());
         auto picks = picksOf(ints(env, pickCounts), ints(env, pickIds), doubles(env, pickPoints));
         pm::Body b;
-        b.solid = pm::extrude(id, planeOf(p.data()), curves, picks, forward, back, taper);
+        b.solid = pm::extrude(id, planeOf(p.data()), curves, picks, forward, back, taper, thin);
         std::lock_guard<std::mutex> g(lock);
         return store.add(std::move(b));
     } catch (const std::exception& e) {
@@ -689,6 +690,32 @@ JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_convertToSolid(JNIEnv* env
 }
 
 /** The middle of a body: a solid's centre of mass, a mesh's bounding box centre. */
+/** kind is pm::Primitive's order; sizes as pm::primitive takes them. */
+JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_primitive(JNIEnv* env, jobject, jint id, jdoubleArray plane, jint kind, jdouble u,
+                                                               jdouble v, jdouble a, jdouble b, jdouble c) {
+    try {
+        auto p = doubles(env, plane);
+        pm::Body out;
+        out.solid = pm::primitive(id, planeOf(p.data()), pm::Primitive(kind), u, v, a, b, c);
+        std::lock_guard<std::mutex> g(lock);
+        return store.add(std::move(out));
+    } catch (const std::exception& e) {
+        fail(env, e.what());
+        return 0;
+    }
+}
+
+/** The box round a body: x, y, z low, then high. */
+JNIEXPORT jdoubleArray JNICALL Java_com_rm_parrotmetric_Core_bounds(JNIEnv* env, jobject, jlong body) {
+    std::unique_lock<std::mutex> g(lock);
+    const pm::Body b = store.get(body);
+    g.unlock();
+    std::array<double, 6> box = b.mesh ? b.mesh->bounds() : pm::bounds(*b.solid);
+    jdoubleArray out = env->NewDoubleArray(6);
+    env->SetDoubleArrayRegion(out, 0, 6, box.data());
+    return out;
+}
+
 JNIEXPORT jdoubleArray JNICALL Java_com_rm_parrotmetric_Core_bodyCentre(JNIEnv* env, jobject, jlong body) {
     try {
         std::unique_lock<std::mutex> g(lock);

@@ -13,8 +13,12 @@ class KernelException(message: String) : Exception(message)
  * Calls that can't be done throw [KernelException].
  */
 interface Kernel {
-    /** taper in radians leans the sides in going forward, pivoting at the plane. */
-    fun extrude(id: Int, plane: SketchPlane, curves: List<ProfileCurve>, regions: List<RegionRef>, forward: Double, back: Double, taper: Double = 0.0): Long
+    /**
+     * taper in radians leans the sides in going forward, pivoting at the
+     * plane; thin (mm, 0 for solid) keeps only a wall that thick inside the
+     * areas' edges.
+     */
+    fun extrude(id: Int, plane: SketchPlane, curves: List<ProfileCurve>, regions: List<RegionRef>, forward: Double, back: Double, taper: Double = 0.0, thin: Double = 0.0): Long
     fun revolve(id: Int, plane: SketchPlane, curves: List<ProfileCurve>, regions: List<RegionRef>, ax: Double, ay: Double, dx: Double, dy: Double, angle: Double): Long
     /** how is Join, Cut or Intersect. */
     fun combine(id: Int, target: Long, tool: Long, how: Operation): Long
@@ -37,6 +41,10 @@ interface Kernel {
     fun convertToSolid(id: Int, body: Long): Long
     /** The middle of a body. */
     fun centre(body: Long): Vec3
+    /** A simple solid standing on a plane at (u, v); kind is PrimitiveKind's ordinal, sizes as PrimitiveFeature has them. */
+    fun primitive(id: Int, plane: SketchPlane, kind: Int, u: Double, v: Double, a: Double, b: Double, c: Double): Long
+    /** The box round a body: x, y, z low, then high. */
+    fun bounds(body: Long): DoubleArray
     fun retain(body: Long)
     fun release(body: Long)
     /** Where a named face (or edge) of a body is and how big, to find it again by shape; null if the body hasn't got it. */

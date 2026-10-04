@@ -45,6 +45,8 @@ public:
     std::vector<std::vector<std::array<double, 2>>> slice(const double origin[3], const double x[3], const double y[3]) const;
     /** The middle of its bounding box. */
     std::array<double, 3> centre() const;
+    /** The box round it: x, y, z low, then x, y, z high. */
+    std::array<double, 6> bounds() const;
 
     Mesh toMesh() const;
     double volume() const;

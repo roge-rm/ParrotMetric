@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rm.parrotmetric.design.AxisRef
 import com.rm.parrotmetric.design.Operation
+import com.rm.parrotmetric.design.PrimitiveKind
 import com.rm.parrotmetric.design.SketchFeature
 import com.rm.parrotmetric.sketch.Line
 import com.rm.parrotmetric.sketch.Expression
@@ -85,6 +86,7 @@ fun FeaturePanel(editor: DesignEditor) {
                 is DesignEditor.PlaneDraft -> PlaneSettings(editor, d)
                 is DesignEditor.AxisDraft -> AxisSettings(editor, d)
                 is DesignEditor.PointDraft -> PointSettings(editor, d)
+                is DesignEditor.PrimitiveDraft -> PrimitiveSettings(editor, d)
                 else -> {}
             }
             }
@@ -115,11 +117,19 @@ internal fun count(n: Int, one: String, many: String) = if (n == 1) "1 $one" els
 @Composable
 private fun ExtrudeSettings(editor: DesignEditor, d: DesignEditor.ExtrudeDraft) {
     Header("Extrude", Icons.extrude, Palette.create, if (d.regions.isEmpty()) null else count(d.regions.size, "area", "areas"))
-    Segmented(listOf("Distance", "Up to a face or plane"), if (d.upToOn) 1 else 0) {
-        d.upToOn = it == 1
+    Segmented(listOf("Distance", "Through all", "Up to"), if (d.throughAll) 1 else if (d.upToOn) 2 else 0) {
+        d.throughAll = it == 1
+        d.upToOn = it == 2
         editor.draftChanged()
     }
-    if (d.upToOn) {
+    if (d.throughAll) {
+        val choice = if (d.direction != DesignEditor.Direction.OneSide) 2 else if (d.backwards) 1 else 0
+        Segmented(listOf("Forward", "Back", "Both ways"), choice) {
+            d.direction = if (it == 2) DesignEditor.Direction.Symmetric else DesignEditor.Direction.OneSide
+            d.backwards = it == 1
+            editor.draftChanged()
+        }
+    } else if (d.upToOn) {
         // A face tapped in the view is added here as "The face".
         Segmented(d.planes.map { it.first }, d.planes.indexOfFirst { it.second == d.upTo }) {
             d.upTo = d.planes[it].second
@@ -143,10 +153,61 @@ private fun ExtrudeSettings(editor: DesignEditor, d: DesignEditor.ExtrudeDraft) 
         d.taperDegrees = it
         editor.draftChanged()
     }
+    Field(editor, d, "offset", "Start at", d.offset, "mm", allowNegative = true) {
+        d.offset = it
+        editor.draftChanged()
+    }
+    Toggle("Thin wall", d.thinOn) { d.thinOn = it; editor.draftChanged() }
+    if (d.thinOn) Field(editor, d, "thin", "Wall", d.thin, "mm", allowNegative = false) {
+        d.thin = it
+        editor.draftChanged()
+    }
     OperationRow(d.operation) {
         d.operation = it
         editor.draftChanged()
     }
+}
+
+@Composable
+private fun PrimitiveSettings(editor: DesignEditor, d: DesignEditor.PrimitiveDraft) {
+    Header(d.kind.name, primitiveIcon(d.kind), Palette.create, null)
+    Text("On", fontSize = 13.sp, color = Palette.muted)
+    Segmented(d.planes.map { it.first }, d.planes.indexOfFirst { it.second == d.plane }.coerceAtLeast(0)) { d.plane = d.planes[it].second; editor.draftChanged() }
+    // Which sizes each shape has, and what they're called.
+    val labels = when (d.kind) {
+        PrimitiveKind.Box -> listOf("Width", "Depth", "Height")
+        PrimitiveKind.Cylinder -> listOf("Diameter", "Height")
+        PrimitiveKind.Sphere -> listOf("Diameter")
+        PrimitiveKind.Torus -> listOf("Ring", "Tube")
+        PrimitiveKind.Cone -> listOf("Base", "Top", "Height")
+    }
+    labels.forEachIndexed { i, label ->
+        val field = listOf("a", "b", "c")[i]
+        val value = listOf(d.a, d.b, d.c)[i]
+        // A cone's top can be 0, a point.
+        Field(editor, d, field, label, value, "mm", allowNegative = d.kind == PrimitiveKind.Cone && i == 1) {
+            when (i) {
+                0 -> d.a = it
+                1 -> d.b = it
+                else -> d.c = it
+            }
+            editor.draftChanged()
+        }
+    }
+    Field(editor, d, "u", "Centre x", d.u, "mm", allowNegative = true) { d.u = it; editor.draftChanged() }
+    Field(editor, d, "v", "Centre y", d.v, "mm", allowNegative = true) { d.v = it; editor.draftChanged() }
+    OperationRow(d.operation) {
+        d.operation = it
+        editor.draftChanged()
+    }
+}
+
+internal fun primitiveIcon(kind: PrimitiveKind) = when (kind) {
+    PrimitiveKind.Box -> Icons.box
+    PrimitiveKind.Cylinder -> Icons.cylinder
+    PrimitiveKind.Sphere -> Icons.sphere
+    PrimitiveKind.Torus -> Icons.torus
+    PrimitiveKind.Cone -> Icons.cone
 }
 
 @Composable

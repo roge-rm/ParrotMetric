@@ -30,9 +30,14 @@ private class FakeKernel : Kernel {
         return h
     }
 
-    override fun extrude(id: Int, plane: SketchPlane, curves: List<ProfileCurve>, regions: List<RegionRef>, forward: Double, back: Double, taper: Double): Long {
+    var lastBack = 0.0
+    var lastThin = 0.0
+
+    override fun extrude(id: Int, plane: SketchPlane, curves: List<ProfileCurve>, regions: List<RegionRef>, forward: Double, back: Double, taper: Double, thin: Double): Long {
         calls += "extrude $id"
         lastForward = forward
+        lastBack = back
+        lastThin = thin
         val x = curves.minOf { minOf(it.x1, it.x2) }
         val w = curves.maxOf { maxOf(it.x1, it.x2) } - x
         return make(Box(x, x + w, listOf("F$id.$side", "F$id.end")))
@@ -93,6 +98,12 @@ private class FakeKernel : Kernel {
     }
 
     override fun convertToSolid(id: Int, body: Long) = make(bodies.getValue(body))
+    override fun primitive(id: Int, plane: SketchPlane, kind: Int, u: Double, v: Double, a: Double, b: Double, c: Double): Long {
+        calls += "primitive $id $kind"
+        return make(Box(u - a / 2, u + a / 2, listOf("F$id.start", "F$id.end")))
+    }
+    /** Boxes are 10 deep and 10 high, on z from 0. */
+    override fun bounds(body: Long) = bodies.getValue(body).let { doubleArrayOf(it.from, 0.0, 0.0, it.to, 10.0, 10.0) }
     override fun centre(body: Long) = bodies.getValue(body).let { Vec3((it.from + it.to) / 2, 0.0, 0.0) }
     override fun holeTool(id: Int, plane: SketchPlane, at: List<Pair<Double, Double>>, diameter: Double, depth: Double, kind: Int, topDiameter: Double, topDepth: Double) =
         make(Box(at.minOf { it.first }, at.maxOf { it.first } + diameter, emptyList()))
@@ -340,5 +351,34 @@ class RebuildTest {
         assertEquals(30.0, k.bodies.getValue(built.bodies[0].handle).from)
         r.clear()
         assertTrue(k.bodies.isEmpty())
+    }
+
+    @Test
+    fun throughAllGoesPastEveryBody() {
+        val k = FakeKernel()
+        val d = Design()
+        extrude(d, sketchAt(d, 0.0, 10.0), Operation.NewBody)
+        val s2 = sketchAt(d, 2.0, 4.0)
+        val cut = ExtrudeFeature(d.newId(), "Cut", s2.id, listOf(RegionRef(listOf(1, 2, 3, 4), 0.0, 0.0)), 1.0, 0.0, Operation.Cut, throughAll = true, offset = 2.0, thin = 0.5)
+        d.add(cut)
+        val built = Rebuilder(k).rebuild(d.active)
+        assertTrue(built.errors.isEmpty(), built.errors.toString())
+        // Bodies reach z 10; from the plane moved up 2, that's 8 to go, and a little more.
+        assertEquals(9.0, k.lastForward)
+        assertEquals(0.0, k.lastBack)
+        assertEquals(0.5, k.lastThin)
+    }
+
+    @Test
+    fun aPrimitiveIsANewBodyOrCutsWhatItTouches() {
+        val k = FakeKernel()
+        val d = Design()
+        extrude(d, sketchAt(d, 0.0, 10.0), Operation.NewBody)
+        d.add(PrimitiveFeature(d.newId(), "Box", PrimitiveKind.Box, PlaneRef.Fixed(SketchPlane.Top), 30.0, 0.0, 4.0, 4.0, 4.0, Operation.NewBody))
+        d.add(PrimitiveFeature(d.newId(), "Cylinder", PrimitiveKind.Cylinder, PlaneRef.Fixed(SketchPlane.Top), 5.0, 0.0, 2.0, 20.0, 0.0, Operation.Cut))
+        val built = Rebuilder(k).rebuild(d.active)
+        assertTrue(built.errors.isEmpty(), built.errors.toString())
+        assertEquals(2, built.bodies.size)
+        assertTrue("primitive 4 1" in k.calls)
     }
 }

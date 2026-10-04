@@ -10,7 +10,7 @@ interface NativeCore {
     fun setScratchDirectory(path: String)
 
     // Kernel. Bodies are handles; each made comes retained once.
-    fun extrude(id: Int, plane: DoubleArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, pickCounts: IntArray, pickIds: IntArray, pickPoints: DoubleArray, forward: Double, back: Double, taper: Double): Long
+    fun extrude(id: Int, plane: DoubleArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, pickCounts: IntArray, pickIds: IntArray, pickPoints: DoubleArray, forward: Double, back: Double, taper: Double, thin: Double): Long
     fun revolve(id: Int, plane: DoubleArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, pickCounts: IntArray, pickIds: IntArray, pickPoints: DoubleArray, ax: Double, ay: Double, dx: Double, dy: Double, angle: Double): Long
     /** how: 0 join, 1 cut, 2 intersect. */
     fun combine(id: Int, target: Long, tool: Long, how: Int): Long
@@ -34,6 +34,10 @@ interface NativeCore {
     fun repairReport(data: ByteArray, format: Int): String
     fun convertToSolid(id: Int, body: Long): Long
     fun bodyCentre(body: Long): DoubleArray
+    /** kind: 0 box, 1 cylinder, 2 sphere, 3 torus, 4 cone; sizes as Kernel.primitive. */
+    fun primitive(id: Int, plane: DoubleArray, kind: Int, u: Double, v: Double, a: Double, b: Double, c: Double): Long
+    /** The box round a body: x, y, z low, then high. */
+    fun bounds(body: Long): DoubleArray
     /** Where bodies cross a plane, as sketch curves; see jni.cpp. */
     fun section(bodies: LongArray, plane: DoubleArray): DoubleArray
     /** Middle and normal of the selected flat part of a mesh, or null. */

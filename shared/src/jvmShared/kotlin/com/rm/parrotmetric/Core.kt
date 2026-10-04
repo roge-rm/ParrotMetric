@@ -11,7 +11,7 @@ object Core : NativeCore {
     override external fun setScratchDirectory(path: String)
 
     // Kernel. Bodies are handles; each made comes retained once.
-    override external fun extrude(id: Int, plane: DoubleArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, pickCounts: IntArray, pickIds: IntArray, pickPoints: DoubleArray, forward: Double, back: Double, taper: Double): Long
+    override external fun extrude(id: Int, plane: DoubleArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, pickCounts: IntArray, pickIds: IntArray, pickPoints: DoubleArray, forward: Double, back: Double, taper: Double, thin: Double): Long
     override external fun revolve(id: Int, plane: DoubleArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, pickCounts: IntArray, pickIds: IntArray, pickPoints: DoubleArray, ax: Double, ay: Double, dx: Double, dy: Double, angle: Double): Long
     /** how: 0 join, 1 cut, 2 intersect. */
     override external fun combine(id: Int, target: Long, tool: Long, how: Int): Long
@@ -35,6 +35,8 @@ object Core : NativeCore {
     override external fun repairReport(data: ByteArray, format: Int): String
     override external fun convertToSolid(id: Int, body: Long): Long
     override external fun bodyCentre(body: Long): DoubleArray
+    override external fun primitive(id: Int, plane: DoubleArray, kind: Int, u: Double, v: Double, a: Double, b: Double, c: Double): Long
+    override external fun bounds(body: Long): DoubleArray
     /** Where bodies cross a plane, as sketch curves; see jni.cpp. */
     override external fun section(bodies: LongArray, plane: DoubleArray): DoubleArray
     /** Middle and normal of the selected flat part of a mesh, or null. */

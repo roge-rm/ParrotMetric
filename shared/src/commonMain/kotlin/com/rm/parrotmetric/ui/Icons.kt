@@ -38,6 +38,10 @@ object Icons {
     val fit = stroke("fit", "M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5")
     val close = stroke("close", "M6 6l12 12M18 6L6 18", width = 2.4f)
     val more = stroke("more", "M6 9l6 6 6-6", width = 2f)
+    val cylinder = stroke("cylinder", "M6 6.5v11a6 2.5 0 0 0 12 0v-11", "M6 6.5a6 2.5 0 1 0 12 0a6 2.5 0 1 0-12 0")
+    val sphere = stroke("sphere", circle(12f, 12f, 8.5f), "M3.5 12a8.5 3 0 0 0 17 0")
+    val torus = stroke("torus", "M2 12a10 6 0 1 0 20 0a10 6 0 1 0-20 0", "M8 11.5a4 1.8 0 0 0 8 0", "M9 11a3 1.3 0 0 1 6 0")
+    val cone = stroke("cone", "M12 3.5L5 17.5M12 3.5l7 14", "M5 17.5a7 2.5 0 1 0 14 0a7 2.5 0 1 0-14 0")
     /** The Shift key, for key badges. */
     val shiftKey = stroke("shiftKey", "M12 4l8 9h-4.5v7h-7v-7H4z", width = 2.4f)
 

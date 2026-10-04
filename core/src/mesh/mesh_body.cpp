@@ -100,6 +100,11 @@ std::array<double, 3> MeshBody::centre() const {
     return {(box.min.x + box.max.x) / 2, (box.min.y + box.max.y) / 2, (box.min.z + box.max.z) / 2};
 }
 
+std::array<double, 6> MeshBody::bounds() const {
+    auto box = m_->BoundingBox();
+    return {box.min.x, box.min.y, box.min.z, box.max.x, box.max.y, box.max.z};
+}
+
 double MeshBody::volume() const { return m_->Volume(); }
 size_t MeshBody::triangleCount() const { return m_->NumTri(); }
 
