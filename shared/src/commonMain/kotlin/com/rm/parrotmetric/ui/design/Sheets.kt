@@ -335,6 +335,23 @@ fun PrintCheckSheet(editor: DesignEditor, close: () -> Unit) {
 }
 
 @Composable
+fun SurfaceCheckSheet(editor: DesignEditor, close: () -> Unit) {
+    SheetFrame("Surface check", close) {
+        Segmented(listOf("Zebra", "Curvature"), if (editor.printCheck == 4) 1 else 0) {
+            editor.printCheck = it + 3
+            editor.updatePrintCheck()
+        }
+        if (editor.printCheck == 4) NumberRow("Radius", editor.curvatureRadius, "mm", allowNegative = false) {
+            editor.curvatureRadius = it.coerceAtLeast(0.01)
+            editor.updatePrintCheck()
+        } else NumberRow("Stripes", editor.zebraStripes, "", allowNegative = false) {
+            editor.zebraStripes = it.coerceIn(1.0, 60.0)
+            editor.updatePrintCheck()
+        }
+    }
+}
+
+@Composable
 fun SectionSheet(editor: DesignEditor, close: () -> Unit) {
     SheetFrame("Section", close) {
         val planes = editor.sectionPlanes

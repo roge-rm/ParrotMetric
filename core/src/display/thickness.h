@@ -16,9 +16,17 @@ std::vector<float> wallThickness(const DisplayMesh& mesh);
 
 /**
  * The mesh with its triangles split small enough to show thickness across
- * big flat faces, each with its own corners, and DisplayMesh::thickness
- * filled in. Faces, edges and corners stay as they were.
+ * big flat faces, each with its own corners, and DisplayMesh::shade
+ * filled in with the thickness. Faces, edges and corners stay as they were.
  */
 DisplayMesh withThickness(const DisplayMesh& mesh);
+
+/**
+ * The mesh with DisplayMesh::shade filled in with how curved it is at each
+ * vertex: 1 / radius, more than 0 where it bulges out. With [smooth] the
+ * normals are worked out again across touching triangles, for meshes whose
+ * own normals are flat.
+ */
+DisplayMesh withCurvature(const DisplayMesh& mesh, bool smooth);
 
 }  // namespace pm

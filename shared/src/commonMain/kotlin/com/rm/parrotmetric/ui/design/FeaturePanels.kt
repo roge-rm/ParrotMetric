@@ -86,6 +86,7 @@ fun FeaturePanel(editor: DesignEditor) {
                 is DesignEditor.MoveDraft -> MoveSettings(editor, d)
                 is DesignEditor.ConvertDraft -> Header("To solid", Icons.convert, Palette.modify, d.bodies.firstOrNull())
                 is DesignEditor.MeshEditDraft -> MeshEditSettings(editor, d)
+                is DesignEditor.RibDraft -> RibSettings(editor, d)
                 is DesignEditor.PlaneDraft -> PlaneSettings(editor, d)
                 is DesignEditor.AxisDraft -> AxisSettings(editor, d)
                 is DesignEditor.PointDraft -> PointSettings(editor, d)
@@ -539,6 +540,19 @@ internal fun FaceSettings(editor: DesignEditor, d: DesignEditor.FaceDraft) {
         DesignEditor.FaceTool.PressPull -> Field(editor, d, "size", "Distance", d.size, "mm", allowNegative = true) { d.size = it; editor.draftChanged() }
         DesignEditor.FaceTool.Delete -> {}
     }
+}
+
+@Composable
+private fun RibSettings(editor: DesignEditor, d: DesignEditor.RibDraft) {
+    Header(if (d.web) "Web" else "Rib", Icons.rib, Palette.modify, null)
+    Segmented(listOf("Rib", "Web"), if (d.web) 1 else 0) { d.web = it == 1; editor.draftChanged() }
+    val sketches = editor.sketchChoices(null)
+    if (sketches.size > 1) Segmented(sketches.takeLast(4).map { it.first }, sketches.takeLast(4).indexOfFirst { it.second == d.sketchId }.coerceAtLeast(0)) {
+        d.sketchId = sketches.takeLast(4)[it].second
+        editor.draftChanged()
+    }
+    Field(editor, d, "size", "Thickness", d.thickness, "mm", allowNegative = false) { d.thickness = it; editor.draftChanged() }
+    Toggle("Grow the other way", d.flip) { d.flip = it; editor.draftChanged() }
 }
 
 @Composable

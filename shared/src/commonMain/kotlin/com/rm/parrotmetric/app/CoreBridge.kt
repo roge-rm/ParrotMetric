@@ -76,6 +76,10 @@ class CoreKernel(private val core: NativeCore) : Kernel {
     override fun offsetFaces(id: Int, body: Long, faces: List<String>, distance: Double) = call { core.offsetFaces(id, body, faces.toTypedArray(), distance) }
     override fun deleteFaces(id: Int, body: Long, faces: List<String>) = call { core.deleteFaces(id, body, faces.toTypedArray()) }
     override fun meshEdit(id: Int, body: Long, kind: Int, size: Double, steps: Int) = call { core.meshEdit(id, body, kind, size, steps) }
+    override fun rib(id: Int, body: Long, plane: SketchPlane, curves: List<ProfileCurve>, thickness: Double, flip: Boolean, web: Boolean): Long {
+        val c = Curves(curves)
+        return call { core.rib(id, body, plane.numbers(), c.kinds, c.ids, c.nums, thickness, flip, web) }
+    }
     override fun chamfer(id: Int, body: Long, edges: List<String>, distance: Double, kind: Int, second: Double, flip: Boolean) =
         call { core.chamfer(id, body, edges.toTypedArray(), distance, kind, second, flip) }
     override fun overlaps(a: Long, b: Long) = call { core.overlaps(a, b) }

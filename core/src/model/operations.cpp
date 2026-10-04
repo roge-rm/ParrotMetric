@@ -2,6 +2,7 @@
 #include "parallel.h"
 
 #include <BRepAdaptor_Curve.hxx>
+#include <BRepExtrema_DistShapeShape.hxx>
 #include <GeomAPI_ProjectPointOnSurf.hxx>
 #include <GCPnts_AbscissaPoint.hxx>
 #include <BRepOffset_MakeOffset.hxx>
@@ -1269,6 +1270,103 @@ NamedShape coil(int id, const gp_Ax3& plane, double u, double v, double diameter
         return result;
     } catch (const Standard_Failure&) {
         throw std::runtime_error("The coil couldn't be made");
+    }
+}
+
+NamedShape rib(int id, const NamedShape& body, const gp_Ax3& plane, const std::vector<SketchCurve>& curves, double thickness, bool flip, bool web) {
+    if (thickness <= 0) throw std::runtime_error("The thickness has to be more than 0");
+    TopoDS_Wire wire = pathFromSketch(plane, curves);
+    if (wire.Closed()) throw std::runtime_error("Draw an open line, not a closed shape");
+    try {
+        // Far enough to cross the whole body from anywhere on the curves.
+        Bnd_Box box;
+        BRepBndLib::Add(body.shape, box);
+        BRepBndLib::Add(wire, box);
+        const double far = std::sqrt(box.SquareExtent()) * 2 + 10;
+        const gp_Dir n = plane.Direction();
+        TopoDS_Vertex v0, v1;
+        TopExp::Vertices(wire, v0, v1);
+        const gp_Pnt start = BRep_Tool::Pnt(v0), end = BRep_Tool::Pnt(v1);
+        gp_Dir grow;
+        TopoDS_Shape slab;
+        if (!web) {
+            gp_Vec run(start, end);
+            if (run.Magnitude() < 1e-9) throw std::runtime_error("The line's ends meet; draw an open line");
+            grow = gp_Dir(gp_Vec(n).Crossed(run));
+            if (flip) grow.Reverse();
+            // The curves swept across the plane make a flat face, thickened either side of the plane.
+            gp_Trsf out;
+            out.SetTranslation(gp_Vec(grow) * far);
+            TopoDS_Wire moved = TopoDS::Wire(wire.Moved(TopLoc_Location(out)));
+            BRepBuilderAPI_MakeWire outline;
+            outline.Add(wire);
+            outline.Add(BRepBuilderAPI_MakeEdge(end, end.Translated(gp_Vec(grow) * far)).Edge());
+            outline.Add(TopoDS::Wire(moved.Reversed()));
+            outline.Add(BRepBuilderAPI_MakeEdge(start.Translated(gp_Vec(grow) * far), start).Edge());
+            if (!outline.IsDone()) throw std::runtime_error("The rib couldn't be laid out");
+            BRepBuilderAPI_MakeFace face(gp_Pln(plane), outline.Wire());
+            if (!face.IsDone()) throw std::runtime_error("The rib couldn't be laid out");
+            gp_Trsf down;
+            down.SetTranslation(gp_Vec(n) * (-thickness / 2));
+            slab = BRepPrimAPI_MakePrism(face.Face().Moved(TopLoc_Location(down)), gp_Vec(n) * thickness).Shape();
+        } else {
+            // The curves grown straight out of the plane into a sheet, thickened to either side.
+            grow = flip ? n.Reversed() : n;
+            TopoDS_Shape sheet = BRepPrimAPI_MakePrism(wire, gp_Vec(grow) * far).Shape();
+            BRepAlgoAPI_Fuse both;
+            TopTools_ListOfShape sides, tools;
+            for (double side : {thickness / 2, -thickness / 2}) {
+                BRepOffsetAPI_MakeThickSolid thick;
+                thick.MakeThickSolidBySimple(sheet, side);
+                if (!thick.IsDone()) throw std::runtime_error("The web couldn't be laid out");
+                // The negative side comes out inside out.
+                TopoDS_Shape made = thick.Shape();
+                for (TopExp_Explorer so(made, TopAbs_SOLID); so.More(); so.Next()) {
+                    TopoDS_Solid solid = TopoDS::Solid(so.Current());
+                    BRepLib::OrientClosedSolid(solid);
+                    (sides.IsEmpty() ? sides : tools).Append(solid);
+                }
+            }
+            both.SetArguments(sides);
+            both.SetTools(tools);
+            both.Build();
+            if (!both.IsDone()) throw std::runtime_error("The web couldn't be laid out");
+            ShapeUpgrade_UnifySameDomain tidy(both.Shape());
+            tidy.Build();
+            slab = tidy.Shape();
+        }
+        // What's outside the body, from the curves up to where it meets the body.
+        BRepAlgoAPI_Cut outside(slab, body.shape);
+        outside.SetRunParallel(useCores());
+        outside.Build();
+        if (!outside.IsDone()) throw std::runtime_error("The rib couldn't be fitted to the body");
+        std::vector<TopoDS_Shape> kept;
+        bool tooFar = false;
+        for (TopExp_Explorer s(outside.Shape(), TopAbs_SOLID); s.More(); s.Next()) {
+            BRepExtrema_DistShapeShape gap(s.Current(), wire);
+            if (!gap.IsDone() || gap.Value() > 1e-4) continue;
+            Bnd_Box piece;
+            BRepBndLib::Add(s.Current(), piece);
+            double lo[3], hi[3];
+            piece.Get(lo[0], lo[1], lo[2], hi[0], hi[1], hi[2]);
+            double reach = 0;
+            for (int i = 0; i < 8; ++i) {
+                gp_Pnt c(i & 1 ? hi[0] : lo[0], i & 2 ? hi[1] : lo[1], i & 4 ? hi[2] : lo[2]);
+                double along = 0;
+                for (TopExp_Explorer v(wire, TopAbs_VERTEX); v.More(); v.Next())
+                    along = std::max(along, gp_Vec(BRep_Tool::Pnt(TopoDS::Vertex(v.Current())), c).Dot(gp_Vec(grow)));
+                reach = std::max(reach, along);
+            }
+            if (reach > far * 0.9) tooFar = true;
+            else kept.push_back(s.Current());
+        }
+        if (kept.empty()) throw std::runtime_error(tooFar ? "It doesn't meet the body that way" : "It doesn't touch the body");
+        NamedShape out = body;
+        for (size_t i = 0; i < kept.size(); ++i)
+            out = combine(id, out, nameAll(id, kept[i], TopoDS_Shape(), TopoDS_Shape(), i == 0 ? "w" : "w" + std::to_string(i) + "."), Combine::Join);
+        return out;
+    } catch (const Standard_Failure&) {
+        throw std::runtime_error("The rib couldn't be made");
     }
 }
 

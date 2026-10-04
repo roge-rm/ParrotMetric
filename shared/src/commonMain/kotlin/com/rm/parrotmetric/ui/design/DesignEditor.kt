@@ -187,14 +187,23 @@ class DesignEditor(
         measuring = false
     }
 
-    /** Colouring bodies to check them for printing: 0 off, 1 overhangs, 2 thin walls. */
+    /** Colouring bodies to check them: 0 off, 1 overhangs, 2 thin walls, 3 zebra stripes, 4 curvature. */
     var printCheck by mutableStateOf(0)
+    var zebraStripes by mutableStateOf(8.0)
+    /** Curves this tight or tighter show in full colour, mm. */
+    var curvatureRadius by mutableStateOf(10.0)
     /** Overhangs steeper than this from straight up need support, degrees. */
     var overhangAngle by mutableStateOf(45.0)
     var thinWall by mutableStateOf(1.2)
 
     fun updatePrintCheck() {
-        viewport.setAnalysis(printCheck, if (printCheck == 1) (90 - overhangAngle) * kotlin.math.PI / 180 else thinWall)
+        val limit = when (printCheck) {
+            1 -> (90 - overhangAngle) * kotlin.math.PI / 180
+            2 -> thinWall
+            3 -> zebraStripes
+            else -> curvatureRadius
+        }
+        viewport.setAnalysis(printCheck, limit)
         rebuild()
     }
 
@@ -544,6 +553,7 @@ class DesignEditor(
             when (it) {
                 is ExtrudeFeature -> it.sketchId
                 is RevolveFeature -> it.sketchId
+                is com.rm.parrotmetric.design.RibFeature -> it.sketchId
                 else -> null
             }
         }.toSet()
@@ -859,6 +869,11 @@ class DesignEditor(
     }
     fun startPlaneCut() = openBodies(SplitDraft(null).also { it.keep = 1 })
     fun startConvert() = openBodies(ConvertDraft(null))
+
+    fun startRib(web: Boolean) {
+        panel = RibDraft(null, web)
+        rebuild()
+    }
     fun startMeshEdit(kind: com.rm.parrotmetric.design.MeshEdit) = openBodies(MeshEditDraft(null, kind))
 
     private fun openBodies(d: BodyDraft) {
@@ -911,6 +926,7 @@ class DesignEditor(
             is com.rm.parrotmetric.design.AlignFeature -> AlignDraft(f).also { alignPicks(it) }
             is com.rm.parrotmetric.design.ConvertFeature -> ConvertDraft(f)
             is com.rm.parrotmetric.design.MeshEditFeature -> MeshEditDraft(f, f.kind)
+            is com.rm.parrotmetric.design.RibFeature -> RibDraft(f, f.web)
             is PointFeature -> PointDraft(f)
             is PlaneFeature -> PlaneDraft(f, f.kind).also { it.planes = planeChoices().filter { c -> c.second != PlaneRef.Construction(f.id) } }
             is AxisFeature -> AxisDraft(f)
@@ -1440,6 +1456,18 @@ class DesignEditor(
         init { if (editing != null) bodies = listOf(editing.body) }
         override fun feature(): Feature? = bodies.firstOrNull()?.let { com.rm.parrotmetric.design.ConvertFeature(id, name, it) }
         override fun missing() = "Tap the mesh to make solid"
+    }
+
+    /** A rib or web from a sketch's open lines. */
+    inner class RibDraft(editing: com.rm.parrotmetric.design.RibFeature?, web: Boolean) : FeatureDraft() {
+        val id = editing?.id ?: newId()
+        private val name = editing?.name ?: nextName(if (web) "Web" else "Rib", design.features.count { it is com.rm.parrotmetric.design.RibFeature && it.web == web })
+        var sketchId by mutableStateOf(editing?.sketchId ?: sketchChoices(null).lastOrNull()?.second)
+        var thickness by mutableStateOf(editing?.thickness ?: 2.0)
+        var flip by mutableStateOf(editing?.flip ?: false)
+        var web by mutableStateOf(web)
+        override fun feature(): Feature? = sketchId?.let { com.rm.parrotmetric.design.RibFeature(id, name, it, thickness, flip, web) }
+        override fun missing() = "Draw an open line in a sketch first"
     }
 
     /** Reduce, remesh or smooth a body's triangles. */

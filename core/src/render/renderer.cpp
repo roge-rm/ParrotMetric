@@ -27,7 +27,7 @@ const char* kFaceVertex = R"(#version 300 es
 layout(location = 0) in vec3 position;
 layout(location = 1) in vec3 normal;
 layout(location = 2) in uint face;
-layout(location = 3) in float thickness;
+layout(location = 3) in float shade;
 uniform mat4 viewProjection;
 uniform mat3 view;
 uniform sampler2D selected;
@@ -39,7 +39,7 @@ flat out float chosen;
 void main() {
     eyeNormal = view * normal;
     worldNormal = normal;
-    thick = thickness;
+    thick = shade;
     world = position;
     chosen = texelFetch(selected, ivec2(int(face) % 1024, int(face) / 1024), 0).r;
     gl_Position = viewProjection * vec4(position, 1.0);
@@ -82,6 +82,10 @@ void main() {
         float c = cos(limit);
         if (down > c && world.z > bedZ + 0.05) own = mix(vec3(0.95, 0.62, 0.25), vec3(0.86, 0.22, 0.20), clamp((down - c) / max(1.0 - c, 0.01) * 2.0, 0.0, 1.0));
         else own = vec3(0.62, 0.78, 0.70);
+    } else if (analysed && analysis == 4) {
+        // Bulging out warm, hollow cool, flat between; limit is the radius that shows fully.
+        float t = clamp(thick * limit, -1.0, 1.0);
+        own = t >= 0.0 ? mix(vec3(0.62, 0.78, 0.70), vec3(0.90, 0.36, 0.22), t) : mix(vec3(0.62, 0.78, 0.70), vec3(0.30, 0.50, 0.90), -t);
     } else if (analysed && analysis == 2) {
         if (thick < limit) own = vec3(0.86, 0.22, 0.20);
         else if (thick < limit * 2.0) own = mix(vec3(0.95, 0.70, 0.25), vec3(0.62, 0.78, 0.70), (thick - limit) / limit);
@@ -90,6 +94,12 @@ void main() {
     vec3 base = mix(own, vec3(1.0, 0.48, 0.24), chosen * 0.55);
     float alpha = faceColour.a < 1.0 ? mix(faceColour.a, 0.55, chosen) : 1.0;
     colour = vec4(base * (ambient + 0.72 * key) + rim * (1.0 - chosen), alpha);
+    if (analysed && analysis == 3) {
+        // Stripes as a row of lights would reflect in it; limit is how many.
+        vec3 r = reflect(vec3(0.0, 0.0, -1.0), n);
+        float band = step(0.5, fract(r.y * limit * 0.5 + 0.5));
+        colour = vec4(mix(vec3(0.08), vec3(0.95), band) * (0.75 + 0.25 * key), alpha);
+    }
 })";
 
 const char* kEdgeVertex = R"(#version 300 es
@@ -370,7 +380,7 @@ void Renderer::upload() {
         glBufferSubData(GL_ARRAY_BUFFER, 0, GLsizeiptr(posBytes), b.positions.data());
         glBufferSubData(GL_ARRAY_BUFFER, GLintptr(posBytes), GLsizeiptr(posBytes), b.normals.data());
         glBufferSubData(GL_ARRAY_BUFFER, GLintptr(posBytes * 2), GLsizeiptr(faceBytes), b.faceOfVertex.data());
-        std::vector<float> thick = b.thickness.size() == n ? b.thickness : std::vector<float>(n, 1e9f);
+        std::vector<float> thick = b.shade.size() == n ? b.shade : std::vector<float>(n, 1e9f);
         glBufferSubData(GL_ARRAY_BUFFER, GLintptr(posBytes * 2 + faceBytes), GLsizeiptr(faceBytes), thick.data());
         glEnableVertexAttribArray(0);
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);

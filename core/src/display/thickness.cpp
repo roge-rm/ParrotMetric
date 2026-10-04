@@ -4,6 +4,7 @@
 #include <array>
 #include <cmath>
 #include <thread>
+#include <unordered_map>
 
 #include "parallel.h"
 
@@ -283,7 +284,63 @@ DisplayMesh withThickness(const DisplayMesh& mesh) {
             }
         }
     }
-    out.thickness = castAll(mesh, samples);
+    out.shade = castAll(mesh, samples);
+    return out;
+}
+
+DisplayMesh withCurvature(const DisplayMesh& mesh, bool smooth) {
+    DisplayMesh out = mesh;
+    size_t n = mesh.vertexCount();
+    // Which vertex each is the same as: itself, or with [smooth] the first in the same place.
+    std::vector<uint32_t> same(n);
+    if (smooth) {
+        std::unordered_map<uint64_t, uint32_t> at;
+        auto key = [&](size_t i) {
+            uint64_t k = 0;
+            for (int c = 0; c < 3; ++c) k = k * 1000003u + uint64_t(int64_t(std::llround(mesh.positions[i * 3 + size_t(c)] * 1e4)));
+            return k;
+        };
+        for (size_t i = 0; i < n; ++i) same[i] = at.emplace(key(i), uint32_t(i)).first->second;
+    } else {
+        for (size_t i = 0; i < n; ++i) same[i] = uint32_t(i);
+    }
+    std::vector<float> normal(n * 3, 0.0f);
+    if (smooth) {
+        // By the area of each triangle round it.
+        for (size_t t = 0; t + 2 < mesh.indices.size(); t += 3) {
+            const float* a = &mesh.positions[mesh.indices[t] * 3];
+            const float* b = &mesh.positions[mesh.indices[t + 1] * 3];
+            const float* c = &mesh.positions[mesh.indices[t + 2] * 3];
+            float u[3] = {b[0] - a[0], b[1] - a[1], b[2] - a[2]}, v[3] = {c[0] - a[0], c[1] - a[1], c[2] - a[2]};
+            float x[3] = {u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]};
+            for (int k = 0; k < 3; ++k)
+                for (int d = 0; d < 3; ++d) normal[same[mesh.indices[t + size_t(k)]] * 3 + size_t(d)] += x[d];
+        }
+        for (size_t i = 0; i < n; ++i) normalise(&normal[same[i] * 3]);
+    } else {
+        normal = mesh.normals;
+    }
+    // Along each edge, how fast the normal turns for the distance: averaged round each vertex.
+    std::vector<float> sum(n, 0.0f);
+    std::vector<int> count(n, 0);
+    for (size_t t = 0; t + 2 < mesh.indices.size(); t += 3)
+        for (int e = 0; e < 3; ++e) {
+            uint32_t i = same[mesh.indices[t + size_t(e)]], j = same[mesh.indices[t + size_t((e + 1) % 3)]];
+            if (i == j) continue;
+            const float *pi = &mesh.positions[i * 3], *pj = &mesh.positions[j * 3];
+            const float *ni = &normal[i * 3], *nj = &normal[j * 3];
+            float d[3] = {pi[0] - pj[0], pi[1] - pj[1], pi[2] - pj[2]};
+            float len2 = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
+            if (len2 < 1e-12f) continue;
+            float k = ((ni[0] - nj[0]) * d[0] + (ni[1] - nj[1]) * d[1] + (ni[2] - nj[2]) * d[2]) / len2;
+            sum[i] += k; ++count[i];
+            sum[j] += k; ++count[j];
+        }
+    out.shade.assign(n, 0.0f);
+    for (size_t i = 0; i < n; ++i) {
+        uint32_t s = same[i];
+        out.shade[i] = count[s] > 0 ? sum[s] / float(count[s]) : 0.0f;
+    }
     return out;
 }
 

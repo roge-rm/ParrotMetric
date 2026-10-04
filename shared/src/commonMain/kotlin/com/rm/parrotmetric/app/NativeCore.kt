@@ -18,6 +18,7 @@ interface NativeCore {
     fun offsetFaces(id: Int, body: Long, faces: Array<String>, distance: Double): Long
     fun deleteFaces(id: Int, body: Long, faces: Array<String>): Long
     fun meshEdit(id: Int, body: Long, kind: Int, size: Double, steps: Int): Long
+    fun rib(id: Int, body: Long, plane: DoubleArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, thickness: Double, flip: Boolean, web: Boolean): Long
     fun chamfer(id: Int, body: Long, edges: Array<String>, distance: Double, kind: Int, second: Double, flip: Boolean): Long
     fun overlaps(a: Long, b: Long): Boolean
     fun facePlane(body: Long, name: String): DoubleArray

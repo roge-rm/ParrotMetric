@@ -66,6 +66,8 @@ object Tools {
         ToolDef("shell", "Shell", Icons.shell, ToolGroup.Modify, key = "W", suggest = ::faces, cluster = "Faces") { it.design.startShell() },
         ToolDef("presspull", "Press pull", Icons.pressPull, ToolGroup.Modify, key = "Q", suggest = ::faces) { it.design.startPressPull() },
         ToolDef("deleteface", "Delete face", Icons.deleteFace, ToolGroup.Modify, suggest = ::faces, cluster = "Faces") { it.design.startDeleteFace() },
+        ToolDef("rib", "Rib", Icons.rib, ToolGroup.Modify, cluster = "Ribs") { it.design.startRib(web = false) },
+        ToolDef("web", "Web", Icons.rib, ToolGroup.Modify, cluster = "Ribs") { it.design.startRib(web = true) },
         ToolDef("hole", "Hole", Icons.hole, ToolGroup.Modify, key = "H", mesh = true, cluster = "Holes and threads") { it.design.startHole() },
         ToolDef("thread", "Thread", Icons.thread, ToolGroup.Modify, cluster = "Holes and threads") { it.design.startThread() },
         ToolDef("draft", "Draft", Icons.draft, ToolGroup.Modify, key = "Shift+D", suggest = ::faces, cluster = "Faces") { it.design.startDraft() },
@@ -109,6 +111,9 @@ object Tools {
         ToolDef("section", "Section", Icons.section, ToolGroup.Inspect, key = "Shift+I") { it.design.startSection(); it.openSheet("section") },
         ToolDef("printcheck", "Print check", Icons.printCheck, ToolGroup.Inspect) {
             it.design.printCheck = 1; it.design.updatePrintCheck(); it.openSheet("printcheck")
+        },
+        ToolDef("surfacecheck", "Surface check", Icons.zebra, ToolGroup.Inspect) {
+            it.design.printCheck = 3; it.design.updatePrintCheck(); it.openSheet("surfacecheck")
         },
         ToolDef("interference", "Interference", Icons.interference, ToolGroup.Inspect) { it.openSheet("interference") },
         ToolDef("parameters", "Parameters", Icons.parameters, ToolGroup.Inspect) { it.openSheet("parameters") },

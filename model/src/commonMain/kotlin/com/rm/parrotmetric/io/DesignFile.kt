@@ -34,6 +34,7 @@ import com.rm.parrotmetric.design.FilletKind
 import com.rm.parrotmetric.design.OffsetFaceFeature
 import com.rm.parrotmetric.design.DeleteFaceFeature
 import com.rm.parrotmetric.design.MeshEdit
+import com.rm.parrotmetric.design.RibFeature
 import com.rm.parrotmetric.design.MeshEditFeature
 import com.rm.parrotmetric.design.ImportFeature
 import com.rm.parrotmetric.design.Operation
@@ -164,6 +165,7 @@ object DesignFile {
             is MirrorFeature -> mapOf("type" to "mirror", "bodies" to f.bodies, "plane" to plane(f.plane), "join" to f.join, "features" to f.features)
             is OffsetFaceFeature -> mapOf("type" to "offsetFace", "faces" to f.faces, "distance" to f.distance)
             is DeleteFaceFeature -> mapOf("type" to "deleteFace", "faces" to f.faces)
+            is RibFeature -> mapOf("type" to "rib", "sketch" to f.sketchId, "thickness" to f.thickness, "flip" to f.flip, "web" to f.web)
             is MeshEditFeature -> mapOf("type" to "meshEdit", "body" to f.body, "kind" to f.kind.name, "size" to f.size, "steps" to f.steps)
             is PatternFeature -> mapOf(
                 "type" to "pattern", "bodies" to f.bodies, "circular" to f.circular, "axis" to f.axis.name, "count" to f.count,
@@ -257,6 +259,7 @@ object DesignFile {
             "mirror" -> MirrorFeature(id, name, strings(o.arr("bodies")), plane(o.obj("plane")), o.bool("join"), ints(o["features"]))
             "offsetFace" -> OffsetFaceFeature(id, name, strings(o.arr("faces")), o.num("distance"))
             "deleteFace" -> DeleteFaceFeature(id, name, strings(o.arr("faces")))
+            "rib" -> RibFeature(id, name, o.int("sketch"), o.num("thickness"), o.bool("flip"), o.bool("web"))
             "meshEdit" -> MeshEditFeature(id, name, o.str("body"), MeshEdit.valueOf(o.str("kind")), o.num("size"), o.int("steps"))
             "pattern" -> PatternFeature(
                 id, name, strings(o.arr("bodies")), o.bool("circular"), Axis3.valueOf(o.str("axis")), o.int("count"), o.num("spacing"), o.num("angle"),

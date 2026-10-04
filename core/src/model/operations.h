@@ -165,6 +165,15 @@ NamedShape coil(int id, const gp_Ax3& plane, double u, double v, double diameter
  */
 NamedShape thread(int id, const NamedShape& body, const std::string& face, double pitch);
 
+/**
+ * A rib or web from open sketch curves, grown until it meets the body and
+ * joined to it. A rib is [thickness] across the sketch plane, centred on it,
+ * and grows in the plane, square to the curves' run (the other way with
+ * [flip]). A web is [thickness] wide in the plane and grows along the
+ * plane's normal (against it with [flip]). New faces are F<id>.w<n>.
+ */
+NamedShape rib(int id, const NamedShape& body, const gp_Ax3& plane, const std::vector<SketchCurve>& curves, double thickness, bool flip, bool web);
+
 /** One area of a sketch, for a loft. */
 struct LoftProfile {
     gp_Ax3 plane;

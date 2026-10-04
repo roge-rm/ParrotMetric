@@ -4,6 +4,8 @@
 
 #include "display/display_mesh.h"
 #include "display/thickness.h"
+#include <BRepPrimAPI_MakeSphere.hxx>
+#include <algorithm>
 #include "mesh/mesh_body.h"
 #include "solid/solid.h"
 
@@ -53,13 +55,29 @@ TEST_CASE("thin walls show across big flat faces") {
     // A box with 1 mm walls and no top: its sides have only corner vertices until split.
     MeshBody cup = MeshBody::box(30, 20, 10).boolean(MeshBody::box(28, 18, 10).translated(1, 1, 1), BooleanOp::Cut);
     DisplayMesh d = withThickness(displayMesh(cup.toMesh()));
-    REQUIRE(d.thickness.size() == d.vertexCount());
+    REQUIRE(d.shade.size() == d.vertexCount());
     size_t sides = 0, thin = 0;
     for (size_t i = 0; i < d.vertexCount(); ++i) {
         if (std::abs(d.normals[i * 3 + 2]) > 0.1f) continue;
         ++sides;
-        if (d.thickness[i] < 1.01f) ++thin;
+        if (d.shade[i] < 1.01f) ++thin;
     }
     CHECK(sides > 1000);
     CHECK(double(thin) / double(sides) > 0.85);
+}
+
+TEST_CASE("curvature is one over the radius") {
+    Solid ball = Solid::fromShape(BRepPrimAPI_MakeSphere(10).Shape());
+    auto median = [](std::vector<float> v) {
+        std::nth_element(v.begin(), v.begin() + long(v.size() / 2), v.end());
+        return v[v.size() / 2];
+    };
+    DisplayMesh d = withCurvature(ball.display(), false);
+    CHECK(median(d.shade) == Catch::Approx(0.1).epsilon(0.1));
+    // A mesh has flat normals: they're worked out again across triangles.
+    DisplayMesh m = withCurvature(displayMesh(ball.tessellate({})), true);
+    CHECK(median(m.shade) == Catch::Approx(0.1).epsilon(0.15));
+    // Flat faces aren't curved.
+    DisplayMesh box = withCurvature(Solid::box(10, 10, 10).display(), false);
+    for (float k : box.shade) CHECK(std::abs(k) < 1e-6);
 }

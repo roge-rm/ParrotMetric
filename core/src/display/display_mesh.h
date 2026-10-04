@@ -26,8 +26,11 @@ struct DisplayMesh {
         std::vector<float> points;  // x, y, z per point; empty for edges not drawn, such as seams
     };
     std::vector<Edge> edges;
-    /** How thick the body is at each vertex (mm), for the thickness view; empty when not worked out. */
-    std::vector<float> thickness;
+    /**
+     * A number at each vertex that a check view colours by: how thick the
+     * body is there (mm) or how curved (1/mm). Empty when not worked out.
+     */
+    std::vector<float> shade;
     /** A body, as opposed to a sketch or plane: the views that colour bodies colour it. */
     bool body = false;
     /** Corners that can be picked: x, y, z each. Solids only. */

@@ -394,6 +394,25 @@ class Rebuilder(private val kernel: Kernel) {
             }
             Step(f.key(), out, planes, null, made)
         }
+        is RibFeature -> {
+            val sketch = sketchOf(f.sketchId, all)
+            val plane = planes[f.sketchId] ?: throw KernelException("Its sketch couldn't be built")
+            val curves = sketch.curves()
+            if (curves.isEmpty()) throw KernelException("Its sketch has no lines")
+            // The first body it meets.
+            var made2: Pair<BodyState, Long>? = null
+            var why: String? = null
+            for (b in bodies) {
+                try {
+                    made2 = b to kernel.rib(f.id, b.handle, plane, curves, f.thickness, f.flip, f.web)
+                    break
+                } catch (e: KernelException) {
+                    if (why == null) why = e.message
+                }
+            }
+            val (body, h) = made2 ?: throw KernelException(why ?: "There's no body for it to meet")
+            replace(f, bodies, planes, made, body) { h }
+        }
         is MeshEditFeature -> {
             val body = bodies.firstOrNull { it.label == f.body } ?: throw KernelException("${f.body} isn't there any more")
             replace(f, bodies, planes, made, body) { kernel.meshEdit(f.id, body.handle, f.kind.ordinal, f.size, f.steps) }

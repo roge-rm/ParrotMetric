@@ -459,3 +459,18 @@ TEST_CASE("places along a path, spread evenly or spaced") {
     CHECK(turned[1][0] == Catch::Approx(0).margin(1e-9));  // x goes to y: cos 90°
     CHECK(turned[1][4] == Catch::Approx(1));
 }
+
+TEST_CASE("a rib grows down to the body and a web out of its plane") {
+    NamedShape box = extrude(1, top, rectangle(40, 40), {{{1, 2, 3, 4}, 5, 5}}, 10, 0);
+    // Standing across the middle of the box, sketch y pointing down: the line is 20 above the top.
+    gp_Ax3 across(gp_Pnt(0, 20, 0), gp_Dir(0, 1, 0), gp_Dir(1, 0, 0));
+    std::vector<SketchCurve> above = {line(1, 5, -30, 35, -30)};
+    NamedShape ribbed = rib(2, box, across, above, 2, false, false);
+    CHECK(volume(ribbed) == Catch::Approx(16000 + 2 * 30 * 20).epsilon(1e-6));
+    CHECK(has(ribbed.faceNames(), "F2.w0"));
+    CHECK_THROWS_WITH(rib(2, box, across, above, 2, true, false), "It doesn't meet the body that way");
+    // A web from a plane 30 up, facing down, grows to the top face.
+    gp_Ax3 high(gp_Pnt(0, 0, 30), gp_Dir(0, 0, -1), gp_Dir(1, 0, 0));
+    NamedShape webbed = rib(3, box, high, {line(1, 5, -20, 35, -20)}, 2, false, true);
+    CHECK(volume(webbed) == Catch::Approx(16000 + 30 * 2 * 20).epsilon(1e-4));
+}

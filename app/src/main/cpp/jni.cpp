@@ -194,6 +194,8 @@ struct DisplayCached {
     std::shared_ptr<const pm::DisplayMesh> mesh;
     std::vector<std::string> faceNames, edgeNames, cornerNames;
     size_t triangles = 0;  // Mesh bodies' own triangles.
+    int shadeMode = 0;     // The check view DisplayMesh::shade was worked out for, if any.
+    std::shared_ptr<const pm::DisplayMesh> plain;  // The mesh before any check view's changes.
 };
 std::unordered_map<jlong, DisplayCached> displayCache;  // Only show() uses it, one call at a time.
 
@@ -204,10 +206,13 @@ std::atomic<int> analysisMode{0};
 
 const DisplayCached& displayOf(jlong handle, const pm::Body& b) {
     const DisplayCached& c = displayShape(handle, b);
-    if (analysisMode != 2 || !c.mesh->thickness.empty()) return c;
-    auto withThickness = std::make_shared<pm::DisplayMesh>(pm::withThickness(*c.mesh));
+    int mode = analysisMode;
+    int want = (mode == 2 || mode == 4) ? mode : 0;
+    if (c.shadeMode == want) return c;
     DisplayCached& again = displayCache[handle];
-    again.mesh = std::move(withThickness);
+    if (want == 0) again.mesh = again.plain;
+    else again.mesh = std::make_shared<pm::DisplayMesh>(want == 2 ? pm::withThickness(*again.plain) : pm::withCurvature(*again.plain, !b.solid));
+    again.shadeMode = want;
     return again;
 }
 
@@ -239,6 +244,7 @@ const DisplayCached& displayShape(jlong handle, const pm::Body& b) {
         mesh.body = true;
         c.mesh = std::make_shared<pm::DisplayMesh>(std::move(mesh));
     }
+    c.plain = c.mesh;
     return displayCache[handle] = std::move(c);
 }
 
@@ -1865,6 +1871,24 @@ JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_meshEdit(JNIEnv* env, jobj
         }
         g.lock();
         return store.add(std::move(out));
+    } catch (const std::exception& e) {
+        fail(env, e.what());
+        return 0;
+    }
+}
+
+/** A rib (or web) from open curves on a plane, joined to the body; see pm::rib. */
+JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_rib(JNIEnv* env, jobject, jint id, jlong body, jdoubleArray plane, jintArray kinds, jintArray ids,
+                                                         jdoubleArray nums, jdouble thickness, jboolean flip, jboolean web) {
+    try {
+        auto p = doubles(env, plane);
+        auto k = ints(env, kinds), i = ints(env, ids);
+        auto n = doubles(env, nums);
+        auto curves = curvesOf(k.data(), i.data(), n.data(), k.size());
+        std::unique_lock<std::mutex> g(lock);
+        pm::NamedShape s = solidOf(body);
+        g.unlock();
+        return keep(pm::rib(id, s, planeOf(p.data()), curves, thickness, flip, web));
     } catch (const std::exception& e) {
         fail(env, e.what());
         return 0;

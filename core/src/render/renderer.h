@@ -54,7 +54,8 @@ public:
      * Colours bodies to check them for printing: 0 off; 1 overhangs, faces
      * facing down more steeply than limit radians from straight down, above
      * the lowest point; 2 walls thinner than limit mm (needs
-     * DisplayMesh::thickness).
+     * DisplayMesh::shade); 3 zebra stripes, limit of them; 4 curvature
+     * (needs DisplayMesh::shade), full colour at radius limit mm.
      */
     void setAnalysis(int mode, float limit) {
         analysis_ = mode;

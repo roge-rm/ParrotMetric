@@ -19,6 +19,7 @@ object Core : NativeCore {
     override external fun offsetFaces(id: Int, body: Long, faces: Array<String>, distance: Double): Long
     override external fun deleteFaces(id: Int, body: Long, faces: Array<String>): Long
     override external fun meshEdit(id: Int, body: Long, kind: Int, size: Double, steps: Int): Long
+    override external fun rib(id: Int, body: Long, plane: DoubleArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, thickness: Double, flip: Boolean, web: Boolean): Long
     override external fun chamfer(id: Int, body: Long, edges: Array<String>, distance: Double, kind: Int, second: Double, flip: Boolean): Long
     override external fun overlaps(a: Long, b: Long): Boolean
     override external fun facePlane(body: Long, name: String): DoubleArray

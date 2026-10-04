@@ -87,6 +87,8 @@ object Icons {
     val pointTool = stroke("point", circle(12f, 12f, 2.5f), "M12 4v3M12 17v3M4 12h3M17 12h3")
     val spline = stroke("spline", "M3 17c3-8 6-8 9-2s6 6 9-2", circle(3f, 17f, 1.3f), circle(21f, 13f, 1.3f))
     val polygon = stroke("polygon", "M12 3l8 5.5-3 9.5H7L4 8.5z")
+    val zebra = stroke("zebra", "M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18z", "M6 6.5l11.5 11.5M3.5 11.5l9 9M11.5 3.5l9 9")
+    val rib = stroke("rib", "M3 20h18", "M5 20V9h14v11", "M12 9v11", "M10.5 20V12h3v8")
     val breakTool = stroke("breakTool", "M3 12h7M14 12h7", "M12 7v2M12 15v2", circle(12f, 12f, 1.2f))
     val ellipse = stroke("ellipse", "M3 12a9 5.5 0 1 0 18 0a9 5.5 0 1 0-18 0")
     val conic = stroke("conic", "M4 19C5 11 10 6 19 5", "M4 19L4 5h15", circle(4f, 5f, 1.2f))

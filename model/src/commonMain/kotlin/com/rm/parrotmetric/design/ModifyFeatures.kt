@@ -23,6 +23,22 @@ data class DeleteFaceFeature(override val id: Int, override val name: String, va
     override fun key() = this
 }
 
+/**
+ * A rib from a sketch's open curves, [thickness] mm, grown until it meets a
+ * body: across the sketch plane, or with [web] out of it along its normal.
+ * [flip] grows it the other way.
+ */
+data class RibFeature(
+    override val id: Int,
+    override val name: String,
+    val sketchId: Int,
+    val thickness: Double,
+    val flip: Boolean,
+    val web: Boolean,
+) : Feature() {
+    override fun key() = this
+}
+
 enum class MeshEdit { Reduce, Remesh, Smooth }
 
 /**
