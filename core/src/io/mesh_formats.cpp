@@ -1,5 +1,7 @@
 #include "io/mesh_formats.h"
 
+#include <cstdio>
+
 #include <zlib.h>
 
 #include <array>
@@ -194,19 +196,34 @@ std::vector<uint8_t> write3mf(const std::vector<NamedMesh>& objects) {
     m << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
          "<model unit=\"millimeter\" xml:lang=\"en-US\" xmlns=\"http://schemas.microsoft.com/3dmanufacturing/core/2015/02\">\n"
          " <resources>\n";
+    // Colours as base materials, one per object that has one; the objects are numbered after them.
+    bool coloured = false;
+    for (const auto& o : objects) coloured = coloured || o.colour >= 0;
+    const size_t first = coloured ? 2 : 1;
+    if (coloured) {
+        m << "  <basematerials id=\"1\">\n";
+        for (const auto& o : objects) {
+            char hex[8];
+            std::snprintf(hex, sizeof hex, "#%06X", unsigned(o.colour < 0 ? 0xCCCCCC : o.colour) & 0xFFFFFFu);
+            m << "   <base name=\"" << hex << "\" displaycolor=\"" << hex << "\"/>\n";
+        }
+        m << "  </basematerials>\n";
+    }
     for (size_t i = 0; i < objects.size(); ++i) {
         std::string name;
         for (char c : objects[i].name) {
             if (c == '&') name += "&amp;"; else if (c == '<') name += "&lt;"; else if (c == '"') name += "&quot;"; else name += c;
         }
-        m << "  <object id=\"" << i + 1 << "\" name=\"" << name << "\" type=\"model\">\n   <mesh>\n    <vertices>\n";
+        m << "  <object id=\"" << i + first << "\" name=\"" << name << "\" type=\"model\"";
+        if (coloured) m << " pid=\"1\" pindex=\"" << i << "\"";
+        m << ">\n   <mesh>\n    <vertices>\n";
         for (const auto& v : objects[i].mesh.vertices) m << "     <vertex x=\"" << v[0] << "\" y=\"" << v[1] << "\" z=\"" << v[2] << "\"/>\n";
         m << "    </vertices>\n    <triangles>\n";
         for (const auto& t : objects[i].mesh.triangles) m << "     <triangle v1=\"" << t[0] << "\" v2=\"" << t[1] << "\" v3=\"" << t[2] << "\"/>\n";
         m << "    </triangles>\n   </mesh>\n  </object>\n";
     }
     m << " </resources>\n <build>\n";
-    for (size_t i = 0; i < objects.size(); ++i) m << "  <item objectid=\"" << i + 1 << "\"/>\n";
+    for (size_t i = 0; i < objects.size(); ++i) m << "  <item objectid=\"" << i + first << "\"/>\n";
     m << " </build>\n</model>\n";
     return zip({
         {"[Content_Types].xml",

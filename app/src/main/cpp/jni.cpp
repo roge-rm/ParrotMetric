@@ -705,6 +705,43 @@ JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_primitive(JNIEnv* env, job
     }
 }
 
+/** A body's volume (mm³), surface area (mm²) and centre of mass x, y, z. */
+JNIEXPORT jdoubleArray JNICALL Java_com_rm_parrotmetric_Core_properties(JNIEnv* env, jobject, jlong body) {
+    std::unique_lock<std::mutex> g(lock);
+    const pm::Body b = store.get(body);
+    g.unlock();
+    double out[5] = {0, 0, 0, 0, 0};
+    if (b.solid) {
+        GProp_GProps volume, surface;
+        BRepGProp::VolumeProperties(b.solid->shape, volume);
+        BRepGProp::SurfaceProperties(b.solid->shape, surface);
+        out[0] = std::abs(volume.Mass());
+        out[1] = surface.Mass();
+        out[2] = volume.CentreOfMass().X(); out[3] = volume.CentreOfMass().Y(); out[4] = volume.CentreOfMass().Z();
+    } else {
+        // From the triangles: each with the origin makes a tetrahedron.
+        pm::Mesh m = b.mesh->toMesh();
+        double v = 0, cx = 0, cy = 0, cz = 0, area = 0;
+        for (const auto& t : m.triangles) {
+            const auto& p = m.vertices[t[0]];
+            const auto& q = m.vertices[t[1]];
+            const auto& r = m.vertices[t[2]];
+            double d = (double(p[0]) * (double(q[1]) * r[2] - double(q[2]) * r[1]) - double(p[1]) * (double(q[0]) * r[2] - double(q[2]) * r[0]) +
+                        double(p[2]) * (double(q[0]) * r[1] - double(q[1]) * r[0])) / 6;
+            v += d;
+            cx += d * (p[0] + q[0] + r[0]) / 4; cy += d * (p[1] + q[1] + r[1]) / 4; cz += d * (p[2] + q[2] + r[2]) / 4;
+            double ux = q[0] - p[0], uy = q[1] - p[1], uz = q[2] - p[2], wx = r[0] - p[0], wy = r[1] - p[1], wz = r[2] - p[2];
+            area += std::sqrt(std::pow(uy * wz - uz * wy, 2) + std::pow(uz * wx - ux * wz, 2) + std::pow(ux * wy - uy * wx, 2)) / 2;
+        }
+        out[0] = std::abs(v);
+        out[1] = area;
+        if (std::abs(v) > 1e-12) { out[2] = cx / v; out[3] = cy / v; out[4] = cz / v; }
+    }
+    jdoubleArray a = env->NewDoubleArray(5);
+    env->SetDoubleArrayRegion(a, 0, 5, out);
+    return a;
+}
+
 /** The box round a body: x, y, z low, then high. */
 JNIEXPORT jdoubleArray JNICALL Java_com_rm_parrotmetric_Core_bounds(JNIEnv* env, jobject, jlong body) {
     std::unique_lock<std::mutex> g(lock);
@@ -834,7 +871,7 @@ JNIEXPORT jboolean JNICALL Java_com_rm_parrotmetric_Core_isMesh(JNIEnv*, jobject
  * nothing that format can hold.
  */
 JNIEXPORT jbyteArray JNICALL Java_com_rm_parrotmetric_Core_exportBodies(JNIEnv* env, jobject, jlongArray handles, jobjectArray names,
-                                                                       jint format, jint quality) {
+                                                                       jintArray colours, jint format, jint quality) {
     try {
         std::vector<pm::Body> bodies;
         {
@@ -842,12 +879,13 @@ JNIEXPORT jbyteArray JNICALL Java_com_rm_parrotmetric_Core_exportBodies(JNIEnv* 
             for (jlong h : longs(env, handles)) bodies.push_back(store.get(h));
         }
         auto labels = strings(env, names);
+        auto tints = ints(env, colours);
         const double chords[3] = {0.005, 0.02, 0.1}, angles[3] = {0.1, 0.25, 0.5};
         int q = std::clamp(int(quality), 0, 2);
         if (format == 3 || format == 4) {
             std::vector<pm::NamedMesh> objects;
             for (size_t i = 0; i < bodies.size(); ++i)
-                objects.push_back({i < labels.size() ? labels[i] : "Body", bodies[i].asMesh(chords[q], angles[q]).toMesh()});
+                objects.push_back({i < labels.size() ? labels[i] : "Body", bodies[i].asMesh(chords[q], angles[q]).toMesh(), i < tints.size() ? tints[i] : -1});
             if (objects.empty()) return nullptr;
             if (format == 4) return array(env, pm::write3mf(objects));
             std::string text = pm::writeObj(objects);
@@ -884,11 +922,13 @@ JNIEXPORT jbyteArray JNICALL Java_com_rm_parrotmetric_Core_exportBodies(JNIEnv* 
  */
 JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_show(JNIEnv* env, jobject, jlongArray handles, jdoubleArray planes,
                                                          jintArray curveCounts, jintArray kinds, jintArray ids, jdoubleArray nums,
-                                                         jdoubleArray constructionPlanes, jdoubleArray axes, jdoubleArray points, jboolean refit) {
+                                                         jdoubleArray constructionPlanes, jdoubleArray axes, jdoubleArray points, jintArray colours,
+                                                         jboolean refit) {
     auto cp = doubles(env, constructionPlanes);
     auto ax = doubles(env, axes);
     auto pts = doubles(env, points);
     auto h = longs(env, handles);
+    auto tints = ints(env, colours);
     auto p = doubles(env, planes);
     auto counts = ints(env, curveCounts);
     auto k = ints(env, kinds), i = ints(env, ids);
@@ -909,6 +949,12 @@ JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_show(JNIEnv* env, jobject, 
         s.edgeNames = c.edgeNames;
         triangles += c.triangles;
         meshes.push_back(*c.mesh);
+        if (i < tints.size() && tints[i] >= 0) {
+            int t = tints[i];
+            meshes.back().faceColour[0] = float((t >> 16) & 255) / 255;
+            meshes.back().faceColour[1] = float((t >> 8) & 255) / 255;
+            meshes.back().faceColour[2] = float(t & 255) / 255;
+        }
         if (b.mesh) s.mesh = std::const_pointer_cast<pm::DisplayMesh>(c.mesh);
         nextShown.push_back(std::move(s));
     }

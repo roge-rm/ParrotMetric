@@ -20,6 +20,15 @@ TEST_CASE("3MF round trip keeps each body") {
     CHECK(openEdgeCount(back[1].mesh) == 0);
 }
 
+TEST_CASE("3MF with colours still reads back each body") {
+    NamedMesh a{"Red", MeshBody::box(10, 10, 10).toMesh(), 0xD64541};
+    NamedMesh b{"Plain", MeshBody::box(5, 5, 5).translated(20, 0, 0).toMesh()};
+    auto back = read3mf(write3mf({a, b}));
+    REQUIRE(back.size() == 2);
+    CHECK(back[0].name == "Red");
+    CHECK(volume(back[1].mesh) == Catch::Approx(125));
+}
+
 TEST_CASE("OBJ round trip, with quads split") {
     NamedMesh a{"Box", MeshBody::box(10, 20, 30).toMesh()};
     Mesh back = readObj(writeObj({a}));

@@ -13,9 +13,11 @@ namespace pm {
 struct NamedMesh {
     std::string name;
     Mesh mesh;
+    /** 0xRRGGBB, or -1 for none. */
+    int colour = -1;
 };
 
-/** 3MF: a zip of XML, the usual format for slicers. Millimetres; one object per body. */
+/** 3MF: a zip of XML, the usual format for slicers. Millimetres; one object per body, with its colour if it has one. */
 std::vector<uint8_t> write3mf(const std::vector<NamedMesh>& objects);
 
 /** Every object a 3MF file places on its build plate, moved where it puts them. Throws std::runtime_error. */

@@ -89,6 +89,7 @@ class CoreKernel(private val core: NativeCore) : Kernel {
     override fun primitive(id: Int, plane: SketchPlane, kind: Int, u: Double, v: Double, a: Double, b: Double, c: Double) =
         call { core.primitive(id, plane.numbers(), kind, u, v, a, b, c) }
     override fun bounds(body: Long) = call { core.bounds(body) }
+    override fun properties(body: Long) = call { core.properties(body) }
     override fun signature(body: Long, name: String, edge: Boolean) = core.signature(body, name, edge)
     override fun relocate(body: Long, signature: DoubleArray) = core.relocate(body, signature)
     override fun retain(body: Long) = core.retain(body)
@@ -99,7 +100,7 @@ class CoreKernel(private val core: NativeCore) : Kernel {
 class CoreViewport(private val core: NativeCore, private val gl: (() -> Unit) -> Unit) : Viewport {
     override fun show(
         bodies: List<Long>, sketches: List<Pair<SketchPlane, List<ProfileCurve>>>,
-        planes: List<SketchPlane>, axes: List<Pair<Vec3, Vec3>>, points: List<Vec3>, refit: Boolean,
+        planes: List<SketchPlane>, axes: List<Pair<Vec3, Vec3>>, points: List<Vec3>, colours: List<Int>, refit: Boolean,
     ) {
         val all = sketches.flatMap { it.second }
         val c = Curves(all)
@@ -107,7 +108,7 @@ class CoreViewport(private val core: NativeCore, private val gl: (() -> Unit) ->
         val construction = planes.flatMap { it.numbers().asList() }.toDoubleArray()
         val axisNumbers = axes.flatMap { (p, d) -> listOf(p.x, p.y, p.z, d.x, d.y, d.z) }.toDoubleArray()
         core.show(bodies.toLongArray(), sketchPlanes, IntArray(sketches.size) { sketches[it].second.size }, c.kinds, c.ids, c.nums, construction, axisNumbers,
-            points.flatMap { listOf(it.x, it.y, it.z) }.toDoubleArray(), refit)
+            points.flatMap { listOf(it.x, it.y, it.z) }.toDoubleArray(), colours.toIntArray(), refit)
         gl {}
     }
 

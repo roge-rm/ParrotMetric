@@ -37,6 +37,7 @@ object Core : NativeCore {
     override external fun bodyCentre(body: Long): DoubleArray
     override external fun primitive(id: Int, plane: DoubleArray, kind: Int, u: Double, v: Double, a: Double, b: Double, c: Double): Long
     override external fun bounds(body: Long): DoubleArray
+    override external fun properties(body: Long): DoubleArray
     /** Where bodies cross a plane, as sketch curves; see jni.cpp. */
     override external fun section(bodies: LongArray, plane: DoubleArray): DoubleArray
     /** Middle and normal of the selected flat part of a mesh, or null. */
@@ -45,11 +46,11 @@ object Core : NativeCore {
     override external fun release(body: Long)
     override external fun isMesh(body: Long): Boolean
     /** format as [Format]'s ordinal, quality 0 fine to 2 coarse; null if none of them can go in that format. */
-    override external fun exportBodies(bodies: LongArray, names: Array<String>, format: Int, quality: Int): ByteArray?
+    override external fun exportBodies(bodies: LongArray, names: Array<String>, colours: IntArray, format: Int, quality: Int): ByteArray?
 
     // What's shown and selected.
     /** Bodies, then sketches (a plane each and their curves), then construction planes (nine numbers each), axes (six each) and points (three each). */
-    override external fun show(bodies: LongArray, planes: DoubleArray, curveCounts: IntArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, constructionPlanes: DoubleArray, axes: DoubleArray, points: DoubleArray, refit: Boolean)
+    override external fun show(bodies: LongArray, planes: DoubleArray, curveCounts: IntArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, constructionPlanes: DoubleArray, axes: DoubleArray, points: DoubleArray, colours: IntArray, refit: Boolean)
     override external fun selectedPlanes(): IntArray
     /** Lines describing what's selected: lengths, areas, gaps, angles, the body's volume and size. */
     override external fun measure(): Array<String>

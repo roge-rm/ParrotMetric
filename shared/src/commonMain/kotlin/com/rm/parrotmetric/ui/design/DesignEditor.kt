@@ -55,7 +55,7 @@ interface Viewport {
     /** Shows these bodies, these sketches with their areas pickable, and construction planes, axes and points. Clears the selection. */
     fun show(
         bodies: List<Long>, sketches: List<Pair<SketchPlane, List<ProfileCurve>>>,
-        planes: List<SketchPlane>, axes: List<Pair<Vec3, Vec3>>, points: List<Vec3>, refit: Boolean,
+        planes: List<SketchPlane>, axes: List<Pair<Vec3, Vec3>>, points: List<Vec3>, colours: List<Int>, refit: Boolean,
     )
     /** Selected construction planes, by their place in the list shown. */
     fun selectedPlanes(): List<Int>
@@ -146,7 +146,7 @@ class DesignEditor(
         return design.features.mapIndexed { i, f ->
             val kind = when (f) {
                 is SketchFeature -> HistoryEntry.Kind.Sketch
-                is ExtrudeFeature, is RevolveFeature -> HistoryEntry.Kind.Create
+                is ExtrudeFeature, is RevolveFeature, is com.rm.parrotmetric.design.PrimitiveFeature -> HistoryEntry.Kind.Create
                 is ImportFeature -> HistoryEntry.Kind.Import
                 is PlaneFeature, is AxisFeature, is PointFeature -> HistoryEntry.Kind.Construct
                 else -> HistoryEntry.Kind.Modify
@@ -228,6 +228,20 @@ class DesignEditor(
     }
 
     fun setHidden(label: String, hidden: Boolean) = setInfo(label) { it.copy(hidden = hidden) }
+
+    /** 0xRRGGBB, or null for the usual grey. */
+    fun setColour(label: String, colour: Int?) = setInfo(label) { it.copy(colour = colour) }
+
+    /** Picked for Measure's mass: by its index in Materials. */
+    var material by mutableStateOf(0)
+
+    /** The body under the first selected face or edge, else the only body shown: its label and properties (Kernel.properties). */
+    fun measuredBody(): Pair<String, DoubleArray>? {
+        val shown = shownBodies
+        val index = viewport.selectedFaces().firstOrNull()?.first ?: if (shown.size == 1) 0 else return null
+        val b = shown.getOrNull(index) ?: return null
+        return b.label to (kernel.properties(b.handle) ?: return null)
+    }
 
     /** Hides the bodies under the selected faces. */
     fun hideSelectedBodies() {
@@ -455,7 +469,7 @@ class DesignEditor(
                         shownBodies = visible
                         viewport.show(
                             visible.map { it.handle }, shown.map { it.second to it.first.sketch.profileCurves() },
-                            planeFeatures.map { b.sketchPlanes.getValue(it.id) }, b.axes.values.toList(), b.points.values.toList(), refit,
+                            planeFeatures.map { b.sketchPlanes.getValue(it.id) }, b.axes.values.toList(), b.points.values.toList(), visible.map { design.info(it.label).colour ?: -1 }, refit,
                         )
                         shownPlanes = planeFeatures
                         Triple(b, shown.map { it.first }, draft)

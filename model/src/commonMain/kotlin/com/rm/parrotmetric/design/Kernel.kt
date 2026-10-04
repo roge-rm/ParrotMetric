@@ -45,6 +45,8 @@ interface Kernel {
     fun primitive(id: Int, plane: SketchPlane, kind: Int, u: Double, v: Double, a: Double, b: Double, c: Double): Long
     /** The box round a body: x, y, z low, then high. */
     fun bounds(body: Long): DoubleArray
+    /** A body's volume (mm³), surface area (mm²) and centre of mass x, y, z. */
+    fun properties(body: Long): DoubleArray? = null
     fun retain(body: Long)
     fun release(body: Long)
     /** Where a named face (or edge) of a body is and how big, to find it again by shape; null if the body hasn't got it. */

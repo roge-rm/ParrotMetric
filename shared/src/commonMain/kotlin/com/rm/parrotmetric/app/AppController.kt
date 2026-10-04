@@ -253,9 +253,10 @@ class AppController(
         }
         val bodies = chosen.map { it.handle }.toLongArray()
         val names = chosen.map { design.design.nameOf(it.label) }.toTypedArray()
+        val colours = chosen.map { design.design.info(it.label).colour ?: -1 }.toIntArray()
         scope.launch {
             val error = try {
-                val bytes = withContext(Dispatchers.Default) { core.exportBodies(bodies, names, format.ordinal, request.quality) }
+                val bytes = withContext(Dispatchers.Default) { core.exportBodies(bodies, names, colours, format.ordinal, request.quality) }
                 when {
                     bytes == null -> if (format == FileFormat.Step || format == FileFormat.Iges) "Meshes can't be saved as ${request.format}" else "There's nothing to export"
                     !sink.write(bytes) -> "Couldn't write the file"

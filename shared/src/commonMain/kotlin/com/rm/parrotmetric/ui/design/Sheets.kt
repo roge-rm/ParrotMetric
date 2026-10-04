@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -131,6 +133,7 @@ fun PartsSheet(editor: DesignEditor, close: () -> Unit) {
                             fontSize = 15.sp,
                             color = Palette.text,
                         )
+                        ColourPick(info.colour) { editor.setColour(b.label, it) }
                         Box {
                             IconButton(onClick = { menu = true }) { Icon(Icons.more, "Options", tint = Palette.muted) }
                             DropdownMenu(menu, onDismissRequest = { menu = false }, containerColor = Palette.raised) {
@@ -224,6 +227,71 @@ fun MeasureSheet(editor: DesignEditor, close: () -> Unit) {
         val lines = editor.measureLines
         if (lines.isEmpty()) Text("Tap edges or faces", fontSize = 14.sp, color = Palette.muted)
         for (l in lines) Text(l, fontSize = 15.sp, color = Palette.text, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+        editor.measuredBody()?.let { (label, p) ->
+            val (material, density) = Materials[editor.material]
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(editor.design.nameOf(label), Modifier.weight(1f), fontSize = 14.sp, color = Palette.muted)
+                var open by remember { mutableStateOf(false) }
+                Box {
+                    TextButton(onClick = { open = true }) { Text(material, color = Palette.mint) }
+                    DropdownMenu(open, onDismissRequest = { open = false }, containerColor = Palette.raised) {
+                        Materials.forEachIndexed { i, (name, d) ->
+                            DropdownMenuItem({ Text("$name   ${d} g/cm³") }, onClick = { open = false; editor.material = i })
+                        }
+                    }
+                }
+            }
+            // Solid all through; a print with less infill weighs less.
+            val grams = p[0] / 1000 * density
+            Text("Mass ${round1(grams)} g solid", fontSize = 15.sp, color = Palette.text, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+            Text("Area ${round1(p[1] / 100)} cm²", fontSize = 15.sp, color = Palette.text, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+            Text(
+                "Centre of mass ${round1(p[2])}, ${round1(p[3])}, ${round1(p[4])}",
+                fontSize = 15.sp, color = Palette.text, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+            )
+        }
+    }
+}
+
+private fun round1(v: Double): String {
+    val r = kotlin.math.round(v * 10) / 10
+    return if (r == kotlin.math.floor(r)) r.toLong().toString() else r.toString()
+}
+
+/** Materials for Measure's mass: name and density in g/cm³. */
+val Materials = listOf(
+    "PLA" to 1.24, "PETG" to 1.27, "ABS" to 1.04, "ASA" to 1.07, "TPU" to 1.21, "Nylon" to 1.14,
+    "Resin" to 1.18, "Aluminium" to 2.70, "Steel" to 7.85, "Brass" to 8.50,
+)
+
+/** Colours a body can have, as 0xRRGGBB; null is the usual grey. */
+private val BodyColours = listOf(
+    null, 0xF2F0EB, 0x2B2B2B, 0xD64541, 0xF28C38, 0xF2C53D, 0x5DAA68, 0x3BB3A6, 0x4A7FD6, 0x8E6BD6, 0xE57FB0, 0x8B5E3C,
+)
+
+private fun swatch(c: Int?) = if (c == null) androidx.compose.ui.graphics.Color(0xFFCCD1CC) else androidx.compose.ui.graphics.Color(0xFF000000 or c.toLong())
+
+/** A body's colour as a dot; tapping it offers the others. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun ColourPick(colour: Int?, onPick: (Int?) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { open = true }) {
+            Box(Modifier.size(18.dp).clip(RoundedCornerShape(9.dp)).background(swatch(colour)))
+        }
+        DropdownMenu(open, onDismissRequest = { open = false }, containerColor = Palette.raised) {
+            androidx.compose.foundation.layout.FlowRow(Modifier.width(200.dp).padding(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (c in BodyColours) {
+                    Box(
+                        Modifier.size(38.dp).clip(RoundedCornerShape(19.dp))
+                            .background(if (c == colour) Palette.mint else androidx.compose.ui.graphics.Color.Transparent)
+                            .padding(3.dp).clip(RoundedCornerShape(16.dp)).background(swatch(c))
+                            .clickable { open = false; onPick(c) },
+                    )
+                }
+            }
+        }
     }
 }
 
