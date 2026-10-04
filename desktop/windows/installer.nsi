@@ -6,7 +6,7 @@
 ; The autosaved design lives in %APPDATA%\ParrotMetric, so upgrading or
 ; uninstalling leaves it alone.
 ;
-;   makensis -DVERSION=0.1.0 -DSTAGE=<the staged folder> -DOUT=<setup.exe> installer.nsi
+;   makensis -DVERSION=0.2.0 -DSTAGE=<the staged folder> -DOUT=<setup.exe> installer.nsi
 
 Unicode true
 SetCompressor /SOLID lzma
