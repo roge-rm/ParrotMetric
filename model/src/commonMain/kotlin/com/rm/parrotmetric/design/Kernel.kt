@@ -33,6 +33,14 @@ interface Kernel {
     fun meshEdit(id: Int, body: Long, kind: Int, size: Double, steps: Int): Long = throw KernelException("Not here")
     /** A rib or web from open curves, grown until it meets the body and joined to it; see RibFeature. */
     fun rib(id: Int, body: Long, plane: SketchPlane, curves: List<ProfileCurve>, thickness: Double, flip: Boolean, web: Boolean): Long = throw KernelException("Not here")
+    /** Sketch areas as flat surfaces. */
+    fun patch(id: Int, plane: SketchPlane, curves: List<ProfileCurve>, regions: List<RegionRef>): Long = throw KernelException("Not here")
+    /** A surface filling a closed loop of a body's edges. */
+    fun patchEdges(id: Int, body: Long, edges: List<String>): Long = throw KernelException("Not here")
+    /** Surfaces sewn into one, a solid if they close round. */
+    fun stitch(id: Int, bodies: List<Long>): Long = throw KernelException("Not here")
+    /** A surface made thick: to one side, or both. */
+    fun thicken(id: Int, body: Long, thickness: Double, both: Boolean): Long = throw KernelException("Not here")
     /** The body with faces taken away and the gap closed. */
     fun deleteFaces(id: Int, body: Long, faces: List<String>): Long = throw KernelException("Not here")
     /** Where copies go along a path, 3x4 matrices from its start, the first being the start; see PatternFeature. */

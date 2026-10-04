@@ -413,6 +413,36 @@ class Rebuilder(private val kernel: Kernel) {
             val (body, h) = made2 ?: throw KernelException(why ?: "There's no body for it to meet")
             replace(f, bodies, planes, made, body) { h }
         }
+        is PatchFeature -> {
+            if (f.sketchId != null) {
+                val sketch = sketchOf(f.sketchId, all)
+                val plane = planes[f.sketchId] ?: throw KernelException("Its sketch couldn't be built")
+                if (f.regions.isEmpty()) throw KernelException("Pick an area of the sketch")
+                applyTool(f, kernel.patch(f.id, plane, sketch.curves(), f.regions), Operation.NewBody, bodies, planes, made)
+            } else {
+                val edges = f.edges.map { ref(f, it, true, bodies) }
+                val body = bodies.firstOrNull { b -> val faces = kernel.faceNames(b.handle).toSet(); edges.all { e -> facesOf(e).all { it in faces } } }
+                    ?: throw KernelException("Its edges aren't all on one body any more")
+                applyTool(f, kernel.patchEdges(f.id, body.handle, edges), Operation.NewBody, bodies, planes, made)
+            }
+        }
+        is StitchFeature -> {
+            val chosen = picked(f.bodies, bodies)
+            if (chosen.size < 2) throw KernelException("Pick at least two surfaces")
+            val h = kernel.stitch(f.id, chosen.map { it.handle })
+            val out = bodies.mapNotNull { b ->
+                when {
+                    b == chosen[0] -> BodyState(b.label, h)
+                    b in chosen -> null
+                    else -> b.also { kernel.retain(it.handle) }
+                }
+            }
+            Step(f.key(), out, planes, null, made)
+        }
+        is ThickenFeature -> {
+            val body = bodies.firstOrNull { it.label == f.body } ?: throw KernelException("${f.body} isn't there any more")
+            replace(f, bodies, planes, made, body) { kernel.thicken(f.id, body.handle, f.thickness, f.both) }
+        }
         is MeshEditFeature -> {
             val body = bodies.firstOrNull { it.label == f.body } ?: throw KernelException("${f.body} isn't there any more")
             replace(f, bodies, planes, made, body) { kernel.meshEdit(f.id, body.handle, f.kind.ordinal, f.size, f.steps) }

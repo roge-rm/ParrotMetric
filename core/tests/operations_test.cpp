@@ -474,3 +474,35 @@ TEST_CASE("a rib grows down to the body and a web out of its plane") {
     NamedShape webbed = rib(3, box, high, {line(1, 5, -20, 35, -20)}, 2, false, true);
     CHECK(volume(webbed) == Catch::Approx(16000 + 30 * 2 * 20).epsilon(1e-4));
 }
+
+TEST_CASE("surfaces: patch, stitch, thicken and trim") {
+    auto area = [](const NamedShape& s) {
+        GProp_GProps props;
+        BRepGProp::SurfaceProperties(s.shape, props);
+        return props.Mass();
+    };
+    NamedShape sheet = patch(1, top, rectangle(40, 20), {{{1, 2, 3, 4}, 5, 5}});
+    CHECK(area(sheet) == Catch::Approx(800));
+    CHECK(has(sheet.faceNames(), "F1.a0"));
+    CHECK(volume(thicken(2, sheet, 2, false)) == Catch::Approx(1600));
+    CHECK(volume(thicken(2, sheet, 2, true)) == Catch::Approx(1600));
+    // Cut across the middle, the sheet is two.
+    CHECK(split(3, sheet, gp_Pnt(20, 0, 0), gp_Dir(1, 0, 0)).size() == 2);
+
+    // A box's top filled from its edges, and its faces sewn back into a solid.
+    NamedShape box = extrude(4, top, rectangle(40, 20), {{{1, 2, 3, 4}, 5, 5}}, 10, 0);
+    std::vector<std::string> rim;
+    for (const auto& e : box.edgeNames()) if (e.find("F4.end") != std::string::npos) rim.push_back(e);
+    REQUIRE(rim.size() == 4);
+    CHECK(area(patchEdges(5, box, rim)) == Catch::Approx(800).epsilon(1e-3));
+    std::vector<NamedShape> faces;
+    for (TopExp_Explorer f(box.shape, TopAbs_FACE); f.More(); f.Next()) {
+        NamedShape one;
+        one.shape = f.Current();
+        one.names.Bind(f.Current(), box.names.Find(f.Current()));
+        faces.push_back(one);
+    }
+    NamedShape sewn = stitch(6, faces);
+    CHECK(volume(sewn) == Catch::Approx(8000));
+    CHECK(has(sewn.faceNames(), "F4.end"));
+}

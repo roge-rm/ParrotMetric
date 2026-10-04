@@ -35,6 +35,9 @@ import com.rm.parrotmetric.design.OffsetFaceFeature
 import com.rm.parrotmetric.design.DeleteFaceFeature
 import com.rm.parrotmetric.design.MeshEdit
 import com.rm.parrotmetric.design.RibFeature
+import com.rm.parrotmetric.design.PatchFeature
+import com.rm.parrotmetric.design.StitchFeature
+import com.rm.parrotmetric.design.ThickenFeature
 import com.rm.parrotmetric.design.MeshEditFeature
 import com.rm.parrotmetric.design.ImportFeature
 import com.rm.parrotmetric.design.Operation
@@ -180,6 +183,9 @@ object DesignFile {
             is MirrorFeature -> mapOf("type" to "mirror", "bodies" to f.bodies, "plane" to plane(f.plane), "join" to f.join, "features" to f.features)
             is OffsetFaceFeature -> mapOf("type" to "offsetFace", "faces" to f.faces, "distance" to f.distance)
             is DeleteFaceFeature -> mapOf("type" to "deleteFace", "faces" to f.faces)
+            is PatchFeature -> mapOf("type" to "patch", "sketch" to f.sketchId, "regions" to writeRegions(f.regions), "edges" to f.edges)
+            is StitchFeature -> mapOf("type" to "stitch", "bodies" to f.bodies)
+            is ThickenFeature -> mapOf("type" to "thicken", "body" to f.body, "thickness" to f.thickness, "both" to f.both)
             is RibFeature -> mapOf("type" to "rib", "sketch" to f.sketchId, "thickness" to f.thickness, "flip" to f.flip, "web" to f.web)
             is MeshEditFeature -> mapOf("type" to "meshEdit", "body" to f.body, "kind" to f.kind.name, "size" to f.size, "steps" to f.steps)
             is PatternFeature -> mapOf(
@@ -274,6 +280,9 @@ object DesignFile {
             "mirror" -> MirrorFeature(id, name, strings(o.arr("bodies")), plane(o.obj("plane")), o.bool("join"), ints(o["features"]))
             "offsetFace" -> OffsetFaceFeature(id, name, strings(o.arr("faces")), o.num("distance"))
             "deleteFace" -> DeleteFaceFeature(id, name, strings(o.arr("faces")))
+            "patch" -> PatchFeature(id, name, (o["sketch"] as? Json.Num)?.value?.toInt(), readRegions(o.arr("regions")), strings(o.arr("edges")))
+            "stitch" -> StitchFeature(id, name, strings(o.arr("bodies")))
+            "thicken" -> ThickenFeature(id, name, o.str("body"), o.num("thickness"), o.bool("both"))
             "rib" -> RibFeature(id, name, o.int("sketch"), o.num("thickness"), o.bool("flip"), o.bool("web"))
             "meshEdit" -> MeshEditFeature(id, name, o.str("body"), MeshEdit.valueOf(o.str("kind")), o.num("size"), o.int("steps"))
             "pattern" -> PatternFeature(

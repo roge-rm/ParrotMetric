@@ -174,6 +174,18 @@ NamedShape thread(int id, const NamedShape& body, const std::string& face, doubl
  */
 NamedShape rib(int id, const NamedShape& body, const gp_Ax3& plane, const std::vector<SketchCurve>& curves, double thickness, bool flip, bool web);
 
+/** Sketch areas as flat surfaces with no thickness. Faces are F<id>.a<n>. */
+NamedShape patch(int id, const gp_Ax3& plane, const std::vector<SketchCurve>& curves, const std::vector<RegionPick>& picks);
+
+/** A surface filling a closed loop of a body's edges, curving to meet them. The face is F<id>.a0. */
+NamedShape patchEdges(int id, const NamedShape& body, const std::vector<std::string>& edges);
+
+/** Surfaces sewn together where their edges meet; a solid if they close round. Faces keep their names. */
+NamedShape stitch(int id, const std::vector<NamedShape>& parts);
+
+/** A surface made thick, to one side of it or [both] sides. New faces are F<id>.k<n>. */
+NamedShape thicken(int id, const NamedShape& surface, double thickness, bool both);
+
 /** One area of a sketch, for a loft. */
 struct LoftProfile {
     gp_Ax3 plane;

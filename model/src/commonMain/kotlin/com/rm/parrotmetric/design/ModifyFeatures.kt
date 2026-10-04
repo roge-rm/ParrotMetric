@@ -39,6 +39,27 @@ data class RibFeature(
     override fun key() = this
 }
 
+/** A surface: sketch areas laid flat ([sketchId] and [regions]), or filling a loop of body [edges]. */
+data class PatchFeature(
+    override val id: Int,
+    override val name: String,
+    val sketchId: Int?,
+    val regions: List<RegionRef>,
+    val edges: List<String>,
+) : Feature() {
+    override fun key() = this
+}
+
+/** Surfaces sewn into the first of [bodies]; a solid if they close round. */
+data class StitchFeature(override val id: Int, override val name: String, val bodies: BodyPick) : Feature() {
+    override fun key() = this
+}
+
+/** A surface made [thickness] mm thick, to one side or [both]. */
+data class ThickenFeature(override val id: Int, override val name: String, val body: String, val thickness: Double, val both: Boolean) : Feature() {
+    override fun key() = this
+}
+
 enum class MeshEdit { Reduce, Remesh, Smooth }
 
 /**

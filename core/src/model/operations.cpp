@@ -3,6 +3,7 @@
 
 #include <BRepAdaptor_Curve.hxx>
 #include <BRepExtrema_DistShapeShape.hxx>
+#include <BRepOffsetAPI_MakeFilling.hxx>
 #include <GeomAPI_ProjectPointOnSurf.hxx>
 #include <GCPnts_AbscissaPoint.hxx>
 #include <BRepOffset_MakeOffset.hxx>
@@ -80,6 +81,7 @@
 #include <TopExp_Explorer.hxx>
 #include <TopTools_IndexedDataMapOfShapeListOfShape.hxx>
 #include <TopTools_IndexedMapOfShape.hxx>
+#include <TopTools_MapOfShape.hxx>
 #include <TopoDS.hxx>
 #include <gp_Ax1.hxx>
 #include <gp_Trsf.hxx>
@@ -817,6 +819,55 @@ NamedShape transformed(int id, const NamedShape& body, const double m[12], const
     }
 }
 
+namespace {
+
+/** The separate pieces of a shape: its solids, or for surfaces, faces joined at their edges, but not across [cut]. */
+std::vector<TopoDS_Shape> piecesOf(const TopoDS_Shape& shape, const TopTools_ListOfShape& cut) {
+    TopTools_MapOfShape across;
+    for (const auto& e : cut) across.Add(e);
+    std::vector<TopoDS_Shape> out;
+    for (TopExp_Explorer s(shape, TopAbs_SOLID); s.More(); s.Next()) out.push_back(s.Current());
+    if (!out.empty()) return out;
+    TopTools_IndexedMapOfShape faces;
+    TopExp::MapShapes(shape, TopAbs_FACE, faces);
+    TopTools_IndexedDataMapOfShapeListOfShape edgeFaces;
+    TopExp::MapShapesAndAncestors(shape, TopAbs_EDGE, TopAbs_FACE, edgeFaces);
+    std::vector<int> group(size_t(faces.Extent()) + 1, 0);
+    int groups = 0;
+    for (int i = 1; i <= faces.Extent(); ++i) {
+        if (group[size_t(i)]) continue;
+        ++groups;
+        std::vector<int> todo{i};
+        group[size_t(i)] = groups;
+        while (!todo.empty()) {
+            int f = todo.back();
+            todo.pop_back();
+            for (TopExp_Explorer e(faces(f), TopAbs_EDGE); e.More(); e.Next()) {
+                int k = edgeFaces.FindIndex(e.Current());
+                if (k == 0 || across.Contains(e.Current())) continue;
+                for (const auto& g : edgeFaces(k)) {
+                    int j = faces.FindIndex(g);
+                    if (j > 0 && !group[size_t(j)]) {
+                        group[size_t(j)] = groups;
+                        todo.push_back(j);
+                    }
+                }
+            }
+        }
+    }
+    BRep_Builder b;
+    for (int g = 1; g <= groups; ++g) {
+        TopoDS_Compound c;
+        b.MakeCompound(c);
+        for (int i = 1; i <= faces.Extent(); ++i)
+            if (group[size_t(i)] == g) b.Add(c, faces(i));
+        out.push_back(c);
+    }
+    return out;
+}
+
+}  // namespace
+
 std::vector<NamedShape> split(int id, const NamedShape& body, const gp_Pnt& origin, const gp_Dir& normal) {
     try {
         Bnd_Box box;
@@ -834,9 +885,9 @@ std::vector<NamedShape> split(int id, const NamedShape& body, const gp_Pnt& orig
         if (!op.IsDone()) throw std::runtime_error("The body couldn't be split");
         NamedShape all = carryNames({&body}, op, op.Shape(), prefix(id));
         std::vector<NamedShape> out;
-        for (TopExp_Explorer s(all.shape, TopAbs_SOLID); s.More(); s.Next()) {
+        for (const TopoDS_Shape& part : piecesOf(all.shape, op.SectionEdges())) {
             NamedShape piece;
-            piece.shape = s.Current();
+            piece.shape = part;
             for (TopExp_Explorer f(piece.shape, TopAbs_FACE); f.More(); f.Next()) piece.names.Bind(f.Current(), all.faceName(f.Current()));
             out.push_back(std::move(piece));
         }
@@ -860,9 +911,9 @@ std::vector<NamedShape> splitBy(int id, const NamedShape& body, const NamedShape
         if (!op.IsDone()) throw std::runtime_error("The body couldn't be split");
         NamedShape all = carryNames({&body, &tool}, op, op.Shape(), prefix(id));
         std::vector<NamedShape> out;
-        for (TopExp_Explorer s(all.shape, TopAbs_SOLID); s.More(); s.Next()) {
+        for (const TopoDS_Shape& part : piecesOf(all.shape, op.SectionEdges())) {
             NamedShape piece;
-            piece.shape = s.Current();
+            piece.shape = part;
             for (TopExp_Explorer f(piece.shape, TopAbs_FACE); f.More(); f.Next()) piece.names.Bind(f.Current(), all.faceName(f.Current()));
             out.push_back(std::move(piece));
         }
@@ -1367,6 +1418,131 @@ NamedShape rib(int id, const NamedShape& body, const gp_Ax3& plane, const std::v
         return out;
     } catch (const Standard_Failure&) {
         throw std::runtime_error("The rib couldn't be made");
+    }
+}
+
+NamedShape patch(int id, const gp_Ax3& plane, const std::vector<SketchCurve>& curves, const std::vector<RegionPick>& picks) {
+    try {
+        auto regions = buildRegionFaces(curves);
+        TopLoc_Location loc(placeOn(plane));
+        BRep_Builder b;
+        TopoDS_Compound all;
+        b.MakeCompound(all);
+        int n = 0;
+        for (const RegionFace* r : choose(regions, picks)) {
+            b.Add(all, r->face.Moved(loc));
+            ++n;
+        }
+        if (n == 0) throw std::runtime_error("Pick an area of the sketch");
+        TopoDS_Shape shape = all;
+        if (n > 1) {
+            BRepBuilderAPI_Sewing sew;
+            sew.Add(all);
+            sew.Perform();
+            shape = sew.SewedShape();
+        } else {
+            shape = TopExp_Explorer(all, TopAbs_FACE).Current();
+        }
+        return nameAll(id, shape, TopoDS_Shape(), TopoDS_Shape(), "a");
+    } catch (const Standard_Failure&) {
+        throw std::runtime_error("The patch couldn't be made");
+    }
+}
+
+NamedShape patchEdges(int id, const NamedShape& body, const std::vector<std::string>& edges) {
+    if (edges.size() < 2) throw std::runtime_error("Pick the edges round the gap");
+    try {
+        BRepOffsetAPI_MakeFilling fill;
+        for (const auto& name : edges) {
+            auto found = body.findEdges(name);
+            if (found.empty()) throw std::runtime_error("An edge of it isn't there any more");
+            for (const auto& e : found) fill.Add(e, GeomAbs_C0);
+        }
+        fill.Build();
+        if (!fill.IsDone()) throw std::runtime_error("Those edges don't close round a gap");
+        NamedShape out = nameAll(id, fill.Shape(), TopoDS_Shape(), TopoDS_Shape(), "a");
+        check(out.shape, "The patch couldn't be made");
+        return out;
+    } catch (const Standard_Failure&) {
+        throw std::runtime_error("The patch couldn't be made");
+    }
+}
+
+NamedShape stitch(int id, const std::vector<NamedShape>& parts) {
+    if (parts.size() < 2) throw std::runtime_error("Pick at least two surfaces");
+    try {
+        BRepBuilderAPI_Sewing sew(1e-3);
+        for (const auto& p : parts) sew.Add(p.shape);
+        sew.Perform();
+        TopoDS_Shape sewn = sew.SewedShape();
+        // Closed all round, it's a solid.
+        TopoDS_Shape shape = sewn;
+        if (sewn.ShapeType() == TopAbs_SHELL && BRep_Tool::IsClosed(sewn)) {
+            BRepBuilderAPI_MakeSolid solid(TopoDS::Shell(sewn));
+            if (solid.IsDone()) {
+                TopoDS_Solid s = TopoDS::Solid(solid.Shape());
+                BRepLib::OrientClosedSolid(s);
+                shape = s;
+            }
+        }
+        NamedShape out;
+        out.shape = shape;
+        // Each face by the name it had, through the sewing's changes.
+        for (const auto& p : parts)
+            for (TopExp_Explorer f(p.shape, TopAbs_FACE); f.More(); f.Next()) {
+                if (!p.names.IsBound(f.Current())) continue;
+                TopoDS_Shape now = sew.IsModified(f.Current()) ? sew.Modified(f.Current()) : f.Current();
+                for (TopExp_Explorer g(now, TopAbs_FACE); g.More(); g.Next())
+                    for (TopExp_Explorer h(shape, TopAbs_FACE); h.More(); h.Next())
+                        if (h.Current().IsSame(g.Current()) && !out.names.IsBound(h.Current())) out.names.Bind(h.Current(), p.names.Find(f.Current()));
+            }
+        int k = 0;
+        for (TopExp_Explorer f(shape, TopAbs_FACE); f.More(); f.Next())
+            if (!out.names.IsBound(f.Current())) out.names.Bind(f.Current(), prefix(id) + ".a" + std::to_string(k++));
+        return out;
+    } catch (const Standard_Failure&) {
+        throw std::runtime_error("The surfaces couldn't be stitched");
+    }
+}
+
+NamedShape thicken(int id, const NamedShape& surface, double thickness, bool both) {
+    if (thickness <= 0) throw std::runtime_error("The thickness has to be more than 0");
+    try {
+        auto thick = [&](double by) {
+            BRepOffsetAPI_MakeThickSolid t;
+            t.MakeThickSolidBySimple(surface.shape, by);
+            if (!t.IsDone()) throw std::runtime_error("It can't be made that thick");
+            TopoDS_Shape made = t.Shape();
+            // A negative offset comes out inside out.
+            BRep_Builder b;
+            TopoDS_Compound fixed;
+            b.MakeCompound(fixed);
+            int n = 0;
+            for (TopExp_Explorer s(made, TopAbs_SOLID); s.More(); s.Next()) {
+                TopoDS_Solid solid = TopoDS::Solid(s.Current());
+                BRepLib::OrientClosedSolid(solid);
+                b.Add(fixed, solid);
+                ++n;
+            }
+            if (n == 0) throw std::runtime_error("It can't be made that thick");
+            return n == 1 ? TopoDS_Shape(TopExp_Explorer(fixed, TopAbs_SOLID).Current()) : TopoDS_Shape(fixed);
+        };
+        TopoDS_Shape shape;
+        if (both) {
+            BRepAlgoAPI_Fuse fuse(thick(thickness / 2), thick(-thickness / 2));
+            fuse.Build();
+            if (!fuse.IsDone()) throw std::runtime_error("It can't be made that thick");
+            ShapeUpgrade_UnifySameDomain tidy(fuse.Shape());
+            tidy.Build();
+            shape = tidy.Shape();
+        } else {
+            shape = thick(thickness);
+        }
+        NamedShape out = nameAll(id, shape, TopoDS_Shape(), TopoDS_Shape(), "k");
+        check(out.shape, "It can't be made that thick");
+        return out;
+    } catch (const Standard_Failure&) {
+        throw std::runtime_error("It can't be made that thick");
     }
 }
 

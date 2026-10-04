@@ -586,6 +586,16 @@ class DesignEditor(
     fun startRevolve() = openArea(RevolveDraft(null))
     fun startSweep() = openArea(SweepDraft(null))
 
+    fun startPatch() {
+        val d = PatchDraft(null)
+        d.edges = viewport.selectedEdges()
+        d.byEdges = d.edges.isNotEmpty()
+        openArea(d)
+    }
+
+    fun startStitch() = openBodies(StitchDraft(null))
+    fun startThicken() = openBodies(ThickenDraft(null))
+
     fun startPipe() {
         val d = PipeDraft(null)
         d.pathEdges = viewport.selectedEdges()
@@ -945,6 +955,9 @@ class DesignEditor(
             is com.rm.parrotmetric.design.ConvertFeature -> ConvertDraft(f)
             is com.rm.parrotmetric.design.MeshEditFeature -> MeshEditDraft(f, f.kind)
             is com.rm.parrotmetric.design.RibFeature -> RibDraft(f, f.web)
+            is com.rm.parrotmetric.design.PatchFeature -> PatchDraft(f)
+            is com.rm.parrotmetric.design.StitchFeature -> StitchDraft(f)
+            is com.rm.parrotmetric.design.ThickenFeature -> ThickenDraft(f)
             is PointFeature -> PointDraft(f)
             is PlaneFeature -> PlaneDraft(f, f.kind).also { it.planes = planeChoices().filter { c -> c.second != PlaneRef.Construction(f.id) } }
             is AxisFeature -> AxisDraft(f)
@@ -984,6 +997,10 @@ class DesignEditor(
     fun selectionChanged() {
         if (measuring) measureLines = viewport.measure()
         when (val d = panel) {
+            is PatchDraft -> {
+                if (d.byEdges) d.edges = viewport.selectedEdges() else takeAreas(d)
+                rebuild()
+            }
             is SweepDraft -> {
                 takeAreas(d)
                 if (d.pathByEdges) d.pathEdges = viewport.selectedEdges()
@@ -1058,6 +1075,7 @@ class DesignEditor(
     /** Puts the panel's picks back on the display after a rebuild. */
     private fun highlight(d: FeatureDraft) {
         when (d) {
+            is PatchDraft -> viewport.select(d.edges, regionPairs(d.sketchId, d.regions))
             is SweepDraft -> viewport.select(d.pathEdges, regionPairs(d.sketchId, d.regions))
             is PipeDraft -> viewport.select(d.pathEdges, emptyList())
             is LoftDraft -> viewport.select(emptyList(), d.sections.flatMap { regionPairs(it.sketchId, listOf(it.region)) })
@@ -1474,6 +1492,42 @@ class DesignEditor(
         init { if (editing != null) bodies = listOf(editing.body) }
         override fun feature(): Feature? = bodies.firstOrNull()?.let { com.rm.parrotmetric.design.ConvertFeature(id, name, it) }
         override fun missing() = "Tap the mesh to make solid"
+    }
+
+    /** A surface from sketch areas, or filling a loop of edges. */
+    inner class PatchDraft(editing: com.rm.parrotmetric.design.PatchFeature?) : AreaDraft(editing) {
+        private val name = editing?.name ?: nextName("Patch", design.features.count { it is com.rm.parrotmetric.design.PatchFeature })
+        var byEdges by mutableStateOf(editing != null && editing.sketchId == null)
+        var edges by mutableStateOf(editing?.edges ?: emptyList())
+        init {
+            if (editing != null) {
+                sketchId = editing.sketchId
+                regions = editing.regions
+            }
+        }
+        override fun feature(): Feature? = if (byEdges) {
+            if (edges.size < 2) null else com.rm.parrotmetric.design.PatchFeature(id, name, null, emptyList(), edges)
+        } else {
+            val s = sketchId
+            if (s == null || regions.isEmpty()) null else com.rm.parrotmetric.design.PatchFeature(id, name, s, regions, emptyList())
+        }
+        override fun missing() = if (byEdges) "Tap the edges round the gap" else "Tap an area of a sketch"
+    }
+
+    inner class StitchDraft(editing: com.rm.parrotmetric.design.StitchFeature?) : BodyDraft(editing) {
+        private val name = editing?.name ?: nextName("Stitch", design.features.count { it is com.rm.parrotmetric.design.StitchFeature })
+        init { if (editing != null) bodies = editing.bodies }
+        override fun feature(): Feature? = if (bodies.size < 2) null else com.rm.parrotmetric.design.StitchFeature(id, name, bodies)
+        override fun missing() = "Tap the surfaces to stitch"
+    }
+
+    inner class ThickenDraft(editing: com.rm.parrotmetric.design.ThickenFeature?) : BodyDraft(editing) {
+        private val name = editing?.name ?: nextName("Thicken", design.features.count { it is com.rm.parrotmetric.design.ThickenFeature })
+        var thickness by mutableStateOf(editing?.thickness ?: 2.0)
+        var both by mutableStateOf(editing?.both ?: false)
+        init { if (editing != null) bodies = listOf(editing.body) }
+        override fun feature(): Feature? = bodies.firstOrNull()?.let { com.rm.parrotmetric.design.ThickenFeature(id, name, it, thickness, both) }
+        override fun missing() = "Tap the surface"
     }
 
     /** A rib or web from a sketch's open lines. */

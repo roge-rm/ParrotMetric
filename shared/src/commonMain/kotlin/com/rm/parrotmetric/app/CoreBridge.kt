@@ -76,6 +76,14 @@ class CoreKernel(private val core: NativeCore) : Kernel {
     override fun offsetFaces(id: Int, body: Long, faces: List<String>, distance: Double) = call { core.offsetFaces(id, body, faces.toTypedArray(), distance) }
     override fun deleteFaces(id: Int, body: Long, faces: List<String>) = call { core.deleteFaces(id, body, faces.toTypedArray()) }
     override fun meshEdit(id: Int, body: Long, kind: Int, size: Double, steps: Int) = call { core.meshEdit(id, body, kind, size, steps) }
+    override fun patch(id: Int, plane: SketchPlane, curves: List<ProfileCurve>, regions: List<RegionRef>): Long {
+        val c = Curves(curves)
+        val p = Picks(regions)
+        return call { core.patch(id, plane.numbers(), c.kinds, c.ids, c.nums, p.counts, p.ids, p.points) }
+    }
+    override fun patchEdges(id: Int, body: Long, edges: List<String>) = call { core.patchEdges(id, body, edges.toTypedArray()) }
+    override fun stitch(id: Int, bodies: List<Long>) = call { core.stitch(id, bodies.toLongArray()) }
+    override fun thicken(id: Int, body: Long, thickness: Double, both: Boolean) = call { core.thicken(id, body, thickness, both) }
     override fun rib(id: Int, body: Long, plane: SketchPlane, curves: List<ProfileCurve>, thickness: Double, flip: Boolean, web: Boolean): Long {
         val c = Curves(curves)
         return call { core.rib(id, body, plane.numbers(), c.kinds, c.ids, c.nums, thickness, flip, web) }

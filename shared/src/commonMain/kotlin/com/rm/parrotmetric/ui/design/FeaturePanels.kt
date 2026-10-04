@@ -87,6 +87,16 @@ fun FeaturePanel(editor: DesignEditor) {
                 is DesignEditor.ConvertDraft -> Header("To solid", Icons.convert, Palette.modify, d.bodies.firstOrNull())
                 is DesignEditor.MeshEditDraft -> MeshEditSettings(editor, d)
                 is DesignEditor.RibDraft -> RibSettings(editor, d)
+                is DesignEditor.PatchDraft -> {
+                    Header("Patch", Icons.patch, Palette.create, if (d.byEdges) count(d.edges.size, "edge", "edges").takeIf { d.edges.isNotEmpty() } else null)
+                    Segmented(listOf("Sketch areas", "Fill edges"), if (d.byEdges) 1 else 0) { d.byEdges = it == 1; editor.draftChanged() }
+                }
+                is DesignEditor.StitchDraft -> Header("Stitch", Icons.patch, Palette.modify, bodiesLabel(d.bodies, "Tap the surfaces"))
+                is DesignEditor.ThickenDraft -> {
+                    Header("Thicken", Icons.patch, Palette.modify, d.bodies.firstOrNull()?.let { editor.design.nameOf(it) })
+                    Field(editor, d, "size", "Thickness", d.thickness, "mm", allowNegative = false) { d.thickness = it; editor.draftChanged() }
+                    Toggle("Both sides", d.both) { d.both = it; editor.draftChanged() }
+                }
                 is DesignEditor.PlaneDraft -> PlaneSettings(editor, d)
                 is DesignEditor.AxisDraft -> AxisSettings(editor, d)
                 is DesignEditor.PointDraft -> PointSettings(editor, d)

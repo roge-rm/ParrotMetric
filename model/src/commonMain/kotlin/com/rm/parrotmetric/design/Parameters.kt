@@ -80,6 +80,7 @@ object Parametrics {
             }
             is OffsetFaceFeature -> if (field == "size") f.copy(distance = v) else f
             is RibFeature -> if (field == "size") f.copy(thickness = v) else f
+            is ThickenFeature -> if (field == "size") f.copy(thickness = v) else f
             is MeshEditFeature -> when (field) {
                 "size" -> f.copy(size = v)
                 "steps" -> f.copy(steps = v.toInt())

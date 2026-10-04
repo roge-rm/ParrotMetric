@@ -1895,4 +1895,57 @@ JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_rib(JNIEnv* env, jobject, 
     }
 }
 
+JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_patch(JNIEnv* env, jobject, jint id, jdoubleArray plane, jintArray kinds, jintArray ids,
+                                                           jdoubleArray nums, jintArray pickCounts, jintArray pickIds, jdoubleArray pickPoints) {
+    try {
+        auto p = doubles(env, plane);
+        auto k = ints(env, kinds), i = ints(env, ids);
+        auto n = doubles(env, nums);
+        auto picks = picksOf(ints(env, pickCounts), ints(env, pickIds), doubles(env, pickPoints));
+        return keep(pm::patch(id, planeOf(p.data()), curvesOf(k.data(), i.data(), n.data(), k.size()), picks));
+    } catch (const std::exception& e) {
+        fail(env, e.what());
+        return 0;
+    }
+}
+
+JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_patchEdges(JNIEnv* env, jobject, jint id, jlong body, jobjectArray edges) {
+    try {
+        std::unique_lock<std::mutex> g(lock);
+        pm::NamedShape s = solidOf(body);
+        g.unlock();
+        return keep(pm::patchEdges(id, s, strings(env, edges)));
+    } catch (const std::exception& e) {
+        fail(env, e.what());
+        return 0;
+    }
+}
+
+JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_stitch(JNIEnv* env, jobject, jint id, jlongArray bodies) {
+    try {
+        auto h = longs(env, bodies);
+        std::vector<pm::NamedShape> parts;
+        {
+            std::lock_guard<std::mutex> g(lock);
+            for (jlong x : h) parts.push_back(solidOf(x));
+        }
+        return keep(pm::stitch(id, parts));
+    } catch (const std::exception& e) {
+        fail(env, e.what());
+        return 0;
+    }
+}
+
+JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_thicken(JNIEnv* env, jobject, jint id, jlong body, jdouble thickness, jboolean both) {
+    try {
+        std::unique_lock<std::mutex> g(lock);
+        pm::NamedShape s = solidOf(body);
+        g.unlock();
+        return keep(pm::thicken(id, s, thickness, both));
+    } catch (const std::exception& e) {
+        fail(env, e.what());
+        return 0;
+    }
+}
+
 }  // extern "C"
