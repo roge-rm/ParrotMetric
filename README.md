@@ -7,7 +7,7 @@ You draw sketches with constraints and dimensions, turn them into solids with ex
 
 It's made for designing things to 3D print. It works by touch first, but it also has proper mouse and keyboard controls for when you're at a desk. Everything runs on the device.
 
-It's at 0.2.0. It's usable for real parts, but it isn't finished and there will be rough edges. Let me know what works, what doesn't, and what you'd like it to do.
+It's at 0.2.1. It's usable for real parts, but it isn't finished and there will be rough edges. Let me know what works, what doesn't, and what you'd like it to do.
 
 Please join me in the #parrotmetric channel **[on my discord](https://discord.gg/9Wun47jGC6)** to share what you've made, ask questions, report bugs or problems with different devices, or ask for new features. Or feel free to open an issue here.
 
@@ -127,15 +127,15 @@ Each release has:
 
 | File | For |
 |---|---|
-| parrotmetric-0.2.0-64bit.apk | Most Android phones and tablets |
-| parrotmetric-0.2.0-32bit.apk | Older 32-bit devices, like the Fire HD 8 |
-| parrotmetric_0.2.0_amd64.deb | Debian, Ubuntu and the like on a PC |
-| parrotmetric_0.2.0_arm64.deb | Raspberry Pi OS (64-bit) and other arm64 Linux |
-| parrotmetric-0.2.0-x86_64.AppImage | Any recent Linux on a PC |
-| parrotmetric-0.2.0-aarch64.AppImage | Any recent arm64 Linux |
-| parrotmetric-0.2.0-setup.exe | 64-bit Windows, installed |
-| parrotmetric-0.2.0-windows-x64.zip | Windows, without installing |
-| parrotmetric-0.2.0-web.tar.gz | The browser version, to put on any web server |
+| parrotmetric-0.2.1-64bit.apk | Most Android phones and tablets |
+| parrotmetric-0.2.1-32bit.apk | Older 32-bit devices, like the Fire HD 8 |
+| parrotmetric_0.2.1_amd64.deb | Debian, Ubuntu and the like on a PC |
+| parrotmetric_0.2.1_arm64.deb | Raspberry Pi OS (64-bit) and other arm64 Linux |
+| parrotmetric-0.2.1-x86_64.AppImage | Any recent Linux on a PC |
+| parrotmetric-0.2.1-aarch64.AppImage | Any recent arm64 Linux |
+| parrotmetric-0.2.1-setup.exe | 64-bit Windows, installed |
+| parrotmetric-0.2.1-windows-x64.zip | Windows, without installing |
+| parrotmetric-0.2.1-web.tar.gz | The browser version, to put on any web server |
 
 The AppImages and the Windows builds bring their own Java. The .deb packages use the system's Java 21, which your package manager pulls in.
 
@@ -149,7 +149,7 @@ Get the submodules first:
 
 Each target builds Open CASCADE for itself the first time, which takes a while. It's kept in core/build/occt and reused after that.
 
-Android, 64-bit (arm64 and x86_64), and with -Parm32 the 32-bit build (armv7 and x86):
+Android, 64-bit (arm64), and with -Parm32 the 32-bit build (armv7). Debug builds add x86_64 or x86, for emulators:
 
     ./gradlew :app:assembleRelease
     ./gradlew :app:assembleRelease -Parm32

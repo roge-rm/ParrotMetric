@@ -7,8 +7,10 @@ plugins {
 
 /** The 32-bit build, for tablets like the Fire HD 8: see `release` below. */
 val arm32 = project.hasProperty("arm32")
-// The 32-bit build includes x86 so it runs on an x86 emulator.
-val abis = if (arm32) listOf("armeabi-v7a", "x86") else listOf("arm64-v8a", "x86_64")
+// Releases are ARM only. Debug builds add x86, to run on an x86 emulator.
+val armAbi = if (arm32) "armeabi-v7a" else "arm64-v8a"
+val emulatorAbi = if (arm32) "x86" else "x86_64"
+val abis = listOf(armAbi, emulatorAbi)
 
 android {
     namespace = "com.rm.parrotmetric"
@@ -25,10 +27,10 @@ android {
         // phones also run 32-bit code, so the 64-bit APK must be higher: the
         // release number times ten, plus 2 for 64-bit and 1 for 32-bit.
         // Bump [release], not the code.
-        val release = 2
+        val release = 3
         versionCode = release * 10 + if (arm32) 1 else 2
-        versionName = "0.2.0"
-        ndk { abiFilters += abis }
+        versionName = "0.2.1"
+        ndk { abiFilters += armAbi }
         externalNativeBuild {
             cmake {
                 cppFlags += listOf("-std=c++17")
@@ -69,6 +71,9 @@ android {
     }
 
     buildTypes {
+        debug {
+            ndk { abiFilters += emulatorAbi }
+        }
         release {
             // Shrunk and optimised. What must be kept is in proguard-rules.pro.
             optimization {
@@ -86,6 +91,13 @@ android {
     }
     buildFeatures {
         compose = true
+    }
+    // The native library compressed in the APK, which more than halves the
+    // download. Android unpacks it on install.
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
     }
 }
 
