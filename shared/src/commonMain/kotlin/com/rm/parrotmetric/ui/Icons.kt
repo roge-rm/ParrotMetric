@@ -42,6 +42,9 @@ object Icons {
     val sphere = stroke("sphere", circle(12f, 12f, 8.5f), "M3.5 12a8.5 3 0 0 0 17 0")
     val torus = stroke("torus", "M2 12a10 6 0 1 0 20 0a10 6 0 1 0-20 0", "M8 11.5a4 1.8 0 0 0 8 0", "M9 11a3 1.3 0 0 1 6 0")
     val cone = stroke("cone", "M12 3.5L5 17.5M12 3.5l7 14", "M5 17.5a7 2.5 0 1 0 14 0a7 2.5 0 1 0-14 0")
+    val scale = stroke("scale", "M4 20V11h9v9z", "M13 11l7-7", "M15 4h5v5")
+    val align = stroke("align", "M3 20h18", "M7 17h10v-6H7z", "M12 3v5", "M9.5 6l2.5 2.5L14.5 6")
+    val interference = stroke("interference", circle(9f, 12f, 6f), circle(15f, 12f, 6f))
     /** The Shift key, for key badges. */
     val shiftKey = stroke("shiftKey", "M12 4l8 9h-4.5v7h-7v-7H4z", width = 2.4f)
 

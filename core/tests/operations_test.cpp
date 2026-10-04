@@ -302,3 +302,17 @@ TEST_CASE("a thin extrude keeps only a wall inside the sketch's edges") {
     CHECK(std::count(names.begin(), names.end(), "F1.s1") == 1);
     CHECK_THROWS(extrude(1, top, rectangle(40, 20), {{{1, 2, 3, 4}, 5, 5}}, 10, 0, 0, 15));
 }
+
+TEST_CASE("a body split by another comes apart where they cross") {
+    NamedShape block = primitive(1, top, Primitive::Box, 0, 0, 20, 20, 10);
+    NamedShape rod = primitive(2, top, Primitive::Cylinder, 0, 0, 10, 30, 0);
+    auto pieces = splitBy(3, block, rod);
+    REQUIRE(pieces.size() == 2);
+    double total = volume(pieces[0]) + volume(pieces[1]);
+    CHECK(total == Catch::Approx(4000));
+    const double pi = 3.14159265358979;
+    double inside = std::min(volume(pieces[0]), volume(pieces[1]));
+    CHECK(inside == Catch::Approx(pi * 25 * 10).epsilon(1e-4));
+    CHECK(overlapVolume(block, rod) == Catch::Approx(pi * 25 * 10).epsilon(1e-4));
+    CHECK(overlapVolume(block, primitive(4, top, Primitive::Box, 100, 0, 5, 5, 5)) == 0);
+}

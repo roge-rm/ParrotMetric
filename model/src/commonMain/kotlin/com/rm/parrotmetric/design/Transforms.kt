@@ -39,6 +39,21 @@ internal object Transforms {
         )
     }
 
+    /** The turn round the origin that takes unit vector a to unit vector b. */
+    fun turnOnto(a: Vec3, b: Vec3): DoubleArray {
+        val axis = a.cross(b)
+        val sine = kotlin.math.sqrt(axis.dot(axis))
+        val cosine = a.dot(b)
+        if (sine < 1e-9) {
+            if (cosine > 0) return rotate(Vec3(0.0, 0.0, 1.0), 0.0)
+            // Opposite: half a turn round anything square to a.
+            val other = if (kotlin.math.abs(a.x) < 0.9) Vec3(1.0, 0.0, 0.0) else Vec3(0.0, 1.0, 0.0)
+            val square = a.cross(other)
+            return rotate(square * (1 / kotlin.math.sqrt(square.dot(square))), kotlin.math.PI)
+        }
+        return rotate(axis * (1 / sine), kotlin.math.atan2(sine, cosine))
+    }
+
     /** a then b. */
     fun then(a: DoubleArray, b: DoubleArray): DoubleArray {
         val out = DoubleArray(12)

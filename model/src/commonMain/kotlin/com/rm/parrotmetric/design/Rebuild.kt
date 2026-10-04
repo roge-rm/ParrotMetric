@@ -236,9 +236,15 @@ class Rebuilder(private val kernel: Kernel) {
         is CombineFeature -> combineBodies(f, bodies, planes, made)
         is SplitFeature -> {
             val body = bodies.firstOrNull { it.label == f.body } ?: throw KernelException("${f.body} isn't there any more")
-            val plane = resolvePlane(f.plane, bodies, f, planes)
-            var pieces = kernel.split(f.id, body.handle, plane.origin, plane.normal)
-            if (f.keep != 0) {
+            val tool = f.tool?.let { t -> bodies.firstOrNull { it.label == t } ?: throw KernelException("$t isn't there any more") }
+            if (tool == body) throw KernelException("Pick a different body to split it by")
+            val plane = if (tool == null) resolvePlane(f.plane, bodies, f, planes) else null
+            var pieces = when {
+                tool == null -> kernel.split(f.id, body.handle, plane!!.origin, plane.normal)
+                f.keep == 0 -> kernel.splitBy(f.id, body.handle, tool.handle)
+                else -> listOf(kernel.combine(f.id, body.handle, tool.handle, if (f.keep == 1) Operation.Cut else Operation.Intersect))
+            }
+            if (plane != null && f.keep != 0) {
                 // Only the pieces on the side asked for.
                 val wanted = pieces.filter { h -> (kernel.centre(h) - plane.origin).dot(plane.normal) > 0 == (f.keep == 1) }
                 pieces.filter { it !in wanted }.forEach { kernel.release(it) }
@@ -252,6 +258,33 @@ class Rebuilder(private val kernel: Kernel) {
                 pieces.forEachIndexed { i, h -> out += if (i == 0) BodyState(b.label, h) else BodyState("Body ${++count}", h) }
             }
             Step(f.key(), out, planes, null, count)
+        }
+        is AlignFeature -> {
+            val face = ref(f, f.face, false, bodies)
+            val owner = bodyWithFace(face, bodies) ?: throw KernelException("The face to line up isn't there any more")
+            val d = kernel.facePlane(owner.handle, face) ?: throw KernelException("Line up by a flat face")
+            val c = Vec3(d[0], d[1], d[2])
+            val n = Vec3(d[3], d[4], d[5])
+            val target = resolvePlane(f.target, bodies, f, planes)
+            val want = if (f.sameWay) target.normal else target.normal * -1.0
+            // Turned about the face's middle, then moved onto the target, the gap away from it.
+            val turn = Transforms.then(Transforms.then(Transforms.translate(c * -1.0), Transforms.turnOnto(n, want)), Transforms.translate(c))
+            val m = target.normal
+            val away = want * -f.gap
+            val shift = if (f.centred) target.origin - c + away else m * (target.origin - c).dot(m) + away
+            val matrix = Transforms.then(turn, Transforms.translate(shift))
+            val chosen = if (f.bodies.isEmpty()) listOf(owner) else picked(f.bodies, bodies)
+            val out = mutableListOf<BodyState>()
+            try {
+                for (b in bodies) {
+                    if (b in chosen) out += BodyState(b.label, kernel.transform(f.id, b.handle, matrix, "a"))
+                    else { kernel.retain(b.handle); out += b }
+                }
+            } catch (e: KernelException) {
+                out.forEach { kernel.release(it.handle) }
+                throw e
+            }
+            Step(f.key(), out, planes, null, made)
         }
         is ConvertFeature -> {
             val body = bodies.firstOrNull { it.label == f.body } ?: throw KernelException("${f.body} isn't there any more")

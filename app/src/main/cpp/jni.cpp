@@ -690,6 +690,57 @@ JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_convertToSolid(JNIEnv* env
 }
 
 /** The middle of a body: a solid's centre of mass, a mesh's bounding box centre. */
+/** A body cut by another into the parts inside and outside it. Meshes and solids mixed are done as meshes. */
+JNIEXPORT jlongArray JNICALL Java_com_rm_parrotmetric_Core_splitBy(JNIEnv* env, jobject, jint id, jlong body, jlong tool) {
+    try {
+        std::unique_lock<std::mutex> g(lock);
+        const pm::Body b = store.get(body);
+        const pm::Body t = store.get(tool);
+        g.unlock();
+        std::vector<pm::Body> pieces;
+        if (b.mesh || t.mesh) {
+            pm::MeshBody mb = b.asMesh(), mt = t.asMesh();
+            pm::MeshBody inside = mb.boolean(mt, pm::BooleanOp::Intersect), outside = mb.boolean(mt, pm::BooleanOp::Cut);
+            if (inside.empty() || outside.empty()) throw std::runtime_error("The bodies don't cross");
+            pm::Body i, o;
+            i.mesh = inside;
+            o.mesh = outside;
+            pieces.push_back(std::move(o));
+            pieces.push_back(std::move(i));
+        } else {
+            for (auto& n : pm::splitBy(id, *b.solid, *t.solid)) {
+                pm::Body piece;
+                piece.solid = std::move(n);
+                pieces.push_back(std::move(piece));
+            }
+        }
+        g.lock();
+        std::vector<jlong> handles;
+        for (auto& piece : pieces) handles.push_back(store.add(std::move(piece)));
+        g.unlock();
+        jlongArray out = env->NewLongArray(jsize(handles.size()));
+        env->SetLongArrayRegion(out, 0, jsize(handles.size()), handles.data());
+        return out;
+    } catch (const std::exception& e) {
+        fail(env, e.what());
+        return nullptr;
+    }
+}
+
+/** How much two bodies overlap, mm³. */
+JNIEXPORT jdouble JNICALL Java_com_rm_parrotmetric_Core_overlapVolume(JNIEnv* env, jobject, jlong a, jlong b) {
+    try {
+        std::unique_lock<std::mutex> g(lock);
+        const pm::Body x = store.get(a);
+        const pm::Body y = store.get(b);
+        g.unlock();
+        if (x.solid && y.solid) return pm::overlapVolume(*x.solid, *y.solid);
+        return x.asMesh().boolean(y.asMesh(), pm::BooleanOp::Intersect).volume();
+    } catch (const std::exception& e) {
+        return 0;
+    }
+}
+
 /** kind is pm::Primitive's order; sizes as pm::primitive takes them. */
 JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_primitive(JNIEnv* env, jobject, jint id, jdoubleArray plane, jint kind, jdouble u,
                                                                jdouble v, jdouble a, jdouble b, jdouble c) {

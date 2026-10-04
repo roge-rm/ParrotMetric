@@ -38,6 +38,10 @@ interface NativeCore {
     fun primitive(id: Int, plane: DoubleArray, kind: Int, u: Double, v: Double, a: Double, b: Double, c: Double): Long
     /** The box round a body: x, y, z low, then high. */
     fun bounds(body: Long): DoubleArray
+    /** A body cut by another: the pieces outside it, then inside. */
+    fun splitBy(id: Int, body: Long, tool: Long): LongArray
+    /** How much two bodies overlap, mm³. */
+    fun overlapVolume(a: Long, b: Long): Double
     /** A body's volume (mm³), surface area (mm²) and centre of mass x, y, z. */
     fun properties(body: Long): DoubleArray
     /** Where bodies cross a plane, as sketch curves; see jni.cpp. */

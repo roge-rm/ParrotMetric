@@ -25,6 +25,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -256,6 +257,26 @@ fun MeasureSheet(editor: DesignEditor, close: () -> Unit) {
 private fun round1(v: Double): String {
     val r = kotlin.math.round(v * 10) / 10
     return if (r == kotlin.math.floor(r)) r.toLong().toString() else r.toString()
+}
+
+/** Bodies that overlap, worked out when the sheet opens. */
+@Composable
+fun InterferenceSheet(editor: DesignEditor, close: () -> Unit) {
+    var found by remember { mutableStateOf<List<Triple<String, String, Double>>?>(null) }
+    LaunchedEffect(editor.version, editor.built) { found = editor.interference() }
+    SheetFrame("Interference", close) {
+        val list = found
+        when {
+            list == null -> Text("Checking…", fontSize = 14.sp, color = Palette.muted)
+            list.isEmpty() -> Text("No bodies overlap", fontSize = 14.sp, color = Palette.muted)
+            else -> for ((a, b, v) in list) {
+                Text(
+                    "${editor.design.nameOf(a)} and ${editor.design.nameOf(b)}: ${round1(v / 1000)} cm³",
+                    fontSize = 15.sp, color = Palette.text,
+                )
+            }
+        }
+    }
 }
 
 /** Materials for Measure's mass: name and density in g/cm³. */

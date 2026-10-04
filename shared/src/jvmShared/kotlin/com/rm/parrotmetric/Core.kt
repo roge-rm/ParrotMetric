@@ -37,6 +37,8 @@ object Core : NativeCore {
     override external fun bodyCentre(body: Long): DoubleArray
     override external fun primitive(id: Int, plane: DoubleArray, kind: Int, u: Double, v: Double, a: Double, b: Double, c: Double): Long
     override external fun bounds(body: Long): DoubleArray
+    override external fun splitBy(id: Int, body: Long, tool: Long): LongArray
+    override external fun overlapVolume(a: Long, b: Long): Double
     override external fun properties(body: Long): DoubleArray
     /** Where bodies cross a plane, as sketch curves; see jni.cpp. */
     override external fun section(bodies: LongArray, plane: DoubleArray): DoubleArray

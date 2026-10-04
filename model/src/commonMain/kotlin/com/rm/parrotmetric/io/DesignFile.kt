@@ -15,6 +15,7 @@ import com.rm.parrotmetric.design.PatternFeature
 import com.rm.parrotmetric.design.PrimitiveFeature
 import com.rm.parrotmetric.design.PrimitiveKind
 import com.rm.parrotmetric.design.ShellFeature
+import com.rm.parrotmetric.design.AlignFeature
 import com.rm.parrotmetric.design.SplitFeature
 import com.rm.parrotmetric.design.ChamferFeature
 import com.rm.parrotmetric.design.Design
@@ -135,7 +136,11 @@ object DesignFile {
             is CombineFeature -> mapOf(
                 "type" to "combine", "target" to f.target, "tools" to f.tools, "operation" to f.operation.name, "keepTools" to f.keepTools,
             )
-            is SplitFeature -> mapOf("type" to "split", "body" to f.body, "plane" to plane(f.plane), "keep" to f.keep)
+            is SplitFeature -> mapOf("type" to "split", "body" to f.body, "plane" to plane(f.plane), "keep" to f.keep, "tool" to f.tool)
+            is AlignFeature -> mapOf(
+                "type" to "align", "bodies" to f.bodies, "face" to f.face, "target" to plane(f.target),
+                "sameWay" to f.sameWay, "centred" to f.centred, "gap" to f.gap,
+            )
             is ConvertFeature -> mapOf("type" to "convert", "body" to f.body)
             is PlaneFeature -> mapOf(
                 "type" to "plane", "kind" to f.kind.name, "base" to plane(f.base), "offset" to f.offset, "angle" to f.angle,
@@ -195,7 +200,10 @@ object DesignFile {
                 (o["axisFeature"] as? Json.Num)?.value?.toInt(),
             )
             "combine" -> CombineFeature(id, name, o.str("target"), strings(o.arr("tools")), Operation.valueOf(o.str("operation")), o.bool("keepTools"))
-            "split" -> SplitFeature(id, name, o.str("body"), plane(o.obj("plane")), (o["keep"] as? Json.Num)?.value?.toInt() ?: 0)
+            "split" -> SplitFeature(id, name, o.str("body"), plane(o.obj("plane")), (o["keep"] as? Json.Num)?.value?.toInt() ?: 0, (o["tool"] as? Json.Str)?.value)
+            "align" -> AlignFeature(
+                id, name, strings(o.arr("bodies")), o.str("face"), plane(o.obj("target")), o.bool("sameWay"), o.bool("centred"), o.numOr("gap", 0.0),
+            )
             "convert" -> ConvertFeature(id, name, o.str("body"))
             "plane" -> PlaneFeature(
                 id, name, PlaneFeature.Kind.valueOf(o.str("kind")), plane(o.obj("base")), o.num("offset"), o.num("angle"),

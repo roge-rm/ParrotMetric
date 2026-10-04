@@ -658,6 +658,52 @@ std::vector<NamedShape> split(int id, const NamedShape& body, const gp_Pnt& orig
     }
 }
 
+std::vector<NamedShape> splitBy(int id, const NamedShape& body, const NamedShape& tool) {
+    try {
+        BRepAlgoAPI_Splitter op;
+        TopTools_ListOfShape args, tools;
+        args.Append(body.shape);
+        tools.Append(tool.shape);
+        op.SetArguments(args);
+        op.SetTools(tools);
+        op.SetRunParallel(useCores());
+        op.Build();
+        if (!op.IsDone()) throw std::runtime_error("The body couldn't be split");
+        NamedShape all = carryNames({&body, &tool}, op, op.Shape(), prefix(id));
+        std::vector<NamedShape> out;
+        for (TopExp_Explorer s(all.shape, TopAbs_SOLID); s.More(); s.Next()) {
+            NamedShape piece;
+            piece.shape = s.Current();
+            for (TopExp_Explorer f(piece.shape, TopAbs_FACE); f.More(); f.Next()) piece.names.Bind(f.Current(), all.faceName(f.Current()));
+            out.push_back(std::move(piece));
+        }
+        if (out.size() < 2) throw std::runtime_error("The bodies don't cross");
+        return out;
+    } catch (const Standard_Failure&) {
+        throw std::runtime_error("The body couldn't be split");
+    }
+}
+
+double overlapVolume(const NamedShape& a, const NamedShape& b) {
+    try {
+        Bnd_Box ba, bb;
+        BRepBndLib::Add(a.shape, ba);
+        BRepBndLib::Add(b.shape, bb);
+        if (ba.IsOut(bb)) return 0;
+        BRepAlgoAPI_Common common;
+        TopTools_ListOfShape args, tools;
+        args.Append(a.shape);
+        tools.Append(b.shape);
+        common.SetArguments(args);
+        common.SetTools(tools);
+        common.SetRunParallel(useCores());
+        common.Build();
+        return common.IsDone() ? volume(common.Shape()) : 0;
+    } catch (const Standard_Failure&) {
+        return 0;
+    }
+}
+
 NamedShape holeTool(int id, const gp_Ax3& plane, const std::vector<std::pair<double, double>>& at, double diameter, double depth,
                     HoleKind kind, double topDiameter, double topDepth) {
     if (diameter <= 0) throw std::runtime_error("The hole has to be wider than 0");

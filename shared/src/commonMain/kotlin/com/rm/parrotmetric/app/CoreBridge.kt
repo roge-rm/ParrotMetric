@@ -90,6 +90,8 @@ class CoreKernel(private val core: NativeCore) : Kernel {
         call { core.primitive(id, plane.numbers(), kind, u, v, a, b, c) }
     override fun bounds(body: Long) = call { core.bounds(body) }
     override fun properties(body: Long) = call { core.properties(body) }
+    override fun splitBy(id: Int, body: Long, tool: Long) = call { core.splitBy(id, body, tool).toList() }
+    override fun overlapVolume(a: Long, b: Long) = call { core.overlapVolume(a, b) }
     override fun signature(body: Long, name: String, edge: Boolean) = core.signature(body, name, edge)
     override fun relocate(body: Long, signature: DoubleArray) = core.relocate(body, signature)
     override fun retain(body: Long) = core.retain(body)

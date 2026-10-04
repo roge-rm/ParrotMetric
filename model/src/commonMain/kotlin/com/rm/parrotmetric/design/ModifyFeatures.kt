@@ -81,7 +81,37 @@ data class CombineFeature(
  * Cuts a body along a plane. [keep] 0 keeps both pieces as bodies; 1 keeps
  * the side the plane faces, 2 the side behind it.
  */
-data class SplitFeature(override val id: Int, override val name: String, val body: String, val plane: PlaneRef, val keep: Int = 0) : Feature() {
+data class SplitFeature(
+    override val id: Int,
+    override val name: String,
+    val body: String,
+    val plane: PlaneRef,
+    val keep: Int = 0,
+    /**
+     * Another body to split it by in place of the plane; then [keep] is 0
+     * for both, 1 for the part outside it and 2 for the part inside.
+     */
+    val tool: String? = null,
+) : Feature() {
+    override fun key() = this
+}
+
+/**
+ * Turns and moves bodies so a flat [face] of one of them lies on [target]:
+ * facing it, or the same way if [sameWay], [gap] (mm) away from it, and with
+ * the face's middle over the target's origin if [centred].
+ */
+data class AlignFeature(
+    override val id: Int,
+    override val name: String,
+    /** The bodies to move; none means the body with the face. */
+    val bodies: BodyPick,
+    val face: String,
+    val target: PlaneRef,
+    val sameWay: Boolean = false,
+    val centred: Boolean = false,
+    val gap: Double = 0.0,
+) : Feature() {
     override fun key() = this
 }
 

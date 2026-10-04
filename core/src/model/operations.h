@@ -96,6 +96,15 @@ enum class Primitive { Box, Cylinder, Sphere, Torus, Cone };
  */
 NamedShape primitive(int id, const gp_Ax3& plane, Primitive kind, double u, double v, double a, double b, double c);
 
+/**
+ * A body cut into pieces where another body's surface passes through it:
+ * the parts inside the tool and the parts outside. The tool isn't changed.
+ */
+std::vector<NamedShape> splitBy(int id, const NamedShape& body, const NamedShape& tool);
+
+/** How much two bodies overlap, mm³; 0 if they don't. */
+double overlapVolume(const NamedShape& a, const NamedShape& b);
+
 /** The box round a body: x, y, z low, then x, y, z high. */
 std::array<double, 6> bounds(const NamedShape& body);
 

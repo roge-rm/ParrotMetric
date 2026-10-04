@@ -87,6 +87,7 @@ fun FeaturePanel(editor: DesignEditor) {
                 is DesignEditor.AxisDraft -> AxisSettings(editor, d)
                 is DesignEditor.PointDraft -> PointSettings(editor, d)
                 is DesignEditor.PrimitiveDraft -> PrimitiveSettings(editor, d)
+                is DesignEditor.AlignDraft -> AlignSettings(editor, d)
                 else -> {}
             }
             }
@@ -487,19 +488,37 @@ internal fun CombineSettings(editor: DesignEditor, d: DesignEditor.CombineDraft)
 
 @Composable
 internal fun SplitSettings(editor: DesignEditor, d: DesignEditor.SplitDraft) {
-    Header(if (d.keep == 0) "Split" else "Plane cut", Icons.cut, Palette.modify, d.bodies.firstOrNull())
-    PlaneRow(d, d.plane) { d.plane = it; editor.draftChanged() }
-    Segmented(listOf("Keep both", "Keep in front", "Keep behind"), d.keep) { d.keep = it; editor.draftChanged() }
+    Header(if (d.keep == 0 || d.byBody) "Split" else "Plane cut", Icons.cut, Palette.modify, d.bodies.firstOrNull())
+    Segmented(listOf("By a plane", "By a body"), if (d.byBody) 1 else 0) { d.byBody = it == 1; editor.draftChanged() }
+    if (d.byBody) {
+        Text(d.bodies.getOrNull(1)?.let { "By ${editor.design.nameOf(it)}" } ?: "Tap the body to split it by", fontSize = 14.sp, color = Palette.muted)
+        Segmented(listOf("Keep both", "Keep outside", "Keep inside"), d.keep) { d.keep = it; editor.draftChanged() }
+    } else {
+        PlaneRow(d, d.plane) { d.plane = it; editor.draftChanged() }
+        Segmented(listOf("Keep both", "Keep in front", "Keep behind"), d.keep) { d.keep = it; editor.draftChanged() }
+    }
+}
+
+@Composable
+internal fun AlignSettings(editor: DesignEditor, d: DesignEditor.AlignDraft) {
+    Header("Align", Icons.align, Palette.modify, if (d.face == null) null else "1 face")
+    Text("Onto", fontSize = 13.sp, color = Palette.muted)
+    Segmented(d.planes.map { it.first }, d.planes.indexOfFirst { it.second == d.target }) { d.target = d.planes[it].second; editor.draftChanged() }
+    Field(editor, d, "gap", "Gap", d.gap, "mm", allowNegative = true) { d.gap = it; editor.draftChanged() }
+    Toggle("Line up the middles", d.centred) { d.centred = it; editor.draftChanged() }
+    Toggle("Face the same way", d.sameWay) { d.sameWay = it; editor.draftChanged() }
 }
 
 @Composable
 internal fun MoveSettings(editor: DesignEditor, d: DesignEditor.MoveDraft) {
-    Header("Move", Icons.move, Palette.modify, bodiesLabel(d.bodies, "All bodies"))
-    Field(editor, d, "dx", "X", d.dx, "mm", allowNegative = true) { d.dx = it; editor.draftChanged() }
-    Field(editor, d, "dy", "Y", d.dy, "mm", allowNegative = true) { d.dy = it; editor.draftChanged() }
-    Field(editor, d, "dz", "Z", d.dz, "mm", allowNegative = true) { d.dz = it; editor.draftChanged() }
-    AxisRow("Turn round", d.axis, false) { d.axis = it!!; editor.draftChanged() }
-    Field(editor, d, "angle", "By", d.degrees, "°", allowNegative = true) { d.degrees = it; editor.draftChanged() }
+    Header(if (d.scaling) "Scale" else "Move", if (d.scaling) Icons.scale else Icons.move, Palette.modify, bodiesLabel(d.bodies, "All bodies"))
+    if (!d.scaling) {
+        Field(editor, d, "dx", "X", d.dx, "mm", allowNegative = true) { d.dx = it; editor.draftChanged() }
+        Field(editor, d, "dy", "Y", d.dy, "mm", allowNegative = true) { d.dy = it; editor.draftChanged() }
+        Field(editor, d, "dz", "Z", d.dz, "mm", allowNegative = true) { d.dz = it; editor.draftChanged() }
+        AxisRow("Turn round", d.axis, false) { d.axis = it!!; editor.draftChanged() }
+        Field(editor, d, "angle", "By", d.degrees, "°", allowNegative = true) { d.degrees = it; editor.draftChanged() }
+    }
     Toggle("Same scale every way", d.evenly) {
         d.evenly = it
         if (!it) { d.sy = d.sx; d.sz = d.sx }

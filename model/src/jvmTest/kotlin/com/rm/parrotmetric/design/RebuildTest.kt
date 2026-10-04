@@ -98,6 +98,12 @@ private class FakeKernel : Kernel {
     }
 
     override fun convertToSolid(id: Int, body: Long) = make(bodies.getValue(body))
+    override fun splitBy(id: Int, body: Long, tool: Long): List<Long> {
+        calls += "splitBy $id"
+        val b = bodies.getValue(body); val t = bodies.getValue(tool)
+        if (t.to <= b.from || t.from >= b.to) throw KernelException("The bodies don't cross")
+        return listOf(make(Box(b.from, t.from, b.faces)), make(Box(t.from, minOf(b.to, t.to), b.faces)))
+    }
     override fun primitive(id: Int, plane: SketchPlane, kind: Int, u: Double, v: Double, a: Double, b: Double, c: Double): Long {
         calls += "primitive $id $kind"
         return make(Box(u - a / 2, u + a / 2, listOf("F$id.start", "F$id.end")))
@@ -380,5 +386,29 @@ class RebuildTest {
         assertTrue(built.errors.isEmpty(), built.errors.toString())
         assertEquals(2, built.bodies.size)
         assertTrue("primitive 4 1" in k.calls)
+    }
+
+    @Test
+    fun splittingByABodyKeepsTheToolAndAddsAPiece() {
+        val k = FakeKernel()
+        val d = Design()
+        extrude(d, sketchAt(d, 0.0, 10.0), Operation.NewBody)
+        extrude(d, sketchAt(d, 5.0, 10.0), Operation.NewBody)
+        d.add(SplitFeature(d.newId(), "Split", "Body 1", PlaneRef.Fixed(SketchPlane.Right), 0, tool = "Body 2"))
+        val built = Rebuilder(k).rebuild(d.active)
+        assertTrue(built.errors.isEmpty(), built.errors.toString())
+        assertEquals(listOf("Body 1", "Body 3", "Body 2"), built.bodies.map { it.label })
+    }
+
+    @Test
+    fun aligningMovesTheBodyWithTheFace() {
+        val k = FakeKernel()
+        val d = Design()
+        val e = extrude(d, sketchAt(d, 0.0, 10.0), Operation.NewBody)
+        val align = AlignFeature(d.newId(), "Align", emptyList(), "F${e.id}.end", PlaneRef.Fixed(SketchPlane.Top), gap = 2.0)
+        d.add(align)
+        val built = Rebuilder(k).rebuild(d.active)
+        assertTrue(built.errors.isEmpty(), built.errors.toString())
+        assertTrue("transform ${align.id} a" in k.calls)
     }
 }

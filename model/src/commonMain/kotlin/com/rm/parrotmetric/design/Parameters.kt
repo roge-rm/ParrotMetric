@@ -112,6 +112,7 @@ object Parametrics {
                 "angle" -> f.copy(angle = rad)
                 else -> f
             }
+            is AlignFeature -> if (field == "gap") f.copy(gap = v) else f
             is PointFeature -> when (field) {
                 "x" -> f.copy(x = v)
                 "y" -> f.copy(y = v)

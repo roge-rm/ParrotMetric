@@ -69,6 +69,8 @@ object Tools {
         ToolDef("combine", "Combine", Icons.combine, ToolGroup.Modify, key = "J", mesh = true) { it.design.startCombine() },
         ToolDef("split", "Split", Icons.cut, ToolGroup.Modify, key = "X", mesh = true) { it.design.startSplit() },
         ToolDef("move", "Move", Icons.move, ToolGroup.Modify, key = "M", mesh = true, suggest = ::faces) { it.design.startMove() },
+        ToolDef("scale", "Scale", Icons.scale, ToolGroup.Modify, mesh = true, cluster = "Scale and align") { it.design.startScale() },
+        ToolDef("align", "Align", Icons.align, ToolGroup.Modify, mesh = true, cluster = "Scale and align", suggest = { it.selectedFaces == 2 }) { it.design.startAlign() },
 
         ToolDef("plane.offset", "Offset plane", Icons.plane, ToolGroup.Construct, cluster = "Planes") { it.design.startPlane(PlaneFeature.Kind.Offset) },
         ToolDef("plane.angle", "Angled plane", Icons.plane, ToolGroup.Construct, cluster = "Planes") { it.design.startPlane(PlaneFeature.Kind.Angle) },
@@ -80,6 +82,7 @@ object Tools {
             it.design.startMeasuring(); it.openSheet("measure")
         },
         ToolDef("section", "Section", Icons.section, ToolGroup.Inspect, key = "Shift+I") { it.design.startSection(); it.openSheet("section") },
+        ToolDef("interference", "Interference", Icons.interference, ToolGroup.Inspect) { it.openSheet("interference") },
         ToolDef("parameters", "Parameters", Icons.parameters, ToolGroup.Inspect) { it.openSheet("parameters") },
     )
 

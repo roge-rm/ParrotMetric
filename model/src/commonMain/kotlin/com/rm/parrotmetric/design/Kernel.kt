@@ -47,6 +47,10 @@ interface Kernel {
     fun bounds(body: Long): DoubleArray
     /** A body's volume (mm³), surface area (mm²) and centre of mass x, y, z. */
     fun properties(body: Long): DoubleArray? = null
+    /** A body cut where another body's surface passes through it; the tool is left as it is. */
+    fun splitBy(id: Int, body: Long, tool: Long): List<Long>
+    /** How much two bodies overlap, mm³. */
+    fun overlapVolume(a: Long, b: Long): Double = 0.0
     fun retain(body: Long)
     fun release(body: Long)
     /** Where a named face (or edge) of a body is and how big, to find it again by shape; null if the body hasn't got it. */

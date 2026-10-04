@@ -610,6 +610,41 @@ class DesignEditor(
     fun startCombine() = openBodies(CombineDraft(null))
     fun startSplit() = openBodies(SplitDraft(null))
     fun startMove() = openBodies(MoveDraft(null))
+    fun startScale() = openBodies(MoveDraft(null, scaling = true))
+
+    fun startAlign() {
+        val d = AlignDraft(null)
+        alignPicks(d)
+        panel = d
+        rebuild()
+    }
+
+    /** Align's picks from the selection: the first face tapped moves, the second is where to. */
+    private fun alignPicks(d: AlignDraft) {
+        val faces = viewport.selectedFaces().filter { it.second.isNotEmpty() }
+        faces.getOrNull(0)?.let { d.face = it.second }
+        val choices = planeChoices().filter { it.first != "The face" }.toMutableList()
+        faces.getOrNull(1)?.let { (_, f) ->
+            val ref = PlaneRef.OnFace(f, Vec3(1.0, 0.0, 0.0))
+            choices.add(3, "The face" to ref)
+            d.target = ref
+        }
+        (d.target as? PlaneRef.OnFace)?.let { t -> if (choices.none { it.second == t }) choices.add(3, "The face" to t) }
+        d.planes = choices
+    }
+
+    /** Pairs of shown bodies that overlap, and by how much (mm³). */
+    suspend fun interference(): List<Triple<String, String, Double>> = withContext(Dispatchers.Default) {
+        lock.withLock {
+            val shown = shownBodies
+            val out = mutableListOf<Triple<String, String, Double>>()
+            for (i in shown.indices) for (j in i + 1 until shown.size) {
+                val v = kernel.overlapVolume(shown[i].handle, shown[j].handle)
+                if (v > 1e-6) out += Triple(shown[i].label, shown[j].label, v)
+            }
+            out
+        }
+    }
     fun startPlaneCut() = openBodies(SplitDraft(null).also { it.keep = 1 })
     fun startConvert() = openBodies(ConvertDraft(null))
 
@@ -657,7 +692,8 @@ class DesignEditor(
             is PatternFeature -> PatternDraft(f)
             is CombineFeature -> CombineDraft(f)
             is SplitFeature -> SplitDraft(f)
-            is MoveFeature -> MoveDraft(f)
+            is MoveFeature -> MoveDraft(f, scaling = f.dx == 0.0 && f.dy == 0.0 && f.dz == 0.0 && f.angle == 0.0 && f.scaled)
+            is com.rm.parrotmetric.design.AlignFeature -> AlignDraft(f).also { alignPicks(it) }
             is com.rm.parrotmetric.design.ConvertFeature -> ConvertDraft(f)
             is PointFeature -> PointDraft(f)
             is PlaneFeature -> PlaneDraft(f, f.kind).also { it.planes = planeChoices().filter { c -> c.second != PlaneRef.Construction(f.id) } }
@@ -721,6 +757,10 @@ class DesignEditor(
                     viewport.select(emptyList(), emptyList())
                 } else d.faces = faces
             }
+            is AlignDraft -> {
+                alignPicks(d)
+                rebuild()
+            }
             is BodyDraft -> {
                 val picked = pickedBodies()
                 if (picked.isNotEmpty() || viewport.selectedFaces().isEmpty()) {
@@ -747,6 +787,7 @@ class DesignEditor(
             }
             is EdgeDraft -> viewport.select(d.edges, emptyList())
             is FaceDraft -> viewport.select(emptyList(), emptyList(), d.faces + listOfNotNull(d.neutral))
+            is AlignDraft -> viewport.select(emptyList(), emptyList(), listOfNotNull(d.face, (d.target as? PlaneRef.OnFace)?.face))
         }
     }
 
@@ -976,9 +1017,35 @@ class DesignEditor(
         var keep by mutableStateOf(editing?.keep ?: 0)
         private val name = editing?.name ?: nextName("Split", design.features.count { it is SplitFeature })
         var plane by mutableStateOf<PlaneRef>(editing?.plane ?: PlaneRef.Fixed(SketchPlane.Right))
-        init { if (editing != null) bodies = listOf(editing.body) }
-        override fun feature(): Feature? = bodies.firstOrNull()?.let { SplitFeature(id, name, it, plane, keep) }
-        override fun missing() = "Tap a face of the body to split"
+        /** Split by another body, the second one picked, in place of a plane. */
+        var byBody by mutableStateOf(editing?.tool != null)
+        init { if (editing != null) bodies = listOfNotNull(editing.body, editing.tool) }
+        override fun feature(): Feature? {
+            val body = bodies.firstOrNull() ?: return null
+            if (!byBody) return SplitFeature(id, name, body, plane, keep)
+            val tool = bodies.getOrNull(1) ?: return null
+            return SplitFeature(id, name, body, plane, keep, tool)
+        }
+        override fun missing() = if (byBody) "Tap the body to split, then the one to split it by" else "Tap a face of the body to split"
+    }
+
+    /** Lines up a face of a body with another face or a plane. */
+    inner class AlignDraft(editing: com.rm.parrotmetric.design.AlignFeature?) : FeatureDraft() {
+        val id = editing?.id ?: newId()
+        private val name = editing?.name ?: nextName("Align", design.features.count { it is com.rm.parrotmetric.design.AlignFeature })
+        var bodies by mutableStateOf(editing?.bodies ?: emptyList())
+        var face by mutableStateOf(editing?.face)
+        var target by mutableStateOf<PlaneRef?>(editing?.target)
+        var planes by mutableStateOf<List<Pair<String, PlaneRef>>>(emptyList())
+        var sameWay by mutableStateOf(editing?.sameWay ?: false)
+        var centred by mutableStateOf(editing?.centred ?: false)
+        var gap by mutableStateOf(editing?.gap ?: 0.0)
+        override fun feature(): Feature? {
+            val f = face ?: return null
+            val t = target ?: return null
+            return com.rm.parrotmetric.design.AlignFeature(id, name, bodies, f, t, sameWay, centred, gap)
+        }
+        override fun missing() = if (face == null) "Tap the flat face to move" else "Tap the face to line it up with, or pick a plane"
     }
 
     inner class ConvertDraft(editing: com.rm.parrotmetric.design.ConvertFeature?) : BodyDraft(editing) {
@@ -988,8 +1055,9 @@ class DesignEditor(
         override fun missing() = "Tap the mesh to make solid"
     }
 
-    inner class MoveDraft(editing: MoveFeature?) : BodyDraft(editing) {
-        private val name = editing?.name ?: nextName("Move", design.features.count { it is MoveFeature })
+    /** Move, or with [scaling] just Scale. */
+    inner class MoveDraft(editing: MoveFeature?, val scaling: Boolean = false) : BodyDraft(editing) {
+        private val name = editing?.name ?: nextName(if (scaling) "Scale" else "Move", design.features.count { it is MoveFeature })
         var dx by mutableStateOf(editing?.dx ?: 0.0)
         var dy by mutableStateOf(editing?.dy ?: 0.0)
         var dz by mutableStateOf(editing?.dz ?: 0.0)
