@@ -16,6 +16,13 @@ import com.rm.parrotmetric.design.PrimitiveFeature
 import com.rm.parrotmetric.design.PrimitiveKind
 import com.rm.parrotmetric.design.ShellFeature
 import com.rm.parrotmetric.design.AlignFeature
+import com.rm.parrotmetric.design.CoilFeature
+import com.rm.parrotmetric.design.LoftFeature
+import com.rm.parrotmetric.design.LoftSection
+import com.rm.parrotmetric.design.PathRef
+import com.rm.parrotmetric.design.PipeFeature
+import com.rm.parrotmetric.design.SweepFeature
+import com.rm.parrotmetric.design.ThreadFeature
 import com.rm.parrotmetric.design.SplitFeature
 import com.rm.parrotmetric.design.ChamferFeature
 import com.rm.parrotmetric.design.Design
@@ -104,6 +111,13 @@ object DesignFile {
 
     private fun vec(v: Vec3) = listOf(v.x, v.y, v.z)
 
+    private fun path(p: PathRef): Map<String, Any?> = when (p) {
+        is PathRef.Sketch -> mapOf("sketch" to p.sketchId)
+        is PathRef.Edges -> mapOf("edges" to p.names)
+    }
+
+    private fun path(o: Json.Obj): PathRef = if (o["sketch"] is Json.Num) PathRef.Sketch(o.int("sketch")) else PathRef.Edges(strings(o.arr("edges")))
+
     private fun pointRef(r: com.rm.parrotmetric.design.PointRef): Map<String, Any?> = when (r) {
         is com.rm.parrotmetric.design.PointRef.Corner -> mapOf("corner" to r.name)
         is com.rm.parrotmetric.design.PointRef.CentreOf -> mapOf("centreOf" to r.edge)
@@ -149,6 +163,19 @@ object DesignFile {
                 "type" to "combine", "target" to f.target, "tools" to f.tools, "operation" to f.operation.name, "keepTools" to f.keepTools,
             )
             is SplitFeature -> mapOf("type" to "split", "body" to f.body, "plane" to plane(f.plane), "keep" to f.keep, "tool" to f.tool)
+            is SweepFeature -> mapOf(
+                "type" to "sweep", "sketch" to f.sketchId, "regions" to writeRegions(f.regions), "path" to path(f.path), "operation" to f.operation.name,
+            )
+            is PipeFeature -> mapOf("type" to "pipe", "path" to path(f.path), "diameter" to f.diameter, "inner" to f.inner, "operation" to f.operation.name)
+            is CoilFeature -> mapOf(
+                "type" to "coil", "plane" to plane(f.plane), "u" to f.u, "v" to f.v, "diameter" to f.diameter, "pitch" to f.pitch,
+                "turns" to f.turns, "section" to f.section, "square" to f.square, "operation" to f.operation.name,
+            )
+            is ThreadFeature -> mapOf("type" to "thread", "face" to f.face, "pitch" to f.pitch)
+            is LoftFeature -> mapOf(
+                "type" to "loft", "sections" to f.sections.map { mapOf("sketch" to it.sketchId, "region" to writeRegions(listOf(it.region)).first()) },
+                "ruled" to f.ruled, "operation" to f.operation.name,
+            )
             is AlignFeature -> mapOf(
                 "type" to "align", "bodies" to f.bodies, "face" to f.face, "target" to plane(f.target),
                 "sameWay" to f.sameWay, "centred" to f.centred, "gap" to f.gap,
@@ -220,6 +247,17 @@ object DesignFile {
             )
             "combine" -> CombineFeature(id, name, o.str("target"), strings(o.arr("tools")), Operation.valueOf(o.str("operation")), o.bool("keepTools"))
             "split" -> SplitFeature(id, name, o.str("body"), plane(o.obj("plane")), (o["keep"] as? Json.Num)?.value?.toInt() ?: 0, (o["tool"] as? Json.Str)?.value)
+            "sweep" -> SweepFeature(id, name, o.int("sketch"), readRegions(o.arr("regions")), path(o.obj("path")), Operation.valueOf(o.str("operation")))
+            "pipe" -> PipeFeature(id, name, path(o.obj("path")), o.num("diameter"), o.num("inner"), Operation.valueOf(o.str("operation")))
+            "coil" -> CoilFeature(
+                id, name, plane(o.obj("plane")), o.num("u"), o.num("v"), o.num("diameter"), o.num("pitch"), o.num("turns"), o.num("section"),
+                o.bool("square"), Operation.valueOf(o.str("operation")),
+            )
+            "thread" -> ThreadFeature(id, name, o.str("face"), o.num("pitch"))
+            "loft" -> LoftFeature(
+                id, name, o.arr("sections").map { s -> s as Json.Obj; LoftSection(s.int("sketch"), readRegions(listOf(s.obj("region"))).first()) },
+                o.bool("ruled"), Operation.valueOf(o.str("operation")),
+            )
             "align" -> AlignFeature(
                 id, name, strings(o.arr("bodies")), o.str("face"), plane(o.obj("target")), o.bool("sameWay"), o.bool("centred"), o.numOr("gap", 0.0),
             )

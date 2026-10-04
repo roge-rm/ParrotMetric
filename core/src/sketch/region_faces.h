@@ -17,6 +17,9 @@ struct RegionFace {
     Region info;
 };
 
+/** One sketch curve as an edge in the XY plane, or a null edge if it has no length. */
+TopoDS_Edge sketchEdge(const SketchCurve& c);
+
 /** The regions of a sketch's curves as faces, largest first. */
 std::vector<RegionFace> buildRegionFaces(const std::vector<SketchCurve>& curves);
 

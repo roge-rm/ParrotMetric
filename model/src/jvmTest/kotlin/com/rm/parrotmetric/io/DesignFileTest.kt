@@ -73,6 +73,11 @@ class DesignFileTest {
             com.rm.parrotmetric.design.PointFeature(d.newId(), "Point", 1.0, 2.0, 3.0),
             ExtrudeFeature(d.newId(), "Through", 1, emptyList(), 5.0, 0.0, Operation.Cut, throughAll = true, offset = 2.0, thin = 1.5),
             com.rm.parrotmetric.design.SplitFeature(d.newId(), "Split by", "Body 1", top, 2, "Body 2"),
+            com.rm.parrotmetric.design.SweepFeature(d.newId(), "Sweep", 1, listOf(com.rm.parrotmetric.design.RegionRef(listOf(1, 2), 0.5, 0.5)), com.rm.parrotmetric.design.PathRef.Sketch(3), Operation.Join),
+            com.rm.parrotmetric.design.PipeFeature(d.newId(), "Pipe", com.rm.parrotmetric.design.PathRef.Edges(listOf("F1.s1|F1.end")), 4.0, 2.0, Operation.NewBody),
+            com.rm.parrotmetric.design.CoilFeature(d.newId(), "Coil", top, 1.0, 2.0, 20.0, 5.0, 3.5, 2.0, true, Operation.Cut),
+            com.rm.parrotmetric.design.ThreadFeature(d.newId(), "Thread", "F2.side", 1.25),
+            com.rm.parrotmetric.design.LoftFeature(d.newId(), "Loft", listOf(com.rm.parrotmetric.design.LoftSection(1, com.rm.parrotmetric.design.RegionRef(listOf(1), 0.0, 0.0)), com.rm.parrotmetric.design.LoftSection(3, com.rm.parrotmetric.design.RegionRef(listOf(2), 1.0, 1.0))), true, Operation.NewBody),
             com.rm.parrotmetric.design.PlaneFeature(
                 d.newId(), "Three", com.rm.parrotmetric.design.PlaneFeature.Kind.ThreePoints, top, 0.0, 0.0, false, null,
                 listOf(com.rm.parrotmetric.design.PointRef.Corner("a & b"), com.rm.parrotmetric.design.PointRef.CentreOf("F1.s5|F1.end"), com.rm.parrotmetric.design.PointRef.Construction(4)),

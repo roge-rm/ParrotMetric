@@ -90,6 +90,11 @@ fun FeaturePanel(editor: DesignEditor) {
                 is DesignEditor.PointDraft -> PointSettings(editor, d)
                 is DesignEditor.PrimitiveDraft -> PrimitiveSettings(editor, d)
                 is DesignEditor.AlignDraft -> AlignSettings(editor, d)
+                is DesignEditor.SweepDraft -> SweepSettings(editor, d)
+                is DesignEditor.PipeDraft -> PipeSettings(editor, d)
+                is DesignEditor.CoilDraft -> CoilSettings(editor, d)
+                is DesignEditor.ThreadDraft -> ThreadSettings(editor, d)
+                is DesignEditor.LoftDraft -> LoftSettings(editor, d)
                 else -> {}
             }
             }
@@ -199,6 +204,93 @@ private fun PrimitiveSettings(editor: DesignEditor, d: DesignEditor.PrimitiveDra
     }
     Field(editor, d, "u", "Centre x", d.u, "mm", allowNegative = true) { d.u = it; editor.draftChanged() }
     Field(editor, d, "v", "Centre y", d.v, "mm", allowNegative = true) { d.v = it; editor.draftChanged() }
+    OperationRow(d.operation) {
+        d.operation = it
+        editor.draftChanged()
+    }
+}
+
+/** What a sweep or pipe follows: one of the other sketches, or edges picked in the view. */
+@Composable
+private fun PathRow(editor: DesignEditor, except: Int?, byEdges: Boolean, sketch: Int?, edges: Int, onPick: (byEdges: Boolean, sketch: Int?) -> Unit) {
+    val choices = editor.sketchChoices(except)
+    Text("Along", fontSize = 13.sp, color = Palette.muted)
+    val labels = choices.map { it.first } + (if (edges > 0) count(edges, "edge", "edges") else "Picked edges")
+    val chosen = if (byEdges) choices.size else choices.indexOfFirst { it.second == sketch }
+    Segmented(labels, chosen) { i -> if (i == choices.size) onPick(true, sketch) else onPick(false, choices[i].second) }
+}
+
+@Composable
+private fun SweepSettings(editor: DesignEditor, d: DesignEditor.SweepDraft) {
+    Header("Sweep", Icons.sweep, Palette.create, if (d.regions.isEmpty()) null else count(d.regions.size, "area", "areas"))
+    PathRow(editor, d.sketchId, d.pathByEdges, d.pathSketch, d.pathEdges.size) { byEdges, sketch ->
+        d.pathByEdges = byEdges
+        d.pathSketch = sketch
+        editor.draftChanged()
+    }
+    OperationRow(d.operation) {
+        d.operation = it
+        editor.draftChanged()
+    }
+}
+
+@Composable
+private fun PipeSettings(editor: DesignEditor, d: DesignEditor.PipeDraft) {
+    Header("Pipe", Icons.pipe, Palette.create, null)
+    PathRow(editor, null, d.pathByEdges, d.pathSketch, d.pathEdges.size) { byEdges, sketch ->
+        d.pathByEdges = byEdges
+        d.pathSketch = sketch
+        editor.draftChanged()
+    }
+    Field(editor, d, "diameter", "Diameter", d.diameter, "mm", allowNegative = false) { d.diameter = it; editor.draftChanged() }
+    Toggle("Hollow", d.hollow) { d.hollow = it; editor.draftChanged() }
+    if (d.hollow) Field(editor, d, "inner", "Inside", d.inner, "mm", allowNegative = false) { d.inner = it; editor.draftChanged() }
+    OperationRow(d.operation) {
+        d.operation = it
+        editor.draftChanged()
+    }
+}
+
+@Composable
+private fun CoilSettings(editor: DesignEditor, d: DesignEditor.CoilDraft) {
+    Header("Coil", Icons.coil, Palette.create, null)
+    Text("On", fontSize = 13.sp, color = Palette.muted)
+    Segmented(d.planes.map { it.first }, d.planes.indexOfFirst { it.second == d.plane }.coerceAtLeast(0)) { d.plane = d.planes[it].second; editor.draftChanged() }
+    Field(editor, d, "diameter", "Diameter", d.diameter, "mm", allowNegative = false) { d.diameter = it; editor.draftChanged() }
+    Field(editor, d, "pitch", "Pitch", d.pitch, "mm", allowNegative = false) { d.pitch = it; editor.draftChanged() }
+    Field(editor, d, "turns", "Turns", d.turns, "", allowNegative = false) { d.turns = it; editor.draftChanged() }
+    Field(editor, d, "section", "Wire", d.section, "mm", allowNegative = false) { d.section = it; editor.draftChanged() }
+    Segmented(listOf("Round wire", "Square wire"), if (d.square) 1 else 0) { d.square = it == 1; editor.draftChanged() }
+    Field(editor, d, "u", "Centre x", d.u, "mm", allowNegative = true) { d.u = it; editor.draftChanged() }
+    Field(editor, d, "v", "Centre y", d.v, "mm", allowNegative = true) { d.v = it; editor.draftChanged() }
+    OperationRow(d.operation) {
+        d.operation = it
+        editor.draftChanged()
+    }
+}
+
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun ThreadSettings(editor: DesignEditor, d: DesignEditor.ThreadDraft) {
+    Header("Thread", Icons.thread, Palette.modify, if (d.face != null) "1 face" else null)
+    // The ISO sizes; picking one sets its pitch.
+    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        for ((size, pitch) in ThreadSizes.all) {
+            Surface(
+                onClick = { d.pitch = pitch; d.exprs.remove("pitch"); editor.draftChanged() },
+                shape = RoundedCornerShape(12.dp),
+                color = if (d.pitch == pitch) Palette.line else Palette.ground,
+                contentColor = Palette.text,
+            ) { Text(size, Modifier.padding(horizontal = 10.dp, vertical = 7.dp), fontSize = 13.sp) }
+        }
+    }
+    Field(editor, d, "pitch", "Pitch", d.pitch, "mm", allowNegative = false) { d.pitch = it; editor.draftChanged() }
+}
+
+@Composable
+private fun LoftSettings(editor: DesignEditor, d: DesignEditor.LoftDraft) {
+    Header("Loft", Icons.loft, Palette.create, if (d.sections.isEmpty()) null else count(d.sections.size, "area", "areas"))
+    Toggle("Straight between them", d.ruled) { d.ruled = it; editor.draftChanged() }
     OperationRow(d.operation) {
         d.operation = it
         editor.draftChanged()

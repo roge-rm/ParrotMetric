@@ -1,5 +1,6 @@
 #pragma once
 
+#include <TopoDS_Wire.hxx>
 #include <gp_Ax3.hxx>
 
 #include <array>
@@ -104,6 +105,47 @@ std::vector<NamedShape> splitBy(int id, const NamedShape& body, const NamedShape
 
 /** How much two bodies overlap, mm³; 0 if they don't. */
 double overlapVolume(const NamedShape& a, const NamedShape& b);
+
+/** Sketch curves on a plane joined end to end into one path. Throws if they don't make one chain. */
+TopoDS_Wire pathFromSketch(const gp_Ax3& plane, const std::vector<SketchCurve>& curves);
+
+/** Edges joined end to end into one path. Throws if they don't make one chain. */
+TopoDS_Wire pathFromEdges(const std::vector<TopoDS_Edge>& edges);
+
+/**
+ * Sweeps sketch regions along a path, the regions staying as square to it
+ * as they start. Sides are named F<id>.s<curve> as for extrude, the ends
+ * F<id>.start and F<id>.end.
+ */
+NamedShape sweep(int id, const gp_Ax3& plane, const std::vector<SketchCurve>& curves, const std::vector<RegionPick>& picks,
+                 const TopoDS_Wire& path);
+
+/** A round tube along a path, [diameter] across; hollow when [inner] (a diameter) is more than 0. */
+NamedShape pipe(int id, const TopoDS_Wire& path, double diameter, double inner);
+
+/**
+ * A coil round an axis standing on a plane at (u, v): [diameter] across the
+ * middle of its wire, rising [pitch] mm a turn for [turns] turns, its wire
+ * [section] mm across, round or [square].
+ */
+NamedShape coil(int id, const gp_Ax3& plane, double u, double v, double diameter, double pitch, double turns, double section, bool square);
+
+/**
+ * A body with a thread cut into one of its round faces: on the outside of
+ * a shaft or the inside of a hole, as the face looks. ISO metric: a 60°
+ * groove [pitch] mm a turn, as long as the face. The groove is named F<id>.t.
+ */
+NamedShape thread(int id, const NamedShape& body, const std::string& face, double pitch);
+
+/** One area of a sketch, for a loft. */
+struct LoftProfile {
+    gp_Ax3 plane;
+    std::vector<SketchCurve> curves;
+    RegionPick pick;
+};
+
+/** A solid through areas in order, smooth or [ruled] (straight between them). The ends are F<id>.start and F<id>.end. */
+NamedShape loft(int id, const std::vector<LoftProfile>& profiles, bool ruled);
 
 /** The box round a body: x, y, z low, then x, y, z high. */
 std::array<double, 6> bounds(const NamedShape& body);

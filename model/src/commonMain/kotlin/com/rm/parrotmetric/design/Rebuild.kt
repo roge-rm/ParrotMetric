@@ -236,6 +236,29 @@ class Rebuilder(private val kernel: Kernel) {
             }
             applyTool(f, tool, f.operation, bodies, planes, made)
         }
+        is SweepFeature -> {
+            val sketch = sketchOf(f.sketchId, all)
+            val plane = planes[f.sketchId] ?: throw KernelException("Its sketch couldn't be built")
+            applyTool(f, kernel.sweep(f.id, plane, sketch.curves(), f.regions, pathOf(f.path, f, bodies, planes, all)), f.operation, bodies, planes, made)
+        }
+        is PipeFeature -> applyTool(f, kernel.pipe(f.id, pathOf(f.path, f, bodies, planes, all), f.diameter, f.inner), f.operation, bodies, planes, made)
+        is CoilFeature -> {
+            val plane = resolvePlane(f.plane, bodies, f, planes)
+            applyTool(f, kernel.coil(f.id, plane, f.u, f.v, f.diameter, f.pitch, f.turns, f.section, f.square), f.operation, bodies, planes, made)
+        }
+        is ThreadFeature -> {
+            val face = ref(f, f.face, false, bodies)
+            val body = bodyWithFace(face, bodies) ?: throw KernelException("The face it's on isn't there any more")
+            replace(f, bodies, planes, made, body) { kernel.thread(f.id, body.handle, face, f.pitch) }
+        }
+        is LoftFeature -> {
+            if (f.sections.size < 2) throw KernelException("Pick areas in at least two sketches")
+            val sections = f.sections.map { s ->
+                val sketch = sketchOf(s.sketchId, all)
+                Triple(planes[s.sketchId] ?: throw KernelException("A sketch of it couldn't be built"), sketch.curves(), s.region)
+            }
+            applyTool(f, kernel.loft(f.id, sections, f.ruled), f.operation, bodies, planes, made)
+        }
         is PrimitiveFeature -> {
             val plane = resolvePlane(f.plane, bodies, f, planes)
             applyTool(f, kernel.primitive(f.id, plane, f.kind.ordinal, f.u, f.v, f.a, f.b, f.c), f.operation, bodies, planes, made)
@@ -370,6 +393,21 @@ class Rebuilder(private val kernel: Kernel) {
             }
         }
         else -> throw KernelException("This version can't build ${f.name}")
+    }
+
+    /** A path as the kernel takes it. */
+    private fun pathOf(p: PathRef, owner: Feature, bodies: List<BodyState>, planes: Map<Int, SketchPlane>, all: List<Feature>): KernelPath = when (p) {
+        is PathRef.Sketch -> {
+            val sketch = sketchOf(p.sketchId, all)
+            KernelPath(planes[p.sketchId] ?: throw KernelException("Its path's sketch couldn't be built"), sketch.curves(), 0, emptyList())
+        }
+        is PathRef.Edges -> {
+            if (p.names.isEmpty()) throw KernelException("Pick the edges to follow")
+            val names = p.names.map { ref(owner, it, true, bodies) }
+            val body = bodies.firstOrNull { b -> val faces = kernel.faceNames(b.handle).toSet(); names.all { e -> facesOf(e).all { it in faces } } }
+                ?: throw KernelException("Its path's edges aren't all on one body any more")
+            KernelPath(null, emptyList(), body.handle, names)
+        }
     }
 
     /** Where a point construction geometry goes through is, now. */

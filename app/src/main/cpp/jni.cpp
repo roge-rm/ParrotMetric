@@ -202,8 +202,17 @@ const DisplayCached& displayOf(jlong handle, const pm::Body& b) {
     if (b.solid) {
         c.faceNames = b.solid->faceNames();
         c.edgeNames = b.solid->edgeNames();
-        c.cornerNames = b.solid->cornerNames();
-        c.mesh = std::make_shared<pm::DisplayMesh>(pm::Solid::fromShape(b.solid->shape).display(displayTessellation()));
+        auto names = b.solid->cornerNames();
+        auto mesh = pm::Solid::fromShape(b.solid->shape).display(displayTessellation());
+        // Only real corners get a dot: those named.
+        std::vector<float> kept;
+        for (size_t i = 0; i < names.size() && i * 3 + 2 < mesh.corners.size(); ++i) {
+            if (names[i].empty()) continue;
+            kept.insert(kept.end(), mesh.corners.begin() + long(i * 3), mesh.corners.begin() + long(i * 3 + 3));
+            c.cornerNames.push_back(names[i]);
+        }
+        mesh.corners = std::move(kept);
+        c.mesh = std::make_shared<pm::DisplayMesh>(std::move(mesh));
     } else {
         pm::Mesh m = b.mesh->toMesh();
         c.triangles = m.triangles.size();
@@ -849,6 +858,120 @@ JNIEXPORT jdouble JNICALL Java_com_rm_parrotmetric_Core_overlapVolume(JNIEnv* en
         if (x.solid && y.solid) return pm::overlapVolume(*x.solid, *y.solid);
         return x.asMesh().boolean(y.asMesh(), pm::BooleanOp::Intersect).volume();
     } catch (const std::exception& e) {
+        return 0;
+    }
+}
+
+/**
+ * A path: a sketch's curves on a plane when there are any, else the named
+ * edges of a body. Takes the lock itself.
+ */
+TopoDS_Wire pathOf(JNIEnv* env, jdoubleArray plane, jintArray kinds, jintArray ids, jdoubleArray nums, jlong body, jobjectArray edges) {
+    auto k = ints(env, kinds);
+    if (!k.empty()) {
+        auto p = doubles(env, plane);
+        auto i = ints(env, ids);
+        auto n = doubles(env, nums);
+        return pm::pathFromSketch(planeOf(p.data()), curvesOf(k.data(), i.data(), n.data(), k.size()));
+    }
+    auto names = strings(env, edges);
+    std::unique_lock<std::mutex> g(lock);
+    pm::NamedShape s = solidOf(body);
+    g.unlock();
+    std::vector<TopoDS_Edge> found;
+    for (const auto& name : names) {
+        auto e = s.findEdges(name);
+        if (e.empty()) throw std::runtime_error("An edge of the path isn't there any more");
+        found.push_back(e[0]);
+    }
+    return pm::pathFromEdges(found);
+}
+
+jlong keep(pm::NamedShape shape) {
+    pm::Body b;
+    b.solid = std::move(shape);
+    std::lock_guard<std::mutex> g(lock);
+    return store.add(std::move(b));
+}
+
+JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_sweep(JNIEnv* env, jobject, jint id, jdoubleArray plane, jintArray kinds, jintArray ids,
+                                                           jdoubleArray nums, jintArray pickCounts, jintArray pickIds, jdoubleArray pickPoints,
+                                                           jdoubleArray pathPlane, jintArray pathKinds, jintArray pathIds, jdoubleArray pathNums,
+                                                           jlong pathBody, jobjectArray pathEdges) {
+    try {
+        TopoDS_Wire path = pathOf(env, pathPlane, pathKinds, pathIds, pathNums, pathBody, pathEdges);
+        auto p = doubles(env, plane);
+        auto k = ints(env, kinds), i = ints(env, ids);
+        auto n = doubles(env, nums);
+        auto picks = picksOf(ints(env, pickCounts), ints(env, pickIds), doubles(env, pickPoints));
+        return keep(pm::sweep(id, planeOf(p.data()), curvesOf(k.data(), i.data(), n.data(), k.size()), picks, path));
+    } catch (const std::exception& e) {
+        fail(env, e.what());
+        return 0;
+    }
+}
+
+JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_pipe(JNIEnv* env, jobject, jint id, jdoubleArray pathPlane, jintArray pathKinds,
+                                                          jintArray pathIds, jdoubleArray pathNums, jlong pathBody, jobjectArray pathEdges,
+                                                          jdouble diameter, jdouble inner) {
+    try {
+        return keep(pm::pipe(id, pathOf(env, pathPlane, pathKinds, pathIds, pathNums, pathBody, pathEdges), diameter, inner));
+    } catch (const std::exception& e) {
+        fail(env, e.what());
+        return 0;
+    }
+}
+
+JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_coil(JNIEnv* env, jobject, jint id, jdoubleArray plane, jdouble u, jdouble v, jdouble diameter,
+                                                          jdouble pitch, jdouble turns, jdouble section, jboolean square) {
+    try {
+        auto p = doubles(env, plane);
+        return keep(pm::coil(id, planeOf(p.data()), u, v, diameter, pitch, turns, section, square));
+    } catch (const std::exception& e) {
+        fail(env, e.what());
+        return 0;
+    }
+}
+
+JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_thread(JNIEnv* env, jobject, jint id, jlong body, jstring face, jdouble pitch) {
+    try {
+        const char* c = env->GetStringUTFChars(face, nullptr);
+        std::string name(c);
+        env->ReleaseStringUTFChars(face, c);
+        std::unique_lock<std::mutex> g(lock);
+        pm::NamedShape s = solidOf(body);
+        g.unlock();
+        return keep(pm::thread(id, s, name, pitch));
+    } catch (const std::exception& e) {
+        fail(env, e.what());
+        return 0;
+    }
+}
+
+/**
+ * A loft through one area of each of several sketches: their planes (nine
+ * numbers each), how many curves each has, the curves, and per sketch its
+ * picked area as an id count, the ids and a point inside.
+ */
+JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_loft(JNIEnv* env, jobject, jint id, jdoubleArray planes, jintArray curveCounts, jintArray kinds,
+                                                          jintArray ids, jdoubleArray nums, jintArray pickCounts, jintArray pickIds,
+                                                          jdoubleArray pickPoints, jboolean ruled) {
+    try {
+        auto p = doubles(env, planes);
+        auto counts = ints(env, curveCounts);
+        auto k = ints(env, kinds), i = ints(env, ids);
+        auto n = doubles(env, nums);
+        auto picks = picksOf(ints(env, pickCounts), ints(env, pickIds), doubles(env, pickPoints));
+        std::vector<pm::LoftProfile> profiles;
+        size_t start = 0;
+        for (size_t s = 0; s < counts.size() && s < picks.size(); ++s) {
+            size_t c = size_t(counts[s]);
+            profiles.push_back({planeOf(p.data() + s * 9), curvesOf(k.data() + start, i.data() + start, n.data() + start * kCurveNumbers, c), picks[s]});
+            start += c;
+        }
+        return keep(pm::loft(id, profiles, ruled));
+    } catch (const std::exception& e) {
+        fail(env, e.what());
         return 0;
     }
 }

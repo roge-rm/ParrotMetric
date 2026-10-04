@@ -2,6 +2,19 @@
 #include "parallel.h"
 
 #include <BRepAdaptor_Curve.hxx>
+#include <gp_Lin2d.hxx>
+#include <BRepBuilderAPI_MakeEdge.hxx>
+#include <BRepBuilderAPI_MakeWire.hxx>
+#include <TopTools_HSequenceOfShape.hxx>
+#include <ShapeAnalysis_FreeBounds.hxx>
+#include <Geom_CylindricalSurface.hxx>
+#include <Geom2d_TrimmedCurve.hxx>
+#include <Geom2d_Line.hxx>
+#include <BRepOffsetAPI_ThruSections.hxx>
+#include <BRepOffsetAPI_MakePipeShell.hxx>
+#include <BRepOffsetAPI_MakePipe.hxx>
+#include <BRepLib.hxx>
+#include <BRepAdaptor_CompCurve.hxx>
 #include <BRepAdaptor_Surface.hxx>
 #include <BRepAlgoAPI_Common.hxx>
 #include <BRepAlgoAPI_Cut.hxx>
@@ -920,6 +933,264 @@ bool overlaps(const NamedShape& a, const NamedShape& b) {
         return common.IsDone() && volume(common.Shape()) > 1e-9;
     } catch (const Standard_Failure&) {
         return false;
+    }
+}
+
+// Sweeps, pipes, coils, threads and lofts.
+
+namespace {
+
+/** Edges joined into one wire, in order. */
+TopoDS_Wire chain(const std::vector<TopoDS_Edge>& edges) {
+    if (edges.empty()) throw std::runtime_error("The path is empty");
+    Handle(TopTools_HSequenceOfShape) in = new TopTools_HSequenceOfShape;
+    for (const auto& e : edges) in->Append(e);
+    Handle(TopTools_HSequenceOfShape) wires;
+    ShapeAnalysis_FreeBounds::ConnectEdgesToWires(in, 1e-4, false, wires);
+    if (wires.IsNull() || wires->Length() != 1) throw std::runtime_error("The path has gaps or branches");
+    return TopoDS::Wire(wires->Value(1));
+}
+
+/** Where a path starts and which way it heads there. */
+std::pair<gp_Pnt, gp_Dir> pathStart(const TopoDS_Wire& path) {
+    BRepAdaptor_CompCurve c(path);
+    gp_Pnt p;
+    gp_Vec t;
+    c.D1(c.FirstParameter(), p, t);
+    if (t.Magnitude() < 1e-12) throw std::runtime_error("The path has no length");
+    return {p, gp_Dir(t)};
+}
+
+/** A helix round the axis through (0, 0) along z of the frame, of radius r, rising pitch a turn, from height z0 for turns turns. */
+TopoDS_Wire helix(const gp_Ax3& frame, double r, double pitch, double turns, double z0) {
+    Handle(Geom_CylindricalSurface) cylinder = new Geom_CylindricalSurface(frame, r);
+    gp_Lin2d line(gp_Pnt2d(0, z0), gp_Dir2d(2 * M_PI, pitch));
+    double length = turns * std::hypot(2 * M_PI, pitch);
+    Handle(Geom2d_TrimmedCurve) segment = new Geom2d_TrimmedCurve(new Geom2d_Line(line), 0, length);
+    TopoDS_Edge edge = BRepBuilderAPI_MakeEdge(segment, cylinder);
+    BRepLib::BuildCurves3d(edge);
+    return BRepBuilderAPI_MakeWire(edge);
+}
+
+/** A closed polygon as a wire. */
+TopoDS_Wire polygon(const std::vector<gp_Pnt>& points) {
+    BRepBuilderAPI_MakePolygon p;
+    for (const auto& q : points) p.Add(q);
+    p.Close();
+    return p.Wire();
+}
+
+/**
+ * A profile swept along a helix, keeping its slant to the axis, as a coil's
+ * wire or a thread's groove is.
+ */
+TopoDS_Shape alongHelix(const TopoDS_Wire& path, const TopoDS_Wire& profile, const gp_Dir& axis) {
+    BRepOffsetAPI_MakePipeShell shell(path);
+    shell.SetMode(axis);  // The binormal stays along the axis.
+    shell.Add(profile, false, false);
+    shell.Build();
+    if (!shell.IsDone() || !shell.MakeSolid()) throw std::runtime_error("The coil couldn't be made");
+    return shell.Shape();
+}
+
+/** Names every face of a new shape: the first shapes' faces, the last's, and the rest by [rest]. */
+NamedShape nameAll(int id, const TopoDS_Shape& shape, const TopoDS_Shape& first, const TopoDS_Shape& last, const std::string& rest) {
+    NamedShape out;
+    out.shape = shape;
+    if (!first.IsNull())
+        for (TopExp_Explorer f(first, TopAbs_FACE); f.More(); f.Next()) out.names.Bind(f.Current(), prefix(id) + ".start");
+    if (!last.IsNull())
+        for (TopExp_Explorer f(last, TopAbs_FACE); f.More(); f.Next()) out.names.Bind(f.Current(), prefix(id) + ".end");
+    int k = 0;
+    for (TopExp_Explorer f(shape, TopAbs_FACE); f.More(); f.Next())
+        if (!out.names.IsBound(f.Current())) out.names.Bind(f.Current(), prefix(id) + "." + rest + std::to_string(k++));
+    return out;
+}
+
+}  // namespace
+
+TopoDS_Wire pathFromSketch(const gp_Ax3& plane, const std::vector<SketchCurve>& curves) {
+    TopLoc_Location loc(placeOn(plane));
+    std::vector<TopoDS_Edge> edges;
+    for (const auto& c : curves) {
+        TopoDS_Edge e = sketchEdge(c);
+        if (!e.IsNull()) edges.push_back(TopoDS::Edge(e.Moved(loc)));
+    }
+    return chain(edges);
+}
+
+TopoDS_Wire pathFromEdges(const std::vector<TopoDS_Edge>& edges) { return chain(edges); }
+
+NamedShape sweep(int id, const gp_Ax3& plane, const std::vector<SketchCurve>& curves, const std::vector<RegionPick>& picks,
+                 const TopoDS_Wire& path) {
+    try {
+        auto regions = buildRegionFaces(curves);
+        TopLoc_Location loc(placeOn(plane));
+        std::vector<NamedShape> pieces;
+        for (const RegionFace* r : choose(regions, picks)) {
+            TopoDS_Face face = TopoDS::Face(r->face.Moved(loc));
+            BRepOffsetAPI_MakePipe pipe(path, face);
+            pipe.Build();
+            if (!pipe.IsDone()) throw std::runtime_error("The sweep couldn't be made");
+            pieces.push_back(nameSweep(id, pipe, *r, loc));
+        }
+        NamedShape out = fuseAll(id, std::move(pieces));
+        check(out.shape, "The sweep crosses itself");
+        return out;
+    } catch (const Standard_Failure&) {
+        throw std::runtime_error("The sweep couldn't be made");
+    }
+}
+
+NamedShape pipe(int id, const TopoDS_Wire& path, double diameter, double inner) {
+    if (diameter <= 0) throw std::runtime_error("The pipe has to be wider than 0");
+    if (inner >= diameter) throw std::runtime_error("The hole has to be narrower than the pipe");
+    try {
+        auto [start, heading] = pathStart(path);
+        gp_Ax2 at(start, heading);
+        BRepBuilderAPI_MakeFace ring(BRepBuilderAPI_MakeWire(BRepBuilderAPI_MakeEdge(gp_Circ(at, diameter / 2))).Wire());
+        if (inner > 0) {
+            TopoDS_Wire hole = BRepBuilderAPI_MakeWire(BRepBuilderAPI_MakeEdge(gp_Circ(at, inner / 2))).Wire();
+            hole.Reverse();
+            ring.Add(hole);
+        }
+        BRepOffsetAPI_MakePipe tube(path, ring.Face());
+        tube.Build();
+        if (!tube.IsDone()) throw std::runtime_error("The pipe couldn't be made");
+        NamedShape out = nameAll(id, tube.Shape(), tube.FirstShape(), tube.LastShape(), "p");
+        check(out.shape, "The pipe crosses itself");
+        return out;
+    } catch (const Standard_Failure&) {
+        throw std::runtime_error("The pipe couldn't be made");
+    }
+}
+
+NamedShape coil(int id, const gp_Ax3& plane, double u, double v, double diameter, double pitch, double turns, double section, bool square) {
+    if (diameter <= 0 || section <= 0) throw std::runtime_error("Sizes have to be more than 0");
+    if (turns <= 0) throw std::runtime_error("It needs more than 0 turns");
+    if (section >= diameter) throw std::runtime_error("The wire has to be narrower than the coil");
+    if (pitch < section) throw std::runtime_error("The turns would run into each other: make the pitch at least the wire's size");
+    try {
+        gp_Trsf at;
+        at.SetTranslation(gp_Vec(u, v, 0));
+        gp_Trsf place = placeOn(plane) * at;
+        gp_Ax3 frame(gp_Pnt(0, 0, 0).Transformed(place), gp::DZ().Transformed(place), gp::DX().Transformed(place));
+        const double r = diameter / 2;
+        // The wire's section, starting at the helix's start (r along x, at the height of half the wire),
+        // in the plane through the axis.
+        const double z0 = section / 2;
+        TopoDS_Wire path = helix(frame, r, pitch, turns, z0);
+        gp_Pnt middle = gp_Pnt(r, 0, z0).Transformed(place);
+        gp_Dir out = gp::DX().Transformed(place), up = gp::DZ().Transformed(place);
+        TopoDS_Wire profile;
+        if (square) {
+            double h = section / 2;
+            auto p = [&](double a, double b) { return middle.Translated(gp_Vec(out) * a + gp_Vec(up) * b); };
+            profile = polygon({p(-h, -h), p(h, -h), p(h, h), p(-h, h)});
+        } else {
+            profile = BRepBuilderAPI_MakeWire(BRepBuilderAPI_MakeEdge(gp_Circ(gp_Ax2(middle, out.Crossed(up)), section / 2)));
+        }
+        NamedShape result = nameAll(id, alongHelix(path, profile, up), TopoDS_Shape(), TopoDS_Shape(), "c");
+        return result;
+    } catch (const Standard_Failure&) {
+        throw std::runtime_error("The coil couldn't be made");
+    }
+}
+
+NamedShape thread(int id, const NamedShape& body, const std::string& face, double pitch) {
+    if (pitch <= 0) throw std::runtime_error("The pitch has to be more than 0");
+    auto faces = body.findFaces(face);
+    if (faces.empty()) throw std::runtime_error("The face isn't there any more");
+    try {
+        const TopoDS_Face& f = faces[0];
+        BRepAdaptor_Surface surface(f);
+        if (surface.GetType() != GeomAbs_Cylinder) throw std::runtime_error("Threads go on round faces");
+        gp_Cylinder cyl = surface.Cylinder();
+        const double r = cyl.Radius();
+        double u0, u1, v0, v1;
+        BRepTools::UVBounds(f, u0, u1, v0, v1);
+        // A hole if the face looks in towards the axis.
+        gp_Pnt p;
+        gp_Vec du, dv;
+        surface.D1((u0 + u1) / 2, (v0 + v1) / 2, p, du, dv);
+        gp_Vec normal = du.Crossed(dv);
+        if (f.Orientation() == TopAbs_REVERSED) normal.Reverse();
+        gp_Vec radial(cyl.Axis().Location(), p);
+        radial -= gp_Vec(cyl.Axis().Direction()) * radial.Dot(gp_Vec(cyl.Axis().Direction()));
+        const bool hole = normal.Dot(radial) < 0;
+        // ISO metric: 60° flanks; the groove is a little over the basic depth, and starts outside the face so the cut is clean.
+        const double depth = 0.6134 * pitch;
+        const double over = 0.1 * pitch;
+        const double half = (depth + over) * std::tan(M_PI / 6);
+        gp_Ax3 frame(cyl.Axis().Location(), cyl.Axis().Direction(), cyl.XAxis().Direction());
+        const double turns = (v1 - v0) / pitch;
+        if (turns < 0.5) throw std::runtime_error("The face is too short for that pitch");
+        TopoDS_Wire path = helix(frame, r, pitch, turns, v0);
+        gp_Pnt base = frame.Location().Translated(gp_Vec(frame.Direction()) * v0);
+        gp_Vec out(frame.XDirection()), up(frame.Direction());
+        auto at = [&](double radius, double height) { return base.Translated(out * radius + up * height); };
+        // Point in from the surface, or out for a hole; the wide end just outside the material.
+        TopoDS_Wire groove = hole
+            ? polygon({at(r - over, -half), at(r - over, half), at(r + depth, 0)})
+            : polygon({at(r + over, -half), at(r + over, half), at(r - depth, 0)});
+        TopoDS_Shape cutter = alongHelix(path, groove, frame.Direction());
+        BRepAlgoAPI_Cut cut;
+        TopTools_ListOfShape args, tools;
+        args.Append(body.shape);
+        tools.Append(cutter);
+        cut.SetArguments(args);
+        cut.SetTools(tools);
+        cut.SetRunParallel(useCores());
+        cut.Build();
+        if (!cut.IsDone()) throw std::runtime_error("The thread couldn't be cut");
+        NamedShape out2 = carryNames({&body}, cut, cut.Shape(), prefix(id));
+        // The groove's faces, which carryNames numbered, all go by one name.
+        NamedShape named;
+        named.shape = out2.shape;
+        int k = 0;
+        for (TopExp_Explorer e(out2.shape, TopAbs_FACE); e.More(); e.Next()) {
+            std::string n = out2.faceName(e.Current());
+            bool fresh = n.rfind(prefix(id) + ".", 0) == 0;
+            named.names.Bind(e.Current(), fresh ? prefix(id) + ".t" + std::to_string(k++) : n);
+        }
+        check(named.shape, "The thread couldn't be cut");
+        return named;
+    } catch (const Standard_Failure&) {
+        throw std::runtime_error("The thread couldn't be cut");
+    }
+}
+
+NamedShape loft(int id, const std::vector<LoftProfile>& profiles, bool ruled) {
+    if (profiles.size() < 2) throw std::runtime_error("Pick areas in at least two sketches");
+    try {
+        BRepOffsetAPI_ThruSections thru(true, ruled);
+        std::vector<std::pair<TopoDS_Edge, int>> firstEdges;
+        for (size_t i = 0; i < profiles.size(); ++i) {
+            const auto& pr = profiles[i];
+            auto regions = buildRegionFaces(pr.curves);
+            const RegionFace* r = choose(regions, {pr.pick})[0];
+            TopLoc_Location loc(placeOn(pr.plane));
+            TopoDS_Wire outer = TopoDS::Wire(BRepTools::OuterWire(r->face).Moved(loc));
+            thru.AddWire(outer);
+            if (i == 0) for (const auto& [e, c] : r->edgeCurves) firstEdges.push_back({TopoDS::Edge(e.Moved(loc)), c});
+        }
+        thru.CheckCompatibility(true);
+        thru.Build();
+        if (!thru.IsDone()) throw std::runtime_error("The loft couldn't be made");
+        NamedShape out;
+        out.shape = thru.Shape();
+        // Sides by the curves of the first area they rise from.
+        for (const auto& [e, c] : firstEdges) {
+            TopoDS_Shape side = thru.GeneratedFace(e);
+            if (!side.IsNull() && !out.names.IsBound(side)) out.names.Bind(side, prefix(id) + ".s" + std::to_string(c));
+        }
+        NamedShape all = nameAll(id, out.shape, thru.FirstShape(), thru.LastShape(), "n");
+        for (TopExp_Explorer f(out.shape, TopAbs_FACE); f.More(); f.Next())
+            if (!out.names.IsBound(f.Current())) out.names.Bind(f.Current(), all.faceName(f.Current()));
+        check(out.shape, "The loft crosses itself");
+        return out;
+    } catch (const Standard_Failure&) {
+        throw std::runtime_error("The loft couldn't be made");
     }
 }
 

@@ -106,6 +106,8 @@ Region::Loop sampleWire(const TopoDS_Wire& wire, const TopoDS_Face& face) {
 
 }  // namespace
 
+TopoDS_Edge sketchEdge(const SketchCurve& c) { return makeEdge(c); }
+
 std::vector<RegionFace> buildRegionFaces(const std::vector<SketchCurve>& curves) {
     std::vector<RegionFace> regions;
     try {

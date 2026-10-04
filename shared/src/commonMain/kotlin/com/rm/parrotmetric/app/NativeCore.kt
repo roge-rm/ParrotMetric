@@ -34,6 +34,14 @@ interface NativeCore {
     fun repairReport(data: ByteArray, format: Int): String
     fun convertToSolid(id: Int, body: Long): Long
     fun bodyCentre(body: Long): DoubleArray
+    /** A sweep of sketch areas along a path: a sketch's curves when pathKinds has any, else a body's named edges. */
+    fun sweep(id: Int, plane: DoubleArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, pickCounts: IntArray, pickIds: IntArray, pickPoints: DoubleArray, pathPlane: DoubleArray, pathKinds: IntArray, pathIds: IntArray, pathNums: DoubleArray, pathBody: Long, pathEdges: Array<String>): Long
+    /** A round tube along a path, given as for sweep; hollow when inner is more than 0. */
+    fun pipe(id: Int, pathPlane: DoubleArray, pathKinds: IntArray, pathIds: IntArray, pathNums: DoubleArray, pathBody: Long, pathEdges: Array<String>, diameter: Double, inner: Double): Long
+    fun coil(id: Int, plane: DoubleArray, u: Double, v: Double, diameter: Double, pitch: Double, turns: Double, section: Double, square: Boolean): Long
+    fun thread(id: Int, body: Long, face: String, pitch: Double): Long
+    /** A loft through one area of each sketch: nine plane numbers and a curve count per sketch, then one pick per sketch. */
+    fun loft(id: Int, planes: DoubleArray, curveCounts: IntArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, pickCounts: IntArray, pickIds: IntArray, pickPoints: DoubleArray, ruled: Boolean): Long
     /** kind: 0 box, 1 cylinder, 2 sphere, 3 torus, 4 cone; sizes as Kernel.primitive. */
     fun primitive(id: Int, plane: DoubleArray, kind: Int, u: Double, v: Double, a: Double, b: Double, c: Double): Long
     /** The box round a body: x, y, z low, then high. */

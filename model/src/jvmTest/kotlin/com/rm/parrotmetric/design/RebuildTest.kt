@@ -98,6 +98,26 @@ private class FakeKernel : Kernel {
     }
 
     override fun convertToSolid(id: Int, body: Long) = make(bodies.getValue(body))
+    override fun sweep(id: Int, plane: SketchPlane, curves: List<ProfileCurve>, regions: List<RegionRef>, path: KernelPath): Long {
+        calls += "sweep $id ${if (path.plane != null) "sketch" else "edges ${path.edges}"}"
+        return make(Box(0.0, 5.0, listOf("F$id.s1", "F$id.end")))
+    }
+    override fun pipe(id: Int, path: KernelPath, diameter: Double, inner: Double): Long {
+        calls += "pipe $id"
+        return make(Box(100.0, 101.0, listOf("F$id.p0")))
+    }
+    override fun coil(id: Int, plane: SketchPlane, u: Double, v: Double, diameter: Double, pitch: Double, turns: Double, section: Double, square: Boolean): Long {
+        calls += "coil $id"
+        return make(Box(u - diameter / 2, u + diameter / 2, listOf("F$id.c0")))
+    }
+    override fun thread(id: Int, body: Long, face: String, pitch: Double): Long {
+        calls += "thread $id $face $pitch"
+        return make(bodies.getValue(body).let { it.copy(faces = it.faces + "F$id.t0") })
+    }
+    override fun loft(id: Int, sections: List<Triple<SketchPlane, List<ProfileCurve>, RegionRef>>, ruled: Boolean): Long {
+        calls += "loft $id ${sections.size}"
+        return make(Box(200.0, 210.0, listOf("F$id.start", "F$id.end")))
+    }
     override fun splitBy(id: Int, body: Long, tool: Long): List<Long> {
         calls += "splitBy $id"
         val b = bodies.getValue(body); val t = bodies.getValue(tool)
@@ -450,5 +470,27 @@ class RebuildTest {
         val flat = PlaneFeature(d.newId(), "Flat", PlaneFeature.Kind.ThreePoints, PlaneRef.Fixed(SketchPlane.Top), 0.0, 0.0, false, null, refs).also { d.add(it) }
         val built = Rebuilder(k).rebuild(d.active)
         assertEquals("The points are in a line", built.errors[flat.id])
+    }
+
+    @Test
+    fun sweepsPipesCoilsLoftsAndThreadsBuild() {
+        val k = FakeKernel()
+        val d = Design()
+        val profile = sketchAt(d, 0.0, 10.0)
+        val path = sketchAt(d, 0.0, 30.0)
+        val box = extrude(d, profile, Operation.NewBody)
+        val region = RegionRef(listOf(1, 2, 3, 4), 0.0, 0.0)
+        d.add(SweepFeature(d.newId(), "Sweep", profile.id, listOf(region), PathRef.Sketch(path.id), Operation.NewBody))
+        d.add(PipeFeature(d.newId(), "Pipe", PathRef.Edges(listOf("F${box.id}.s1|F${box.id}.end")), 4.0, 2.0, Operation.NewBody))
+        d.add(CoilFeature(d.newId(), "Coil", PlaneRef.Fixed(SketchPlane.Top), 50.0, 0.0, 10.0, 3.0, 5.0, 1.0, false, Operation.NewBody))
+        d.add(LoftFeature(d.newId(), "Loft", listOf(LoftSection(profile.id, region), LoftSection(path.id, region)), false, Operation.NewBody))
+        val thread = ThreadFeature(d.newId(), "Thread", "F${box.id}.end", 1.5).also { d.add(it) }
+        val built = Rebuilder(k).rebuild(d.active)
+        assertTrue(built.errors.isEmpty(), built.errors.toString())
+        assertEquals(5, built.bodies.size)
+        assertTrue(k.calls.any { it.startsWith("sweep") && it.endsWith("sketch") })
+        assertTrue("pipe ${d.features[4].id}" in k.calls)
+        assertTrue("thread ${thread.id} F${box.id}.end 1.5" in k.calls)
+        assertTrue(k.calls.any { it.startsWith("loft") && it.endsWith(" 2") })
     }
 }

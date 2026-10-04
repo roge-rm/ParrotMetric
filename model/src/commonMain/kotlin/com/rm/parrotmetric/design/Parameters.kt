@@ -114,6 +114,21 @@ object Parametrics {
                 else -> f
             }
             is AlignFeature -> if (field == "gap") f.copy(gap = v) else f
+            is PipeFeature -> when (field) {
+                "diameter" -> f.copy(diameter = v)
+                "inner" -> f.copy(inner = v)
+                else -> f
+            }
+            is CoilFeature -> when (field) {
+                "diameter" -> f.copy(diameter = v)
+                "pitch" -> f.copy(pitch = v)
+                "turns" -> f.copy(turns = v)
+                "section" -> f.copy(section = v)
+                "u" -> f.copy(u = v)
+                "v" -> f.copy(v = v)
+                else -> f
+            }
+            is ThreadFeature -> if (field == "pitch") f.copy(pitch = v) else f
             is PointFeature -> when (field) {
                 "x" -> f.copy(x = v)
                 "y" -> f.copy(y = v)

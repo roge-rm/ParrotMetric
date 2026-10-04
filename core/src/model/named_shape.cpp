@@ -59,14 +59,22 @@ std::vector<std::string> NamedShape::edgeNames() const {
 std::vector<std::string> NamedShape::cornerNames() const {
     TopTools_IndexedMapOfShape corners;
     TopExp::MapShapes(shape, TopAbs_VERTEX, corners);
-    TopTools_IndexedDataMapOfShapeListOfShape edgesAt;
+    TopTools_IndexedDataMapOfShapeListOfShape edgesAt, facesOf;
     TopExp::MapShapesAndAncestors(shape, TopAbs_VERTEX, TopAbs_EDGE, edgesAt);
+    TopExp::MapShapesAndAncestors(shape, TopAbs_EDGE, TopAbs_FACE, facesOf);
+    // Seams and edges that close on themselves (a circle) don't make corners.
+    auto counts = [&](const TopoDS_Edge& e) {
+        if (BRep_Tool::Degenerated(e) || BRep_Tool::IsClosed(e)) return false;
+        for (const auto& f : facesOf.FindFromKey(e))
+            if (BRep_Tool::IsClosed(e, TopoDS::Face(f))) return false;
+        return true;
+    };
     std::vector<std::string> out;
     for (int i = 1; i <= corners.Extent(); ++i) {
         // The first two different edge names there, in order, so the name doesn't depend on map order.
         std::vector<std::string> names;
         for (const auto& e : edgesAt.FindFromKey(corners(i))) {
-            if (BRep_Tool::Degenerated(TopoDS::Edge(e))) continue;
+            if (!counts(TopoDS::Edge(e))) continue;
             std::string n = edgeName(TopoDS::Edge(e));
             if (!n.empty() && std::find(names.begin(), names.end(), n) == names.end()) names.push_back(n);
         }

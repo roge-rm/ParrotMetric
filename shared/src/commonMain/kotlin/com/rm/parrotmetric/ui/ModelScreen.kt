@@ -730,7 +730,7 @@ private fun ToolbarMenu(label: String, tools: List<ToolDef>, context: ToolContex
             tooltip = { PlainTooltip { Text(label) } },
             state = androidx.compose.material3.rememberTooltipState(),
         ) {
-            Surface(onClick = { open = true }, modifier = Modifier.size(52.dp, 40.dp), shape = RoundedCornerShape(12.dp), color = Color.Transparent) {
+            Surface(onClick = { open = true }, modifier = Modifier.size(48.dp, 40.dp), shape = RoundedCornerShape(12.dp), color = Color.Transparent) {
                 Row(horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                     Icon(tools[0].icon, label, Modifier.size(22.dp), tint = tools[0].group.colour)
                     Icon(Icons.more, null, Modifier.size(12.dp), tint = Palette.muted)
@@ -767,7 +767,7 @@ private fun ToolbarButton(t: ToolDef, context: ToolContext) {
         Surface(
             onClick = { Tools.run(t, context) },
             enabled = enabled,
-            modifier = Modifier.size(44.dp, 40.dp),
+            modifier = Modifier.size(40.dp, 40.dp),
             shape = RoundedCornerShape(12.dp),
             color = Color.Transparent,
         ) {

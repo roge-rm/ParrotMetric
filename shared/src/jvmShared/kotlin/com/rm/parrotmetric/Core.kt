@@ -35,6 +35,11 @@ object Core : NativeCore {
     override external fun repairReport(data: ByteArray, format: Int): String
     override external fun convertToSolid(id: Int, body: Long): Long
     override external fun bodyCentre(body: Long): DoubleArray
+    override external fun sweep(id: Int, plane: DoubleArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, pickCounts: IntArray, pickIds: IntArray, pickPoints: DoubleArray, pathPlane: DoubleArray, pathKinds: IntArray, pathIds: IntArray, pathNums: DoubleArray, pathBody: Long, pathEdges: Array<String>): Long
+    override external fun pipe(id: Int, pathPlane: DoubleArray, pathKinds: IntArray, pathIds: IntArray, pathNums: DoubleArray, pathBody: Long, pathEdges: Array<String>, diameter: Double, inner: Double): Long
+    override external fun coil(id: Int, plane: DoubleArray, u: Double, v: Double, diameter: Double, pitch: Double, turns: Double, section: Double, square: Boolean): Long
+    override external fun thread(id: Int, body: Long, face: String, pitch: Double): Long
+    override external fun loft(id: Int, planes: DoubleArray, curveCounts: IntArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, pickCounts: IntArray, pickIds: IntArray, pickPoints: DoubleArray, ruled: Boolean): Long
     override external fun primitive(id: Int, plane: DoubleArray, kind: Int, u: Double, v: Double, a: Double, b: Double, c: Double): Long
     override external fun bounds(body: Long): DoubleArray
     override external fun splitBy(id: Int, body: Long, tool: Long): LongArray

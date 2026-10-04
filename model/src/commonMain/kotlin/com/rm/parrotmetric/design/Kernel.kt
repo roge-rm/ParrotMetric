@@ -4,6 +4,9 @@ import com.rm.parrotmetric.sketch.ProfileCurve
 import com.rm.parrotmetric.sketch.SketchPlane
 import com.rm.parrotmetric.sketch.Vec3
 
+/** A path for the kernel: curves on a sketch plane when there are any, else named edges of a body. */
+class KernelPath(val plane: SketchPlane?, val curves: List<ProfileCurve>, val body: Long, val edges: List<String>)
+
 /** A failure the person can act on, with a short reason fit to show them. */
 class KernelException(message: String) : Exception(message)
 
@@ -63,6 +66,15 @@ interface Kernel {
     fun shapeOf(body: Long, name: String, edge: Boolean): DoubleArray? = null
     /** The point a fraction t along a named edge, then the edge's direction there; null if the body hasn't got it. */
     fun alongEdge(body: Long, name: String, t: Double): DoubleArray? = null
+    /** Sketch areas swept along a path. */
+    fun sweep(id: Int, plane: SketchPlane, curves: List<ProfileCurve>, regions: List<RegionRef>, path: KernelPath): Long
+    /** A round tube along a path; hollow when inner (a diameter) is more than 0. */
+    fun pipe(id: Int, path: KernelPath, diameter: Double, inner: Double): Long
+    fun coil(id: Int, plane: SketchPlane, u: Double, v: Double, diameter: Double, pitch: Double, turns: Double, section: Double, square: Boolean): Long
+    /** The body with an ISO metric thread cut into a round face. */
+    fun thread(id: Int, body: Long, face: String, pitch: Double): Long
+    /** A solid through one area of each sketch, in order. */
+    fun loft(id: Int, sections: List<Triple<SketchPlane, List<ProfileCurve>, RegionRef>>, ruled: Boolean): Long
     fun retain(body: Long)
     fun release(body: Long)
     /** Where a named face (or edge) of a body is and how big, to find it again by shape; null if the body hasn't got it. */

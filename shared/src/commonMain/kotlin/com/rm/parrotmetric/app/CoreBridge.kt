@@ -1,6 +1,7 @@
 package com.rm.parrotmetric.app
 
 import com.rm.parrotmetric.design.Kernel
+import com.rm.parrotmetric.design.KernelPath
 import com.rm.parrotmetric.design.KernelException
 import com.rm.parrotmetric.design.Operation
 import com.rm.parrotmetric.design.RegionRef
@@ -92,6 +93,38 @@ class CoreKernel(private val core: NativeCore) : Kernel {
     override fun properties(body: Long) = call { core.properties(body) }
     override fun splitBy(id: Int, body: Long, tool: Long) = call { core.splitBy(id, body, tool).toList() }
     override fun overlapVolume(a: Long, b: Long) = call { core.overlapVolume(a, b) }
+    /** A path as the core takes it: curves on a plane, or a body's edges. */
+    private fun withPath(path: KernelPath, call: (DoubleArray, Curves, Long, Array<String>) -> Long): Long {
+        val c = Curves(path.curves)
+        return call(path.plane?.numbers() ?: DoubleArray(9), c, path.body, path.edges.toTypedArray())
+    }
+
+    override fun sweep(id: Int, plane: SketchPlane, curves: List<ProfileCurve>, regions: List<RegionRef>, path: KernelPath): Long {
+        val c = Curves(curves)
+        val p = Picks(regions)
+        return call {
+            withPath(path) { pp, pc, body, edges ->
+                core.sweep(id, plane.numbers(), c.kinds, c.ids, c.nums, p.counts, p.ids, p.points, pp, pc.kinds, pc.ids, pc.nums, body, edges)
+            }
+        }
+    }
+
+    override fun pipe(id: Int, path: KernelPath, diameter: Double, inner: Double) =
+        call { withPath(path) { pp, pc, body, edges -> core.pipe(id, pp, pc.kinds, pc.ids, pc.nums, body, edges, diameter, inner) } }
+
+    override fun coil(id: Int, plane: SketchPlane, u: Double, v: Double, diameter: Double, pitch: Double, turns: Double, section: Double, square: Boolean) =
+        call { core.coil(id, plane.numbers(), u, v, diameter, pitch, turns, section, square) }
+
+    override fun thread(id: Int, body: Long, face: String, pitch: Double) = call { core.thread(id, body, face, pitch) }
+
+    override fun loft(id: Int, sections: List<Triple<SketchPlane, List<ProfileCurve>, RegionRef>>, ruled: Boolean): Long {
+        val c = Curves(sections.flatMap { it.second })
+        val p = Picks(sections.map { it.third })
+        val planes = sections.flatMap { it.first.numbers().asList() }.toDoubleArray()
+        val counts = IntArray(sections.size) { sections[it].second.size }
+        return call { core.loft(id, planes, counts, c.kinds, c.ids, c.nums, p.counts, p.ids, p.points, ruled) }
+    }
+
     override fun corner(body: Long, name: String) = core.corner(body, name)?.let { Vec3(it[0], it[1], it[2]) }
     override fun shapeOf(body: Long, name: String, edge: Boolean) = core.shapeOf(body, name, edge)
     override fun alongEdge(body: Long, name: String, t: Double) = core.alongEdge(body, name, t)

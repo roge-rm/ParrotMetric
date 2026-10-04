@@ -149,7 +149,8 @@ class DesignEditor(
         return design.features.mapIndexed { i, f ->
             val kind = when (f) {
                 is SketchFeature -> HistoryEntry.Kind.Sketch
-                is ExtrudeFeature, is RevolveFeature, is com.rm.parrotmetric.design.PrimitiveFeature -> HistoryEntry.Kind.Create
+                is ExtrudeFeature, is RevolveFeature, is com.rm.parrotmetric.design.PrimitiveFeature, is com.rm.parrotmetric.design.SweepFeature,
+                is com.rm.parrotmetric.design.PipeFeature, is com.rm.parrotmetric.design.CoilFeature, is com.rm.parrotmetric.design.LoftFeature -> HistoryEntry.Kind.Create
                 is ImportFeature -> HistoryEntry.Kind.Import
                 is PlaneFeature, is AxisFeature, is PointFeature -> HistoryEntry.Kind.Construct
                 else -> HistoryEntry.Kind.Modify
@@ -534,6 +535,74 @@ class DesignEditor(
     /** Opens Extrude or Revolve, starting from any sketch areas already selected. */
     fun startExtrude() = openArea(ExtrudeDraft(null).also { it.planes = planeChoices() })
     fun startRevolve() = openArea(RevolveDraft(null))
+    fun startSweep() = openArea(SweepDraft(null))
+
+    fun startPipe() {
+        val d = PipeDraft(null)
+        d.pathEdges = viewport.selectedEdges()
+        d.pathByEdges = d.pathEdges.isNotEmpty() || sketchChoices(null).isEmpty()
+        if (!d.pathByEdges) d.pathSketch = sketchChoices(null).lastOrNull()?.second
+        panel = d
+        rebuild()
+    }
+
+    fun startCoil() {
+        val d = CoilDraft(null)
+        d.planes = planeChoices()
+        d.planes.firstOrNull { it.first == "The face" }?.let { d.plane = it.second }
+        panel = d
+        rebuild()
+    }
+
+    fun startThread() {
+        val d = ThreadDraft(null)
+        threadPick(d)
+        panel = d
+        rebuild()
+    }
+
+    fun startLoft() {
+        val d = LoftDraft(null)
+        d.sections = loftPicks()
+        panel = d
+        rebuild()
+    }
+
+    /** Sketches to sweep along, by name, leaving out [except]. */
+    fun sketchChoices(except: Int?): List<Pair<String, Int>> =
+        design.active.filterIsInstance<SketchFeature>().filter { it.id != except }.map { it.name to it.id }
+
+    /** The areas picked, as one per sketch in the order tapped, for a loft. */
+    private fun loftPicks(): List<com.rm.parrotmetric.design.LoftSection> {
+        val out = mutableListOf<com.rm.parrotmetric.design.LoftSection>()
+        for ((s, r) in viewport.selectedRegions()) {
+            val sketch = shownSketches.getOrNull(s) ?: continue
+            if (out.any { it.sketchId == sketch.id }) continue
+            val region = finder.find(sketch.sketch.profileCurves()).getOrNull(r) ?: continue
+            out += com.rm.parrotmetric.design.LoftSection(sketch.id, RegionRef(region.curveIds, region.insideU, region.insideV))
+        }
+        return out
+    }
+
+    /** A thread's face from the selection, the first round one, and the ISO size that fits it. */
+    private fun threadPick(d: ThreadDraft) {
+        val face = viewport.selectedFaces().map { it.second }.firstOrNull { it.isNotEmpty() && faceKind(it) == 2.0 } ?: return
+        d.face = face
+        val r = shownBodies.firstNotNullOfOrNull { kernel.shapeOf(it.handle, face, false) }?.get(7) ?: return
+        d.pitch = ThreadSizes.fitting(2 * r).second
+    }
+
+    /** Areas for a sweep, from the selection; kept as they were if none are picked, as when picking its path. */
+    private fun takeAreas(d: AreaDraft) {
+        val picked = viewport.selectedRegions()
+        if (picked.isEmpty()) return
+        val sketch = shownSketches.getOrNull(picked[0].first) ?: return
+        val regions = finder.find(sketch.sketch.profileCurves())
+        d.sketchId = sketch.id
+        d.regions = picked.filter { it.first == picked[0].first }.mapNotNull { (_, r) ->
+            regions.getOrNull(r)?.let { RegionRef(it.curveIds, it.insideU, it.insideV) }
+        }
+    }
 
     private fun openArea(d: AreaDraft) {
         panel = d
@@ -779,6 +848,11 @@ class DesignEditor(
             is PlaneFeature -> PlaneDraft(f, f.kind).also { it.planes = planeChoices().filter { c -> c.second != PlaneRef.Construction(f.id) } }
             is AxisFeature -> AxisDraft(f)
             is com.rm.parrotmetric.design.PrimitiveFeature -> PrimitiveDraft(f, f.kind).also { it.planes = planeChoices() }
+            is com.rm.parrotmetric.design.SweepFeature -> SweepDraft(f)
+            is com.rm.parrotmetric.design.PipeFeature -> PipeDraft(f)
+            is com.rm.parrotmetric.design.CoilFeature -> CoilDraft(f).also { it.planes = planeChoices() }
+            is com.rm.parrotmetric.design.ThreadFeature -> ThreadDraft(f)
+            is com.rm.parrotmetric.design.LoftFeature -> LoftDraft(f)
             else -> return f
         }
         design.expressions[id]?.let { d.exprs.putAll(it) }
@@ -808,6 +882,23 @@ class DesignEditor(
     fun selectionChanged() {
         if (measuring) measureLines = viewport.measure()
         when (val d = panel) {
+            is SweepDraft -> {
+                takeAreas(d)
+                if (d.pathByEdges) d.pathEdges = viewport.selectedEdges()
+                rebuild()
+            }
+            is PipeDraft -> if (d.pathByEdges) {
+                d.pathEdges = viewport.selectedEdges()
+                rebuild()
+            }
+            is LoftDraft -> {
+                d.sections = loftPicks()
+                rebuild()
+            }
+            is ThreadDraft -> {
+                threadPick(d)
+                rebuild()
+            }
             is AreaDraft -> {
                 // Up to a face: the face tapped last.
                 if (d is ExtrudeDraft && d.upToOn) viewport.selectedFaces().lastOrNull { it.second.isNotEmpty() }?.let { (_, face) ->
@@ -859,6 +950,10 @@ class DesignEditor(
     /** Puts the panel's picks back on the display after a rebuild. */
     private fun highlight(d: FeatureDraft) {
         when (d) {
+            is SweepDraft -> viewport.select(d.pathEdges, regionPairs(d.sketchId, d.regions))
+            is PipeDraft -> viewport.select(d.pathEdges, emptyList())
+            is LoftDraft -> viewport.select(emptyList(), d.sections.flatMap { regionPairs(it.sketchId, listOf(it.region)) })
+            is ThreadDraft -> viewport.select(emptyList(), emptyList(), listOfNotNull(d.face))
             is AreaDraft -> {
                 val s = shownSketches.indexOfFirst { it.id == d.sketchId }
                 if (s < 0) return
@@ -876,6 +971,14 @@ class DesignEditor(
             is AxisDraft -> showPicks(d.points, listOfNotNull(d.edge), listOfNotNull(d.face))
             is PointDraft -> showPicks(listOfNotNull(d.ref), emptyList(), d.planes.mapNotNull { (it as? PlaneRef.OnFace)?.face })
         }
+    }
+
+    /** Picked areas of a shown sketch, as the view numbers them. */
+    private fun regionPairs(sketchId: Int?, refs: List<RegionRef>): List<Pair<Int, Int>> {
+        val s = shownSketches.indexOfFirst { it.id == sketchId }
+        if (s < 0) return emptyList()
+        val regions = finder.find(shownSketches[s].sketch.profileCurves())
+        return refs.mapNotNull { ref -> regions.indexOfFirst { it.curveIds == ref.curveIds }.takeIf { it >= 0 }?.let { s to it } }
     }
 
     /** A value in the panel changed: show it. */
@@ -982,6 +1085,85 @@ class DesignEditor(
         }
 
         override fun missing() = if (regions.isEmpty()) "Tap an area of a sketch" else "Tap the face to go up to"
+    }
+
+    /** Areas swept along a path: another sketch, or picked edges. */
+    inner class SweepDraft(editing: com.rm.parrotmetric.design.SweepFeature?) : AreaDraft(editing) {
+        private val name = editing?.name ?: nextName("Sweep", design.features.count { it is com.rm.parrotmetric.design.SweepFeature })
+        var pathByEdges by mutableStateOf(editing?.path is com.rm.parrotmetric.design.PathRef.Edges)
+        var pathSketch by mutableStateOf((editing?.path as? com.rm.parrotmetric.design.PathRef.Sketch)?.sketchId)
+        var pathEdges by mutableStateOf((editing?.path as? com.rm.parrotmetric.design.PathRef.Edges)?.names ?: emptyList())
+        init {
+            if (editing != null) {
+                sketchId = editing.sketchId
+                regions = editing.regions
+                operation = editing.operation
+            }
+        }
+        override fun feature(): Feature? {
+            val s = sketchId ?: return null
+            if (regions.isEmpty()) return null
+            val path = if (pathByEdges) pathEdges.takeIf { it.isNotEmpty() }?.let { com.rm.parrotmetric.design.PathRef.Edges(it) }
+            else pathSketch?.let { com.rm.parrotmetric.design.PathRef.Sketch(it) }
+            return com.rm.parrotmetric.design.SweepFeature(id, name, s, regions, path ?: return null, operation)
+        }
+        override fun missing() = if (regions.isEmpty()) "Tap an area of a sketch" else "Pick the path to follow"
+    }
+
+    /** A round tube along a path. */
+    inner class PipeDraft(editing: com.rm.parrotmetric.design.PipeFeature?) : FeatureDraft() {
+        val id = editing?.id ?: newId()
+        private val name = editing?.name ?: nextName("Pipe", design.features.count { it is com.rm.parrotmetric.design.PipeFeature })
+        var pathByEdges by mutableStateOf(editing?.path is com.rm.parrotmetric.design.PathRef.Edges)
+        var pathSketch by mutableStateOf((editing?.path as? com.rm.parrotmetric.design.PathRef.Sketch)?.sketchId)
+        var pathEdges by mutableStateOf((editing?.path as? com.rm.parrotmetric.design.PathRef.Edges)?.names ?: emptyList())
+        var diameter by mutableStateOf(editing?.diameter ?: 6.0)
+        var hollow by mutableStateOf((editing?.inner ?: 0.0) > 0)
+        var inner by mutableStateOf(editing?.inner?.takeIf { it > 0 } ?: 4.0)
+        var operation by mutableStateOf(editing?.operation ?: Operation.NewBody)
+        override fun feature(): Feature? {
+            val path = if (pathByEdges) pathEdges.takeIf { it.isNotEmpty() }?.let { com.rm.parrotmetric.design.PathRef.Edges(it) }
+            else pathSketch?.let { com.rm.parrotmetric.design.PathRef.Sketch(it) }
+            return com.rm.parrotmetric.design.PipeFeature(id, name, path ?: return null, diameter, if (hollow) inner else 0.0, operation)
+        }
+        override fun missing() = "Pick the path to follow"
+    }
+
+    inner class CoilDraft(editing: com.rm.parrotmetric.design.CoilFeature?) : FeatureDraft() {
+        val id = editing?.id ?: newId()
+        private val name = editing?.name ?: nextName("Coil", design.features.count { it is com.rm.parrotmetric.design.CoilFeature })
+        var planes: List<Pair<String, PlaneRef>> = emptyList()
+        var plane by mutableStateOf<PlaneRef>(editing?.plane ?: PlaneRef.Fixed(SketchPlane.Top))
+        var u by mutableStateOf(editing?.u ?: 0.0)
+        var v by mutableStateOf(editing?.v ?: 0.0)
+        var diameter by mutableStateOf(editing?.diameter ?: 20.0)
+        var pitch by mutableStateOf(editing?.pitch ?: 5.0)
+        var turns by mutableStateOf(editing?.turns ?: 5.0)
+        var section by mutableStateOf(editing?.section ?: 2.0)
+        var square by mutableStateOf(editing?.square ?: false)
+        var operation by mutableStateOf(editing?.operation ?: Operation.NewBody)
+        override fun feature() = com.rm.parrotmetric.design.CoilFeature(id, name, plane, u, v, diameter, pitch, turns, section, square, operation)
+        override fun missing() = ""
+    }
+
+    inner class ThreadDraft(editing: com.rm.parrotmetric.design.ThreadFeature?) : FeatureDraft() {
+        val id = editing?.id ?: newId()
+        private val name = editing?.name ?: nextName("Thread", design.features.count { it is com.rm.parrotmetric.design.ThreadFeature })
+        var face by mutableStateOf(editing?.face)
+        var pitch by mutableStateOf(editing?.pitch ?: 1.0)
+        override fun feature(): Feature? = face?.let { com.rm.parrotmetric.design.ThreadFeature(id, name, it, pitch) }
+        override fun missing() = "Tap the round face of a shaft or hole"
+    }
+
+    /** A loft through areas of sketches, in the order they're tapped. */
+    inner class LoftDraft(editing: com.rm.parrotmetric.design.LoftFeature?) : FeatureDraft() {
+        val id = editing?.id ?: newId()
+        private val name = editing?.name ?: nextName("Loft", design.features.count { it is com.rm.parrotmetric.design.LoftFeature })
+        var sections by mutableStateOf(editing?.sections ?: emptyList())
+        var ruled by mutableStateOf(editing?.ruled ?: false)
+        var operation by mutableStateOf(editing?.operation ?: Operation.NewBody)
+        override fun feature(): Feature? = if (sections.size < 2) null else com.rm.parrotmetric.design.LoftFeature(id, name, sections, ruled, operation)
+        override fun missing() = "Tap an area in each of two or more sketches"
     }
 
     inner class RevolveDraft(editing: RevolveFeature?) : AreaDraft(editing) {

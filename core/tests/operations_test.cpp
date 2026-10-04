@@ -3,6 +3,7 @@
 #include <catch2/matchers/catch_matchers_string.hpp>
 
 #include <BRepAdaptor_Curve.hxx>
+#include <BRepBuilderAPI_MakeEdge.hxx>
 #include <BRepAdaptor_Surface.hxx>
 #include <BRepGProp.hxx>
 #include <TopExp_Explorer.hxx>
@@ -330,4 +331,74 @@ TEST_CASE("each corner of a box has a name it can be found by") {
     std::vector<std::string> sorted = names;
     std::sort(sorted.begin(), sorted.end());
     CHECK(std::unique(sorted.begin(), sorted.end()) == sorted.end());
+}
+
+namespace {
+TopoDS_Edge straight(double x0, double y0, double z0, double x1, double y1, double z1) {
+    return BRepBuilderAPI_MakeEdge(gp_Pnt(x0, y0, z0), gp_Pnt(x1, y1, z1));
+}
+}  // namespace
+
+TEST_CASE("a sweep along a straight path is a prism") {
+    auto path = pathFromEdges({straight(5, 5, 0, 5, 5, 30)});
+    NamedShape s = sweep(1, top, rectangle(10, 10), {{{1, 2, 3, 4}, 5, 5}}, path);
+    CHECK(volume(s) == Catch::Approx(3000).epsilon(1e-6));
+    auto names = s.faceNames();
+    CHECK(std::count(names.begin(), names.end(), "F1.s1") == 1);
+    CHECK(std::count(names.begin(), names.end(), "F1.end") == 1);
+}
+
+TEST_CASE("paths have to be one chain") {
+    CHECK_THROWS(pathFromEdges({straight(0, 0, 0, 10, 0, 0), straight(20, 0, 0, 30, 0, 0)}));
+    // Out of order is fine.
+    CHECK_NOTHROW(pathFromEdges({straight(10, 0, 0, 10, 10, 0), straight(0, 0, 0, 10, 0, 0)}));
+}
+
+TEST_CASE("pipes, solid and hollow") {
+    const double pi = 3.14159265358979;
+    auto path = pathFromEdges({straight(0, 0, 0, 0, 0, 50)});
+    CHECK(volume(pipe(1, path, 10, 0)) == Catch::Approx(pi * 25 * 50).epsilon(1e-6));
+    CHECK(volume(pipe(1, path, 10, 6)) == Catch::Approx(pi * 16 * 50).epsilon(1e-6));
+    // Round a corner.
+    auto bent = pathFromEdges({straight(0, 0, 0, 0, 0, 30), straight(0, 0, 30, 30, 0, 30)});
+    CHECK_NOTHROW(pipe(1, bent, 4, 0));
+}
+
+TEST_CASE("a coil's volume is its wire's section times its length") {
+    const double pi = 3.14159265358979;
+    NamedShape c = coil(1, top, 0, 0, 20, 5, 3, 2, false);
+    double length = 3 * std::hypot(pi * 20, 5);
+    CHECK(volume(c) == Catch::Approx(pi * 1 * length).epsilon(0.02));
+    CHECK(volume(coil(1, top, 0, 0, 20, 5, 2, 2, true)) == Catch::Approx(4 * 2 * std::hypot(pi * 20, 5)).epsilon(0.02));
+    CHECK_THROWS(coil(1, top, 0, 0, 20, 1, 3, 2, false));
+}
+
+TEST_CASE("threads cut into a shaft and into a hole") {
+    NamedShape shaft = primitive(1, top, Primitive::Cylinder, 0, 0, 10, 20, 0);
+    double before = volume(shaft);
+    NamedShape threaded = thread(2, shaft, "F1.side", 1.5);
+    double after = volume(threaded);
+    CHECK(after < before * 0.95);
+    CHECK(after > before * 0.75);
+    auto names = threaded.faceNames();
+    CHECK(std::any_of(names.begin(), names.end(), [](const std::string& n) { return n.rfind("F2.t", 0) == 0; }));
+
+    NamedShape block = combine(5, primitive(3, top, Primitive::Box, 0, 0, 20, 20, 10), primitive(4, top, Primitive::Cylinder, 0, 0, 8, 10, 0), Combine::Cut);
+    double solid = volume(block);
+    NamedShape tapped = thread(6, block, "F4.side", 1.25);
+    CHECK(volume(tapped) < solid);
+    CHECK(volume(tapped) > solid * 0.9);
+    CHECK_THROWS(thread(7, block, "F3.end", 1.25));
+}
+
+TEST_CASE("a loft between two squares is a box") {
+    gp_Ax3 up(gp_Pnt(0, 0, 20), gp::DZ(), gp::DX());
+    LoftProfile low{top, rectangle(10, 10), {{1, 2, 3, 4}, 5, 5}};
+    LoftProfile high{up, rectangle(10, 10), {{1, 2, 3, 4}, 5, 5}};
+    NamedShape box = loft(1, {low, high}, true);
+    CHECK(volume(box) == Catch::Approx(2000).epsilon(1e-6));
+    auto names = box.faceNames();
+    CHECK(std::count(names.begin(), names.end(), "F1.start") == 1);
+    CHECK(std::count(names.begin(), names.end(), "F1.s2") == 1);
+    CHECK_THROWS(loft(1, {low}, false));
 }
