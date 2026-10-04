@@ -174,7 +174,7 @@ class MainActivity : ComponentActivity() {
         var x = ref.x - n * ref.x.dot(n)
         if (x.dot(x) < 1e-12) x = if (abs(n.z) < 0.9) Vec3(0.0, 0.0, 1.0).cross(n) else Vec3(1.0, 0.0, 0.0).cross(n)
         x = x * (1 / sqrt(x.dot(x)))
-        return SketchPlane(name, Vec3(d[0], d[1], d[2]), x, n.cross(x))
+        return SketchPlane("On a face", Vec3(d[0], d[1], d[2]), x, n.cross(x))
     }
 
     private fun openSketch(editor: SketchEditor) {

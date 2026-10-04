@@ -119,7 +119,7 @@ class Rebuilder(private val kernel: Kernel) {
             var x = p.x - n * p.x.dot(n)
             if (x.dot(x) < 1e-12) x = if (abs(n.z) < 0.9) Vec3(0.0, 0.0, 1.0).cross(n) else Vec3(1.0, 0.0, 0.0).cross(n)
             x *= 1 / sqrt(x.dot(x))
-            SketchPlane(f.name, origin, x, n.cross(x))
+            SketchPlane("On a face", origin, x, n.cross(x))
         }
     }
 

@@ -171,11 +171,16 @@ class DesignEditor(
     /** Where a sketch is now, after the last rebuild. */
     fun planeOf(sketch: SketchFeature): SketchPlane? = built?.sketchPlanes?.get(sketch.id)
 
-    /** A plane on the selected flat face, with its x along the view's right, or null if one flat face isn't selected. */
+    /**
+     * A plane on the selected flat face, with its x along the view's right
+     * squared up to the nearest side, or null if one flat face isn't selected.
+     */
     fun faceUnderSelection(yaw: Float): PlaneRef? {
         val faces = viewport.selectedFaces()
         if (faces.size != 1) return null
-        val x = Vec3(-sin(yaw.toDouble()), cos(yaw.toDouble()), 0.0)
+        val quarter = PI / 2
+        val square = kotlin.math.round(yaw / quarter) * quarter
+        val x = Vec3(-sin(square), cos(square), 0.0)
         return PlaneRef.OnFace(faces[0].second, x)
     }
 

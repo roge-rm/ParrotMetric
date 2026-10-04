@@ -414,8 +414,11 @@ void Renderer::drawScene(bool ids, const float* vp, const float* normal) {
         glUniform1i(glGetUniformLocation(faceProgram, "selected"), 0);
     }
     // Solid faces first, then see-through ones over them without hiding what's behind.
+    // See-through faces (sketch areas) aren't pushed back, so on a face they're
+    // sketched on they come out on top, for tapping too.
     for (int pass = 0; pass < 2; ++pass) {
         bool seeThrough = pass == 1;
+        if (seeThrough) glPolygonOffset(0.0f, 0.0f);
         if (seeThrough && !ids) {
             glEnable(GL_BLEND);
             glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
