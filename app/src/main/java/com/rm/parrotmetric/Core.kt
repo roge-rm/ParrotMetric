@@ -47,9 +47,13 @@ object Core {
     external fun exportBodies(bodies: LongArray, format: Int): ByteArray?
 
     // What's shown and selected.
-    external fun show(bodies: LongArray, planes: DoubleArray, curveCounts: IntArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, refit: Boolean)
+    /** Bodies, then sketches (a plane each and their curves), then construction planes (nine numbers each) and axes (six each). */
+    external fun show(bodies: LongArray, planes: DoubleArray, curveCounts: IntArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, constructionPlanes: DoubleArray, axes: DoubleArray, refit: Boolean)
+    external fun selectedPlanes(): IntArray
+    /** A face's edges as sketch curves on a plane; see jni.cpp. */
+    external fun faceOutline(body: Long, face: String, plane: DoubleArray): DoubleArray
     external fun shownTriangles(): Int
-    /** Selects or unselects what's under the point. Returns selected face, edge and sketch region counts. GL thread. */
+    /** Selects or unselects what's under the point. Returns selected face, edge, sketch region and plane counts. GL thread. */
     external fun tap(x: Float, y: Float): IntArray
     external fun clearSelection()
     external fun selectedEdges(): Array<String>

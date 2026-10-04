@@ -233,6 +233,7 @@ sealed class Constraint {
             is Circle -> c.centre
             is Arc -> c.centre
             is Line -> c.a
+            is Spline -> c.through.first()
         }
 
         /** A line's length, or a circle's or arc's radius. */
@@ -240,6 +241,7 @@ sealed class Constraint {
             is Line -> hypot(v(c.b.x) - v(c.a.x), v(c.b.y) - v(c.a.y))
             is Circle -> v(c.r)
             is Arc -> hypot(v(c.start.x) - v(c.centre.x), v(c.start.y) - v(c.centre.y))
+            is Spline -> 0.0
         }
     }
 }

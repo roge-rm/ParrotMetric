@@ -4,7 +4,13 @@
 // reason fit to show.
 #include <jni.h>
 
+#include <BRepAdaptor_Curve.hxx>
+#include <BRepBndLib.hxx>
 #include <BRepBuilderAPI_Transform.hxx>
+#include <BRep_Tool.hxx>
+#include <Bnd_Box.hxx>
+#include <TopoDS.hxx>
+#include <gp_Circ.hxx>
 #include <BRep_Builder.hxx>
 #include <TopExp_Explorer.hxx>
 #include <TopoDS_Compound.hxx>
@@ -37,6 +43,7 @@ pm::BodyStore store;
 /** What each displayed thing is, in the order the renderer numbers them. */
 struct Shown {
     bool sketch = false;
+    int plane = -1;                                 // Construction planes: which of those passed to show.
     std::vector<std::string> faceNames, edgeNames;  // Bodies: names by face and edge number.
     int sketchIndex = 0;                            // Sketches: which of the sketches passed to show.
 };
@@ -97,15 +104,19 @@ jobjectArray stringArray(JNIEnv* env, const std::vector<std::string>& v) {
     return out;
 }
 
-/** Curves as kind (0 line, 1 circle, 2 arc), id and seven numbers each: x1 y1 x2 y2 r a0 a1. */
+/** Numbers per curve, as Sketches.kt packs them. */
+constexpr size_t kCurveNumbers = 11;
+
+/** Curves as kind (0 line, 1 circle, 2 arc, 3 bezier), id and eleven numbers each: x1 y1 x2 y2 r a0 a1 cx1 cy1 cx2 cy2. */
 std::vector<pm::SketchCurve> curvesOf(const jint* kinds, const jint* ids, const jdouble* nums, size_t n) {
     std::vector<pm::SketchCurve> curves(n);
     for (size_t i = 0; i < n; ++i) {
         auto& c = curves[i];
         c.kind = pm::SketchCurve::Kind(kinds[i]);
         c.id = ids[i];
-        const double* d = &nums[i * 7];
+        const double* d = &nums[i * kCurveNumbers];
         c.x1 = d[0]; c.y1 = d[1]; c.x2 = d[2]; c.y2 = d[3]; c.r = d[4]; c.a0 = d[5]; c.a1 = d[6];
+        c.cx1 = d[7]; c.cy1 = d[8]; c.cx2 = d[9]; c.cy2 = d[10];
     }
     return curves;
 }
@@ -169,6 +180,12 @@ pm::DisplayMesh displaySketch(const gp_Ax3& plane, const std::vector<pm::SketchC
         if (c.kind == pm::SketchCurve::Line) {
             add(c.x1, c.y1);
             add(c.x2, c.y2);
+        } else if (c.kind == pm::SketchCurve::Bezier) {
+            for (int i = 0; i <= 24; ++i) {
+                double t = i / 24.0, u = 1 - t;
+                add(u * u * u * c.x1 + 3 * u * u * t * c.cx1 + 3 * u * t * t * c.cx2 + t * t * t * c.x2,
+                    u * u * u * c.y1 + 3 * u * u * t * c.cy1 + 3 * u * t * t * c.cy2 + t * t * t * c.y2);
+            }
         } else {
             double a0 = c.kind == pm::SketchCurve::Circle ? 0 : c.a0;
             double a1 = c.kind == pm::SketchCurve::Circle ? 2 * M_PI : c.a1;
@@ -188,15 +205,52 @@ pm::DisplayMesh displaySketch(const gp_Ax3& plane, const std::vector<pm::SketchC
     return d;
 }
 
+/** Selected faces, edges, sketch areas and construction planes, counted. */
 jintArray selectionCounts(JNIEnv* env) {
-    jint counts[3] = {0, 0, 0};
+    jint counts[4] = {0, 0, 0, 0};
     for (const auto& p : selection) {
-        if (shown[p.body].sketch) counts[2] += p.kind == pm::Pick::Face ? 1 : 0;
+        if (shown[p.body].plane >= 0) counts[3]++;
+        else if (shown[p.body].sketch) counts[2] += p.kind == pm::Pick::Face ? 1 : 0;
         else counts[p.kind == pm::Pick::Edge ? 1 : 0]++;
     }
-    jintArray out = env->NewIntArray(3);
-    env->SetIntArrayRegion(out, 0, 3, counts);
+    jintArray out = env->NewIntArray(4);
+    env->SetIntArrayRegion(out, 0, 4, counts);
     return out;
+}
+
+/** A construction plane as a see-through square, half as wide as `half`, or an axis as a line. */
+pm::DisplayMesh displayPlane(const double* p, double half) {
+    gp_Pnt o(p[0], p[1], p[2]);
+    gp_Vec x(p[3], p[4], p[5]), y(p[6], p[7], p[8]);
+    pm::DisplayMesh d;
+    gp_Vec n = x.Crossed(y);
+    gp_Pnt c[4] = {o.Translated(-x * half - y * half), o.Translated(x * half - y * half), o.Translated(x * half + y * half), o.Translated(-x * half + y * half)};
+    for (const auto& q : c) {
+        d.positions.insert(d.positions.end(), {float(q.X()), float(q.Y()), float(q.Z())});
+        d.normals.insert(d.normals.end(), {float(n.X()), float(n.Y()), float(n.Z())});
+        d.faceOfVertex.push_back(0);
+    }
+    d.indices = {0, 1, 2, 0, 2, 3, 0, 2, 1, 0, 3, 2};  // Both sides, so it can be tapped from either.
+    d.faceCount = 1;
+    pm::DisplayMesh::Edge e;
+    for (int i = 0; i <= 4; ++i) e.points.insert(e.points.end(), {float(c[i % 4].X()), float(c[i % 4].Y()), float(c[i % 4].Z())});
+    d.edges.push_back(std::move(e));
+    const float edge[4] = {1.0f, 0.82f, 0.25f, 0.8f};
+    const float face[4] = {1.0f, 0.82f, 0.25f, 0.12f};
+    std::copy(edge, edge + 4, d.edgeColour);
+    std::copy(face, face + 4, d.faceColour);
+    return d;
+}
+
+pm::DisplayMesh displayAxis(const double* a, double half) {
+    pm::DisplayMesh d;
+    pm::DisplayMesh::Edge e;
+    for (int s = -1; s <= 1; s += 2)
+        e.points.insert(e.points.end(), {float(a[0] + s * a[3] * half), float(a[1] + s * a[4] * half), float(a[2] + s * a[5] * half)});
+    d.edges.push_back(std::move(e));
+    const float edge[4] = {1.0f, 0.82f, 0.25f, 1.0f};
+    std::copy(edge, edge + 4, d.edgeColour);
+    return d;
 }
 
 }  // namespace
@@ -541,7 +595,9 @@ JNIEXPORT jbyteArray JNICALL Java_com_rm_parrotmetric_Core_exportBodies(JNIEnv* 
  */
 JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_show(JNIEnv* env, jobject, jlongArray handles, jdoubleArray planes,
                                                          jintArray curveCounts, jintArray kinds, jintArray ids, jdoubleArray nums,
-                                                         jboolean refit) {
+                                                         jdoubleArray constructionPlanes, jdoubleArray axes, jboolean refit) {
+    auto cp = doubles(env, constructionPlanes);
+    auto ax = doubles(env, axes);
     auto h = longs(env, handles);
     auto p = doubles(env, planes);
     auto counts = ints(env, curveCounts);
@@ -563,12 +619,28 @@ JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_show(JNIEnv* env, jobject, 
     size_t start = 0;
     for (size_t s = 0; s < counts.size(); ++s) {
         size_t c = size_t(counts[s]);
-        auto curves = curvesOf(k.data() + start, i.data() + start, n.data() + start * 7, c);
+        auto curves = curvesOf(k.data() + start, i.data() + start, n.data() + start * kCurveNumbers, c);
         start += c;
         meshes.push_back(displaySketch(planeOf(p.data() + s * 9), curves));
         Shown sh;
         sh.sketch = true;
         sh.sketchIndex = int(s);
+        nextShown.push_back(std::move(sh));
+    }
+    // Construction planes and axes, sized to what's there.
+    Bnd_Box box;
+    for (const auto& b : bodies) if (b.solid) BRepBndLib::Add(b.solid->shape, box);
+    double half = box.IsVoid() ? 25.0 : std::max(15.0, std::sqrt(box.SquareExtent()) * 0.4);
+    for (size_t i = 0; i + 8 < cp.size(); i += 9) {
+        meshes.push_back(displayPlane(cp.data() + i, half));
+        Shown sh;
+        sh.plane = int(i / 9);
+        nextShown.push_back(std::move(sh));
+    }
+    for (size_t i = 0; i + 5 < ax.size(); i += 6) {
+        meshes.push_back(displayAxis(ax.data() + i, half * 1.3));
+        Shown sh;
+        sh.plane = -2;  // Shown but not picked.
         nextShown.push_back(std::move(sh));
     }
     std::lock_guard<std::mutex> g(lock);
@@ -595,6 +667,10 @@ JNIEXPORT jintArray JNICALL Java_com_rm_parrotmetric_Core_tap(JNIEnv* env, jobje
     pm::Pick p = renderer.pick(x, y);
     // Sketch lines aren't picked in 3D; their regions are.
     if (p.kind != pm::Pick::None && p.body < shown.size() && shown[p.body].sketch && p.kind == pm::Pick::Edge) p.kind = pm::Pick::None;
+    if (p.kind != pm::Pick::None && p.body < shown.size() && shown[p.body].plane != -1) {
+        // A plane is picked by its square; axes and plane outlines aren't picked.
+        if (shown[p.body].plane == -2 || p.kind == pm::Pick::Edge) p.kind = pm::Pick::None;
+    }
     if (p.kind == pm::Pick::None) {
         selection.clear();
     } else {
@@ -632,6 +708,85 @@ JNIEXPORT jobjectArray JNICALL Java_com_rm_parrotmetric_Core_selectedFaces(JNIEn
     return stringArray(env, out);
 }
 
+/** The selected construction planes, by their place in the list passed to show. */
+JNIEXPORT jintArray JNICALL Java_com_rm_parrotmetric_Core_selectedPlanes(JNIEnv* env, jobject) {
+    std::lock_guard<std::mutex> g(lock);
+    std::vector<jint> out;
+    for (const auto& p : selection)
+        if (shown[p.body].plane >= 0) out.push_back(shown[p.body].plane);
+    jintArray a = env->NewIntArray(jsize(out.size()));
+    env->SetIntArrayRegion(a, 0, jsize(out.size()), out.data());
+    return a;
+}
+
+/**
+ * The edges of a named face, as sketch curves on a plane (nine numbers),
+ * packed as for curvesOf after a count: lines, circles and arcs as they
+ * are, anything else as short lines.
+ */
+JNIEXPORT jdoubleArray JNICALL Java_com_rm_parrotmetric_Core_faceOutline(JNIEnv* env, jobject, jlong body, jstring face, jdoubleArray plane) {
+    try {
+        const char* c = env->GetStringUTFChars(face, nullptr);
+        std::string name(c);
+        env->ReleaseStringUTFChars(face, c);
+        auto p = doubles(env, plane);
+        std::unique_lock<std::mutex> g(lock);
+        pm::NamedShape s = solidOf(body);
+        g.unlock();
+        auto faces = s.findFaces(name);
+        if (faces.empty()) throw std::runtime_error("The face isn't there any more");
+        gp_Ax3 ax = planeOf(p.data());
+        gp_Trsf toPlane;
+        toPlane.SetTransformation(ax);  // World to the plane's own coordinates.
+        std::vector<double> out = {0};
+        auto add = [&](int kind, std::initializer_list<double> v) {
+            out[0] += 1;
+            out.push_back(kind);
+            out.insert(out.end(), v);
+            for (size_t k = v.size(); k < kCurveNumbers; ++k) out.push_back(0);
+        };
+        for (TopExp_Explorer e(faces[0], TopAbs_EDGE); e.More(); e.Next()) {
+            const TopoDS_Edge& edge = TopoDS::Edge(e.Current());
+            if (BRep_Tool::Degenerated(edge)) continue;
+            BRepAdaptor_Curve curve(edge);
+            auto local = [&](double t) { return curve.Value(t).Transformed(toPlane); };
+            double t0 = curve.FirstParameter(), t1 = curve.LastParameter();
+            if (curve.GetType() == GeomAbs_Line) {
+                gp_Pnt a = local(t0), b = local(t1);
+                add(0, {a.X(), a.Y(), b.X(), b.Y()});
+            } else if (curve.GetType() == GeomAbs_Circle) {
+                gp_Circ circ = curve.Circle();
+                gp_Pnt centre = circ.Location().Transformed(toPlane);
+                double r = circ.Radius();
+                if (std::abs(t1 - t0 - 2 * M_PI) < 1e-9) {
+                    add(1, {centre.X(), centre.Y(), 0, 0, r});
+                } else {
+                    gp_Pnt a = local(t0), b = local(t1), m = local((t0 + t1) / 2);
+                    double a0 = std::atan2(a.Y() - centre.Y(), a.X() - centre.X());
+                    double a1 = std::atan2(b.Y() - centre.Y(), b.X() - centre.X());
+                    double am = std::atan2(m.Y() - centre.Y(), m.X() - centre.X());
+                    // Arcs go anticlockwise; if the middle isn't on the way round from a to b, swap the ends.
+                    auto span = [](double from, double to) { double d = to - from; while (d < 0) d += 2 * M_PI; return d; };
+                    if (span(a0, am) > span(a0, a1)) std::swap(a0, a1);
+                    add(2, {centre.X(), centre.Y(), 0, 0, r, a0, a1});
+                }
+            } else {
+                const int n = 24;
+                for (int i = 0; i < n; ++i) {
+                    gp_Pnt a = local(t0 + (t1 - t0) * i / n), b = local(t0 + (t1 - t0) * (i + 1) / n);
+                    add(0, {a.X(), a.Y(), b.X(), b.Y()});
+                }
+            }
+        }
+        jdoubleArray result = env->NewDoubleArray(jsize(out.size()));
+        env->SetDoubleArrayRegion(result, 0, jsize(out.size()), out.data());
+        return result;
+    } catch (const std::exception& e) {
+        fail(env, e.what());
+        return nullptr;
+    }
+}
+
 /** The selected sketch regions as pairs: sketch number, region number (largest first, as findRegions gives them). */
 JNIEXPORT jintArray JNICALL Java_com_rm_parrotmetric_Core_selectedRegions(JNIEnv* env, jobject) {
     std::lock_guard<std::mutex> g(lock);
@@ -655,6 +810,7 @@ JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_select(JNIEnv* env, jobject
     selection.clear();
     for (uint32_t b = 0; b < shown.size(); ++b) {
         const Shown& s = shown[b];
+        if (s.plane != -1) continue;
         if (s.sketch) {
             for (size_t i = 0; i + 1 < r.size(); i += 2)
                 if (r[i] == s.sketchIndex) selection.push_back({pm::Pick::Face, b, uint32_t(r[i + 1])});

@@ -13,6 +13,8 @@ import com.rm.parrotmetric.design.HoleKind
 import com.rm.parrotmetric.design.MirrorFeature
 import com.rm.parrotmetric.design.MoveFeature
 import com.rm.parrotmetric.design.PatternFeature
+import com.rm.parrotmetric.design.PlaneFeature
+import com.rm.parrotmetric.design.AxisFeature
 import com.rm.parrotmetric.design.ShellFeature
 import com.rm.parrotmetric.design.SplitFeature
 import com.rm.parrotmetric.design.Built
@@ -48,8 +50,15 @@ import kotlin.math.sin
 
 /** The 3D view, as the design editor uses it. The platform supplies it. */
 interface Viewport {
-    /** Shows these bodies, then these sketches with their areas pickable. Clears the selection. */
-    fun show(bodies: List<Long>, sketches: List<Pair<SketchPlane, List<ProfileCurve>>>, refit: Boolean)
+    /** Shows these bodies, these sketches with their areas pickable, and construction planes and axes. Clears the selection. */
+    fun show(
+        bodies: List<Long>, sketches: List<Pair<SketchPlane, List<ProfileCurve>>>,
+        planes: List<SketchPlane>, axes: List<Pair<Vec3, Vec3>>, refit: Boolean,
+    )
+    /** Selected construction planes, by their place in the list shown. */
+    fun selectedPlanes(): List<Int>
+    /** A face's edges as curves on a plane, for projecting into a sketch. Throws if the face is gone. */
+    fun faceOutline(body: Long, face: String, plane: SketchPlane): List<ProfileCurve>
     fun selectedEdges(): List<String>
     /** Selected faces as body number (in the order shown) and face name. */
     fun selectedFaces(): List<Pair<Int, String>>
@@ -65,7 +74,7 @@ interface Viewport {
 
 /** A step for the history bar. */
 data class HistoryEntry(val id: Int, val name: String, val kind: Kind, val error: String?, val active: Boolean) {
-    enum class Kind { Sketch, Create, Modify, Import }
+    enum class Kind { Sketch, Create, Modify, Construct, Import }
 }
 
 /**
@@ -99,6 +108,9 @@ class DesignEditor(
     /** Called on the main thread after each rebuild is shown, which clears the view's selection. */
     var onShown: () -> Unit = {}
 
+    /** The construction planes shown, in the order the viewport numbers them. */
+    private var shownPlanes: List<PlaneFeature> = emptyList()
+
     /** The sketches shown, in the order the viewport numbers them. */
     private var shownSketches: List<SketchFeature> = emptyList()
 
@@ -114,6 +126,7 @@ class DesignEditor(
                 is SketchFeature -> HistoryEntry.Kind.Sketch
                 is ExtrudeFeature, is RevolveFeature -> HistoryEntry.Kind.Create
                 is ImportFeature -> HistoryEntry.Kind.Import
+                is PlaneFeature, is AxisFeature -> HistoryEntry.Kind.Construct
                 else -> HistoryEntry.Kind.Modify
             }
             HistoryEntry(f.id, f.name, kind, errors[f.id], i < design.marker)
@@ -212,6 +225,43 @@ class DesignEditor(
     fun planeOf(sketch: SketchFeature): SketchPlane? = built?.sketchPlanes?.get(sketch.id)
 
     /**
+     * Where a new sketch on the selection goes: a selected construction plane,
+     * or the one selected flat face. Null, with a message, if neither.
+     */
+    fun sketchPlaneUnderSelection(yaw: Float, name: String): Pair<PlaneRef, SketchPlane>? {
+        viewport.selectedPlanes().firstOrNull()?.let { i ->
+            val f = shownPlanes.getOrNull(i) ?: return null
+            val p = built?.sketchPlanes?.get(f.id) ?: return null
+            return PlaneRef.Construction(f.id) to p.copy(name = f.name)
+        }
+        val ref = faceUnderSelection(yaw) as? PlaneRef.OnFace ?: return null
+        val (bodyIndex, _) = viewport.selectedFaces().first()
+        val body = built?.bodies?.getOrNull(bodyIndex) ?: return null
+        val d = try {
+            kernel.facePlane(body.handle, ref.face)
+        } catch (e: com.rm.parrotmetric.design.KernelException) {
+            message = e.message
+            null
+        } ?: return null
+        val n = Vec3(d[3], d[4], d[5])
+        var x = ref.x - n * ref.x.dot(n)
+        if (x.dot(x) < 1e-12) x = if (kotlin.math.abs(n.z) < 0.9) Vec3(0.0, 0.0, 1.0).cross(n) else Vec3(1.0, 0.0, 0.0).cross(n)
+        x = x * (1 / kotlin.math.sqrt(x.dot(x)))
+        return ref to SketchPlane("On a face", Vec3(d[0], d[1], d[2]), x, n.cross(x))
+    }
+
+    /** For projecting into a sketch on a face: that face's edges as curves on the sketch's plane. */
+    fun outlineOf(ref: PlaneRef, plane: SketchPlane): List<ProfileCurve>? {
+        val face = (ref as? PlaneRef.OnFace)?.face ?: return null
+        val body = built?.bodies?.firstOrNull { face in kernel.faceNames(it.handle) } ?: return null
+        return try {
+            viewport.faceOutline(body.handle, face, plane)
+        } catch (e: RuntimeException) {
+            null
+        }
+    }
+
+    /**
      * A plane on the selected flat face, with its x along the view's right
      * squared up to the nearest side, or null if one flat face isn't selected.
      */
@@ -252,7 +302,12 @@ class DesignEditor(
                         val sketches = sketchesToShow(features, draft)
                         val shown = sketches.mapNotNull { s -> b.sketchPlanes[s.id]?.let { s to it } }
                         val refit = refitNow || (!hadBodies && b.bodies.isNotEmpty())
-                        viewport.show(b.bodies.map { it.handle }, shown.map { it.second to it.first.sketch.profileCurves() }, refit)
+                        val planeFeatures = features.filterIsInstance<PlaneFeature>().filter { b.sketchPlanes.containsKey(it.id) }
+                        viewport.show(
+                            b.bodies.map { it.handle }, shown.map { it.second to it.first.sketch.profileCurves() },
+                            planeFeatures.map { b.sketchPlanes.getValue(it.id) }, b.axes.values.toList(), refit,
+                        )
+                        shownPlanes = planeFeatures
                         Triple(b, shown.map { it.first }, draft)
                     }
                 }
@@ -323,6 +378,25 @@ class DesignEditor(
         rebuild()
     }
 
+    fun startPlane(kind: PlaneFeature.Kind) {
+        val d = PlaneDraft(null, kind)
+        d.planes = planeChoices()
+        // Start from what's selected: a plane, else a face, else the top plane.
+        val pick = viewport.selectedPlanes().firstOrNull()?.let { shownPlanes.getOrNull(it) }?.let { PlaneRef.Construction(it.id) }
+            ?: d.planes.firstOrNull { it.first == "The face" }?.second
+        if (pick != null) d.base = pick
+        panel = d
+        rebuild()
+    }
+
+    fun startAxis() {
+        panel = AxisDraft(null)
+        rebuild()
+    }
+
+    /** Construction axes so far, for patterns round them. */
+    fun axisFeatures(): List<AxisFeature> = design.active.filterIsInstance<AxisFeature>()
+
     fun startHole() {
         panel = HoleDraft(null)
         rebuild()
@@ -355,6 +429,7 @@ class DesignEditor(
             "Right" to PlaneRef.Fixed(SketchPlane.Right),
         )
         viewport.selectedFaces().firstOrNull()?.let { out += "The face" to PlaneRef.OnFace(it.second, Vec3(1.0, 0.0, 0.0)) }
+        for (p in design.active.filterIsInstance<PlaneFeature>()) out += p.name to PlaneRef.Construction(p.id)
         return out
     }
 
@@ -380,6 +455,8 @@ class DesignEditor(
             is CombineFeature -> CombineDraft(f)
             is SplitFeature -> SplitDraft(f)
             is MoveFeature -> MoveDraft(f)
+            is PlaneFeature -> PlaneDraft(f, f.kind).also { it.planes = planeChoices().filter { c -> c.second != PlaneRef.Construction(f.id) } }
+            is AxisFeature -> AxisDraft(f)
             else -> return f
         }
         if (d is BodyDraft) d.planes = planeChoices().let { choices ->
@@ -616,9 +693,11 @@ class DesignEditor(
         var count2 by mutableStateOf((editing?.count2 ?: 2).toDouble())
         var spacing2 by mutableStateOf(editing?.spacing2 ?: 20.0)
         var join by mutableStateOf(editing?.join ?: true)
+        var axisFeature by mutableStateOf(editing?.axisFeature)
         init { if (editing != null) bodies = editing.bodies }
         override fun feature() = PatternFeature(
             id, name, bodies, circular, axis, count.toInt(), spacing, degrees * PI / 180, axis2, count2.toInt(), spacing2, join,
+            if (circular) axisFeature else null,
         )
     }
 
@@ -650,6 +729,33 @@ class DesignEditor(
         var copy by mutableStateOf(editing?.copy ?: false)
         init { if (editing != null) bodies = editing.bodies }
         override fun feature() = MoveFeature(id, name, bodies, dx, dy, dz, axis, degrees * PI / 180, copy)
+    }
+
+    inner class PlaneDraft(editing: PlaneFeature?, val kind: PlaneFeature.Kind) : FeatureDraft() {
+        val id = editing?.id ?: newId()
+        private val name = editing?.name ?: nextName("Plane", design.features.count { it is PlaneFeature })
+        var planes: List<Pair<String, PlaneRef>> = emptyList()
+        var base by mutableStateOf<PlaneRef>(editing?.base ?: PlaneRef.Fixed(SketchPlane.Top))
+        var other by mutableStateOf<PlaneRef?>(editing?.other)
+        var offset by mutableStateOf(editing?.offset ?: 10.0)
+        var degrees by mutableStateOf((editing?.angle ?: (PI / 4)) * 180 / PI)
+        var turnRoundY by mutableStateOf(editing?.turnRoundY ?: false)
+        override fun feature(): Feature? {
+            if (kind == PlaneFeature.Kind.Midway && other == null) return null
+            return PlaneFeature(id, name, kind, base, offset, degrees * PI / 180, turnRoundY, other)
+        }
+        override fun missing() = "Pick the second plane"
+    }
+
+    inner class AxisDraft(editing: AxisFeature?) : FeatureDraft() {
+        val id = editing?.id ?: newId()
+        private val name = editing?.name ?: nextName("Axis", design.features.count { it is AxisFeature })
+        var x by mutableStateOf(editing?.x ?: 0.0)
+        var y by mutableStateOf(editing?.y ?: 0.0)
+        var z by mutableStateOf(editing?.z ?: 0.0)
+        var along by mutableStateOf(editing?.along ?: Axis3.Z)
+        override fun feature() = AxisFeature(id, name, x, y, z, along)
+        override fun missing() = ""
     }
 
     inner class EdgeDraft(editing: Feature?, val chamfer: Boolean) : FeatureDraft() {

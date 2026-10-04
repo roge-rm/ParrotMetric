@@ -68,6 +68,7 @@ data class ModelState(
     val selectedFaces: Int = 0,
     val selectedEdges: Int = 0,
     val selectedAreas: Int = 0,
+    val selectedPlanes: Int = 0,
     val yaw: Float = 0f,
     val pitch: Float = 0f,
     /** The camera as last drawn, for lining the sketch overlay up with the view. */
@@ -224,6 +225,7 @@ private fun SelectionChip(state: ModelState, actions: ModelActions) {
         if (state.selectedFaces > 0) add(if (state.selectedFaces == 1) "1 face" else "${state.selectedFaces} faces")
         if (state.selectedEdges > 0) add(if (state.selectedEdges == 1) "1 edge" else "${state.selectedEdges} edges")
         if (state.selectedAreas > 0) add(if (state.selectedAreas == 1) "1 area" else "${state.selectedAreas} areas")
+        if (state.selectedPlanes > 0) add(if (state.selectedPlanes == 1) "1 plane" else "${state.selectedPlanes} planes")
     }
     AnimatedVisibility(parts.isNotEmpty(), enter = fadeIn(tween(150)), exit = fadeOut(tween(150))) {
         Surface(color = Color(0xFF3A2C24), contentColor = Color(0xFFFFB48C), shape = RoundedCornerShape(18.dp)) {
@@ -258,6 +260,7 @@ private fun HistoryBar(design: DesignEditor, actions: ModelActions) {
             val group = when (entry.kind) {
                 HistoryEntry.Kind.Sketch -> ToolGroup.Sketch
                 HistoryEntry.Kind.Modify -> ToolGroup.Modify
+                HistoryEntry.Kind.Construct -> ToolGroup.Construct
                 else -> ToolGroup.Create
             }
             Box {
@@ -333,13 +336,13 @@ private class Tool(val label: String, val icon: ImageVector, val action: (() -> 
 @Composable
 private fun ToolSheet(group: ToolGroup, state: ModelState, design: DesignEditor, actions: ModelActions, close: () -> Unit) {
     var meshTools by remember(group) { mutableStateOf(false) }
-    val oneFace = state.selectedFaces == 1 && state.selectedEdges == 0
+    val oneFace = (state.selectedFaces == 1 && state.selectedPlanes == 0 || state.selectedPlanes == 1 && state.selectedFaces == 0) && state.selectedEdges == 0
     val tools = when (group) {
         ToolGroup.Sketch -> listOf(
             Tool("Top", Icons.plane) { actions.startSketch(SketchPlane.Top) },
             Tool("Front", Icons.plane) { actions.startSketch(SketchPlane.Front) },
             Tool("Right", Icons.plane) { actions.startSketch(SketchPlane.Right) },
-            Tool("On face", Icons.sketch, if (oneFace) ({ actions.startSketch(null) }) else null),
+            Tool("On selected", Icons.sketch, if (oneFace) ({ actions.startSketch(null) }) else null),
         )
         ToolGroup.Create -> listOf(
             Tool("Extrude", Icons.extrude) { design.startExtrude() },
@@ -365,7 +368,12 @@ private fun ToolSheet(group: ToolGroup, state: ModelState, design: DesignEditor,
             Tool("Split", Icons.cut) { design.startSplit() },
             Tool("Move", Icons.move) { design.startMove() },
         )
-        ToolGroup.Construct -> listOf(Tool("Plane", Icons.plane, null), Tool("Axis", Icons.axis, null), Tool("Point", Icons.point, null))
+        ToolGroup.Construct -> listOf(
+            Tool("Offset plane", Icons.plane) { design.startPlane(com.rm.parrotmetric.design.PlaneFeature.Kind.Offset) },
+            Tool("Angled plane", Icons.plane) { design.startPlane(com.rm.parrotmetric.design.PlaneFeature.Kind.Angle) },
+            Tool("Midplane", Icons.plane) { design.startPlane(com.rm.parrotmetric.design.PlaneFeature.Kind.Midway) },
+            Tool("Axis", Icons.axis) { design.startAxis() },
+        )
         ToolGroup.Inspect -> listOf(Tool("Measure", Icons.measure, null), Tool("Section", Icons.section, null))
     }
     Surface(color = Palette.surface, shape = RoundedCornerShape(26.dp)) {

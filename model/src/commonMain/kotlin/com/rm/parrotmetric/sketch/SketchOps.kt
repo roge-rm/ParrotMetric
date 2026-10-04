@@ -29,6 +29,7 @@ object SketchOps {
             val a = startAngle(c) + t
             x(c.centre) + radius(c) * cos(a) to y(c.centre) + radius(c) * sin(a)
         }
+        is Spline -> x(c.through.first()) to y(c.through.first())
     }
 
     private fun Sketch.startAngle(a: Arc) = atan2(y(a.start) - y(a.centre), x(a.start) - x(a.centre))
@@ -51,6 +52,7 @@ object SketchOps {
             while (t < 0) t += 2 * PI
             t
         }
+        is Spline -> 0.0
     }
 
     /** Is the place within the curve's extent (lines and arcs end; circles don't). */
@@ -58,6 +60,8 @@ object SketchOps {
         is Line -> t >= -EPS && t <= 1 + EPS
         is Circle -> true
         is Arc -> t >= -EPS && t <= span(c) + EPS
+        // Splines aren't trimmed or extended to, yet.
+        is Spline -> false
     }
 
     /** Points where two curves' full shapes meet: lines as infinite lines, arcs as whole circles. */
@@ -65,8 +69,9 @@ object SketchOps {
         fun circleOf(k: Curve) = when (k) {
             is Circle -> Triple(x(k.centre), y(k.centre), radius(k))
             is Arc -> Triple(x(k.centre), y(k.centre), radius(k))
-            is Line -> null
+            else -> null
         }
+        if (c is Spline || d is Spline) return emptyList()
         if (c is Line && d is Line) {
             val (x1, y1) = x(c.a) to y(c.a); val (x2, y2) = x(c.b) to y(c.b)
             val (x3, y3) = x(d.a) to y(d.a); val (x4, y4) = x(d.b) to y(d.b)
@@ -138,6 +143,7 @@ object SketchOps {
      * A curve nothing crosses goes altogether.
      */
     fun trim(s: Sketch, c: Curve, u: Double, v: Double): String? {
+        if (c is Spline) return "Splines can't be trimmed yet"
         val at = s.placeOf(c, u, v)
         val cross = s.crossings(c)
         when (c) {
@@ -177,6 +183,7 @@ object SketchOps {
                 for (k in s.constraints.toList()) if (k is Constraint.Radius && k.curve === c) s.add(Constraint.Radius(arc, k.diameter, k.value))
                 removeKeeping(s, c, listOf(start, end, c.centre))
             }
+            is Spline -> {}
         }
         s.solve()
         return null
@@ -223,6 +230,7 @@ object SketchOps {
      */
     fun offset(s: Sketch, curves: List<Curve>, distance: Double): String? {
         if (curves.isEmpty()) return "Select the curves to copy"
+        if (curves.any { it is Spline }) return "Splines can't be offset yet"
         if (abs(distance) < 1e-9) return "The distance can't be 0"
         val mids = curves.map { s.pointAt(it, if (it is Line) 0.5 else if (it is Arc) s.span(it) / 2 else 0.0) }
         val cx = mids.sumOf { it.first } / mids.size
@@ -271,6 +279,7 @@ object SketchOps {
             is Line -> s.addLine(moveOf(c.a), moveOf(c.b), c.construction).also { s.add(Constraint.Parallel(it, c)) }
             is Circle -> s.addCircle(c.centre, newRadius(c), c.construction)
             is Arc -> s.addArc(c.centre, moveOf(c.start), moveOf(c.end), c.construction)
+            is Spline -> {}
         }
         s.solve()
         return null

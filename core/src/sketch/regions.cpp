@@ -18,6 +18,8 @@
 #include <TopTools_ListOfShape.hxx>
 #include <TopoDS.hxx>
 #include <TopoDS_Wire.hxx>
+#include <Geom_BezierCurve.hxx>
+#include <TColgp_Array1OfPnt.hxx>
 #include <gp_Circ.hxx>
 #include <gp_Pln.hxx>
 
@@ -28,6 +30,15 @@ namespace pm {
 namespace {
 
 TopoDS_Edge makeEdge(const SketchCurve& c) {
+    if (c.kind == SketchCurve::Bezier) {
+        TColgp_Array1OfPnt poles(1, 4);
+        poles(1) = gp_Pnt(c.x1, c.y1, 0);
+        poles(2) = gp_Pnt(c.cx1, c.cy1, 0);
+        poles(3) = gp_Pnt(c.cx2, c.cy2, 0);
+        poles(4) = gp_Pnt(c.x2, c.y2, 0);
+        if (poles(1).Distance(poles(4)) < 1e-7) return {};
+        return BRepBuilderAPI_MakeEdge(new Geom_BezierCurve(poles));
+    }
     if (c.kind == SketchCurve::Line) {
         gp_Pnt a(c.x1, c.y1, 0), b(c.x2, c.y2, 0);
         if (a.Distance(b) < 1e-7) return {};

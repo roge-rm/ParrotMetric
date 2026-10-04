@@ -54,6 +54,48 @@ class Sketch {
         return arc
     }
 
+    fun addSpline(through: List<Point>, construction: Boolean = false): Spline =
+        Spline(nextId++, through, construction).also { curveMap[it.id] = it }
+
+    internal fun loadSpline(id: Int, through: List<Point>, construction: Boolean) = loadCurve(Spline(id, through, construction))
+
+    /**
+     * A spline's pieces as cubic Bezier curves: start, first control,
+     * second control, end, as x y pairs. Catmull-Rom through its points, so
+     * the curve passes through each of them.
+     */
+    fun bezierPieces(sp: Spline): List<DoubleArray> {
+        val pts = sp.through.map { x(it) to y(it) }
+        val closed = sp.closed
+        val ring = if (closed) pts.dropLast(1) else pts
+        val n = ring.size
+        if (n < 2) return emptyList()
+        fun at(i: Int) = if (closed) ring[((i % n) + n) % n] else ring[i.coerceIn(0, n - 1)]
+        val pieces = if (closed) n else n - 1
+        return (0 until pieces).map { i ->
+            val p0 = at(i - 1); val p1 = at(i); val p2 = at(i + 1); val p3 = at(i + 2)
+            doubleArrayOf(
+                p1.first, p1.second,
+                p1.first + (p2.first - p0.first) / 6, p1.second + (p2.second - p0.second) / 6,
+                p2.first - (p3.first - p1.first) / 6, p2.second - (p3.second - p1.second) / 6,
+                p2.first, p2.second,
+            )
+        }
+    }
+
+    /** Points along a spline, for drawing and for finding what's near it. */
+    fun sampleSpline(sp: Spline, perPiece: Int = 16): List<Pair<Double, Double>> {
+        val out = mutableListOf<Pair<Double, Double>>()
+        for (b in bezierPieces(sp)) for (k in 0..perPiece) {
+            if (k == 0 && out.isNotEmpty()) continue
+            val t = k.toDouble() / perPiece
+            val u = 1 - t
+            val w0 = u * u * u; val w1 = 3 * u * u * t; val w2 = 3 * u * t * t; val w3 = t * t * t
+            out += (w0 * b[0] + w1 * b[2] + w2 * b[4] + w3 * b[6]) to (w0 * b[1] + w1 * b[3] + w2 * b[5] + w3 * b[7])
+        }
+        return out
+    }
+
     fun setConstruction(curve: Curve, construction: Boolean) {
         curve.construction = construction
     }
@@ -251,4 +293,13 @@ class Circle internal constructor(id: Int, val centre: Point, internal val r: In
 
 class Arc internal constructor(id: Int, val centre: Point, val start: Point, val end: Point, construction: Boolean) : Curve(id, construction) {
     override fun points() = listOf(centre, start, end)
+}
+
+/**
+ * A smooth curve through its points, in order. It closes into a loop when
+ * the last point is the first.
+ */
+class Spline internal constructor(id: Int, val through: List<Point>, construction: Boolean) : Curve(id, construction) {
+    override fun points() = through.distinct()
+    val closed get() = through.size > 2 && through.first() === through.last()
 }

@@ -59,6 +59,8 @@ data class PatternFeature(
     val count2: Int,
     val spacing2: Double,
     val join: Boolean,
+    /** For a pattern round an axis: a construction axis to use instead of the origin's. */
+    val axisFeature: Int? = null,
 ) : Feature() {
     override fun key() = this
 }

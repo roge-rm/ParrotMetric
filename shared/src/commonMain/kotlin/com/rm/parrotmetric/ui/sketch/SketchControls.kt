@@ -135,6 +135,7 @@ private fun ChipRow(editor: SketchEditor, onConstrain: () -> Unit) {
             editor.selectTool(if (editor.tool == SketchTool.Extend) SketchTool.Select else SketchTool.Extend)
         }
         if (editor.selectedCurves.isNotEmpty()) Chip("Offset", Icons.offset) { editor.startOffset() }
+        if (editor.outline != null) Chip("Project", Icons.project) { editor.projectOutline() }
         if (editor.selectedCorner != null) Chip("Round corner", Icons.fillet) { editor.startCornerFillet() }
         Chip("Construction", Icons.construction, active = editor.construction && !hasSelection) { editor.toggleConstruction() }
         if (hasSelection) Chip("Delete", Icons.delete, tint = Palette.orange) { editor.deleteSelection() }
@@ -160,16 +161,60 @@ private fun Chip(label: String, icon: ImageVector, active: Boolean = false, enab
 
 @Composable
 private fun ToolGrid(editor: SketchEditor) {
-    val tools = listOf(
+    val main = listOf(
         Triple(SketchTool.Select, "Select", Icons.select),
         Triple(SketchTool.Line, "Line", Icons.line),
         Triple(SketchTool.Rectangle, "Rectangle", Icons.rectangle),
         Triple(SketchTool.Circle, "Circle", Icons.circleTool),
         Triple(SketchTool.Arc, "Arc", Icons.arc),
-        Triple(SketchTool.Point, "Point", Icons.pointTool),
     )
+    val more = listOf(
+        Triple(SketchTool.Point, "Point", Icons.pointTool),
+        Triple(SketchTool.Spline, "Spline", Icons.spline),
+        Triple(SketchTool.Polygon, "Polygon", Icons.polygon),
+        Triple(SketchTool.Slot, "Slot", Icons.slot),
+    )
+    var showMore by remember { mutableStateOf(editor.tool in more.map { it.first }) }
     Surface(color = Palette.surface, shape = RoundedCornerShape(26.dp)) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 8.dp)) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 8.dp)) {
+            if (showMore) {
+                Row { ToolRow(editor, more) }
+                if (editor.tool == SketchTool.Polygon) Row(Modifier.padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Sides", Modifier.weight(1f), fontSize = 13.sp, color = Palette.muted)
+                    for (n in listOf(3, 4, 5, 6, 8, 12)) {
+                        Surface(
+                            onClick = { editor.polygonSides = n },
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (editor.polygonSides == n) Palette.line else Color.Transparent,
+                            contentColor = Palette.text,
+                        ) { Text("$n", Modifier.padding(horizontal = 10.dp, vertical = 6.dp), fontSize = 13.sp) }
+                    }
+                }
+            }
+            Row {
+                ToolRow(editor, main)
+                Surface(
+                    onClick = { showMore = !showMore },
+                    modifier = Modifier.weight(1f).height(64.dp),
+                    shape = RoundedCornerShape(20.dp),
+                    color = if (showMore) Palette.sketch.copy(alpha = 0.16f) else Color.Transparent,
+                    contentColor = Palette.text,
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                        Icon(Icons.more, null, Modifier.size(24.dp), tint = Palette.sketch)
+                        Spacer(Modifier.height(4.dp))
+                        Text("More", fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun androidx.compose.foundation.layout.RowScope.ToolRow(editor: SketchEditor, tools: List<Triple<SketchTool, String, ImageVector>>) {
+    run {
+        run {
             for ((tool, label, icon) in tools) {
                 val active = editor.tool == tool
                 Surface(

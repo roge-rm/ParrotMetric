@@ -76,6 +76,8 @@ fun FeaturePanel(editor: DesignEditor) {
                 is DesignEditor.CombineDraft -> CombineSettings(editor, d)
                 is DesignEditor.SplitDraft -> SplitSettings(editor, d)
                 is DesignEditor.MoveDraft -> MoveSettings(editor, d)
+                is DesignEditor.PlaneDraft -> PlaneSettings(editor, d)
+                is DesignEditor.AxisDraft -> AxisSettings(editor, d)
                 else -> {}
             }
             }
@@ -310,7 +312,15 @@ internal fun MirrorSettings(editor: DesignEditor, d: DesignEditor.MirrorDraft) {
 internal fun PatternSettings(editor: DesignEditor, d: DesignEditor.PatternDraft) {
     Header("Pattern", Icons.pattern, Palette.modify, bodiesLabel(d.bodies, "All bodies"))
     Segmented(listOf("In a row", "Round an axis"), if (d.circular) 1 else 0) { d.circular = it == 1; editor.draftChanged() }
-    AxisRow(if (d.circular) "Round" else "Along", d.axis, false) { d.axis = it!!; editor.draftChanged() }
+    val axes = editor.axisFeatures()
+    if (d.circular && axes.isNotEmpty()) {
+        val options = listOf<Int?>(null) + axes.map { it.id }
+        Segmented(listOf("Origin axis") + axes.map { it.name }, options.indexOf(d.axisFeature).coerceAtLeast(0)) {
+            d.axisFeature = options[it]
+            editor.draftChanged()
+        }
+    }
+    if (!d.circular || d.axisFeature == null) AxisRow(if (d.circular) "Round" else "Along", d.axis, false) { d.axis = it!!; editor.draftChanged() }
     NumberRow("Count", d.count, "", allowNegative = false) { d.count = it; editor.draftChanged() }
     if (d.circular) {
         NumberRow("Angle", d.degrees, "°", allowNegative = true) { d.degrees = it; editor.draftChanged() }
@@ -350,4 +360,38 @@ internal fun MoveSettings(editor: DesignEditor, d: DesignEditor.MoveDraft) {
     AxisRow("Turn round", d.axis, false) { d.axis = it!!; editor.draftChanged() }
     NumberRow("By", d.degrees, "°", allowNegative = true) { d.degrees = it; editor.draftChanged() }
     Toggle("Move a copy", d.copy) { d.copy = it; editor.draftChanged() }
+}
+
+@Composable
+internal fun PlaneSettings(editor: DesignEditor, d: DesignEditor.PlaneDraft) {
+    val title = when (d.kind) {
+        com.rm.parrotmetric.design.PlaneFeature.Kind.Offset -> "Offset plane"
+        com.rm.parrotmetric.design.PlaneFeature.Kind.Angle -> "Angled plane"
+        com.rm.parrotmetric.design.PlaneFeature.Kind.Midway -> "Midplane"
+    }
+    Header(title, Icons.plane, Palette.construct, null)
+    Text("From", fontSize = 13.sp, color = Palette.muted)
+    Segmented(d.planes.map { it.first }, d.planes.indexOfFirst { it.second == d.base }.coerceAtLeast(0)) { d.base = d.planes[it].second; editor.draftChanged() }
+    when (d.kind) {
+        com.rm.parrotmetric.design.PlaneFeature.Kind.Offset ->
+            NumberRow("Distance", d.offset, "mm", allowNegative = true) { d.offset = it; editor.draftChanged() }
+        com.rm.parrotmetric.design.PlaneFeature.Kind.Angle -> {
+            Segmented(listOf("Round its x", "Round its y"), if (d.turnRoundY) 1 else 0) { d.turnRoundY = it == 1; editor.draftChanged() }
+            NumberRow("Angle", d.degrees, "°", allowNegative = true) { d.degrees = it; editor.draftChanged() }
+        }
+        com.rm.parrotmetric.design.PlaneFeature.Kind.Midway -> {
+            Text("And", fontSize = 13.sp, color = Palette.muted)
+            val others = d.planes.filter { it.second != d.base }
+            Segmented(others.map { it.first }, others.indexOfFirst { it.second == d.other }) { d.other = others[it].second; editor.draftChanged() }
+        }
+    }
+}
+
+@Composable
+internal fun AxisSettings(editor: DesignEditor, d: DesignEditor.AxisDraft) {
+    Header("Axis", Icons.axis, Palette.construct, null)
+    AxisRow("Along", d.along, false) { d.along = it!!; editor.draftChanged() }
+    NumberRow("Through X", d.x, "mm", allowNegative = true) { d.x = it; editor.draftChanged() }
+    NumberRow("Y", d.y, "mm", allowNegative = true) { d.y = it; editor.draftChanged() }
+    NumberRow("Z", d.z, "mm", allowNegative = true) { d.z = it; editor.draftChanged() }
 }

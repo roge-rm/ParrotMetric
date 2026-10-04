@@ -236,4 +236,24 @@ class RebuildTest {
         r.clear()
         assertTrue(k.bodies.isEmpty())
     }
+
+    @Test
+    fun constructionPlanesCanBeBuiltOn() {
+        val d = Design()
+        val offset = PlaneFeature(d.newId(), "Plane 1", PlaneFeature.Kind.Offset, PlaneRef.Fixed(SketchPlane.Top), 15.0, 0.0, false, null)
+        d.add(offset)
+        val tilted = PlaneFeature(d.newId(), "Plane 2", PlaneFeature.Kind.Angle, PlaneRef.Fixed(SketchPlane.Top), 0.0, kotlin.math.PI / 2, false, null)
+        d.add(tilted)
+        val mid = PlaneFeature(d.newId(), "Plane 3", PlaneFeature.Kind.Midway, PlaneRef.Fixed(SketchPlane.Top), 0.0, 0.0, false, PlaneRef.Construction(offset.id))
+        d.add(mid)
+        val s = SketchFeature(d.newId(), "Sketch", PlaneRef.Construction(offset.id), Sketch())
+        d.add(s)
+        val built = Rebuilder(FakeKernel()).rebuild(d.active)
+        assertTrue(built.errors.isEmpty(), built.errors.toString())
+        assertEquals(15.0, built.sketchPlanes.getValue(s.id).origin.z)
+        assertEquals(7.5, built.sketchPlanes.getValue(mid.id).origin.z)
+        // The top plane turned a quarter round its x: its normal now lies along -y.
+        val n = built.sketchPlanes.getValue(tilted.id).normal
+        assertTrue(kotlin.math.abs(n.y + 1) < 1e-9 && kotlin.math.abs(n.z) < 1e-9, n.toString())
+    }
 }

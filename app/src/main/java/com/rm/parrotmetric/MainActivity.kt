@@ -165,7 +165,7 @@ class MainActivity : ComponentActivity() {
         override fun clearSelection() {
             Core.clearSelection()
             view?.requestRender()
-            state = state.copy(selectedFaces = 0, selectedEdges = 0, selectedAreas = 0)
+            state = state.copy(selectedFaces = 0, selectedEdges = 0, selectedAreas = 0, selectedPlanes = 0)
             design.selectionChanged()
         }
 
@@ -187,17 +187,9 @@ class MainActivity : ComponentActivity() {
 
         override fun startSketch(plane: SketchPlane?) {
             val name = design.nextSketchName()
-            val ref: PlaneRef
-            val p: SketchPlane
-            if (plane != null) {
-                ref = PlaneRef.Fixed(plane)
-                p = plane
-            } else {
-                ref = design.faceUnderSelection(state.yaw) ?: return
-                p = planeOnSelectedFace(ref as PlaneRef.OnFace, name) ?: return
-            }
+            val (ref, p) = if (plane != null) PlaneRef.Fixed(plane) to plane else design.sketchPlaneUnderSelection(state.yaw, name) ?: return
             newSketch = ref to name
-            openSketch(SketchEditor(p, name, Sketch(), coreRegionFinder))
+            openSketch(SketchEditor(p, name, Sketch(), coreRegionFinder, outlineFor(ref, p)))
         }
 
         override fun finishSketch() {
@@ -222,12 +214,15 @@ class MainActivity : ComponentActivity() {
                 val plane = design.planeOf(f) ?: return
                 design.checkpoint()
                 newSketch = null
-                openSketch(SketchEditor(plane, f.name, f.sketch, coreRegionFinder))
+                openSketch(SketchEditor(plane, f.name, f.sketch, coreRegionFinder, outlineFor(f.plane, plane)))
             } else {
                 design.edit(id)
             }
         }
     }
+
+    private fun outlineFor(ref: PlaneRef, plane: SketchPlane): (() -> List<com.rm.parrotmetric.sketch.ProfileCurve>?)? =
+        if (ref is PlaneRef.OnFace) ({ design.outlineOf(ref, plane) }) else null
 
     /** The plane a new sketch on the selected face gets: as the rebuild will place it. */
     private fun planeOnSelectedFace(ref: PlaneRef.OnFace, name: String): SketchPlane? {
@@ -261,7 +256,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         Core.setScratchDirectory(cacheDir.absolutePath)
         design = DesignEditor(CoreKernel, coreRegionFinder, CoreViewport { work -> view?.gl(work) }, lifecycleScope)
-        design.onShown = { state = state.copy(selectedFaces = 0, selectedEdges = 0, selectedAreas = 0) }
+        design.onShown = { state = state.copy(selectedFaces = 0, selectedEdges = 0, selectedAreas = 0, selectedPlanes = 0) }
         design.onHistoryChanged = ::scheduleAutosave
         // Carry on from where the last session left off.
         if (autosave.exists()) {
@@ -283,7 +278,7 @@ class MainActivity : ComponentActivity() {
                                     state = state.copy(yaw = camera.yaw, pitch = camera.pitch, camera = camera)
                                 },
                                 onSelection = { counts ->
-                                    state = state.copy(selectedFaces = counts[0], selectedEdges = counts[1], selectedAreas = counts[2])
+                                    state = state.copy(selectedFaces = counts[0], selectedEdges = counts[1], selectedAreas = counts[2], selectedPlanes = counts[3])
                                     design.selectionChanged()
                                 },
                             ).also { view = it }

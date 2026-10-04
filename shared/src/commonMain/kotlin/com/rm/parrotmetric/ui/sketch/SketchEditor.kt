@@ -12,11 +12,13 @@ import com.rm.parrotmetric.sketch.Curve
 import com.rm.parrotmetric.sketch.Expression
 import com.rm.parrotmetric.sketch.Line
 import com.rm.parrotmetric.sketch.Point
+import com.rm.parrotmetric.sketch.ProfileCurve
 import com.rm.parrotmetric.sketch.RegionFinder
 import com.rm.parrotmetric.sketch.Sketch
 import com.rm.parrotmetric.sketch.SketchPlane
 import com.rm.parrotmetric.sketch.SketchOps
 import com.rm.parrotmetric.sketch.SketchRegion
+import com.rm.parrotmetric.sketch.Spline
 import com.rm.parrotmetric.sketch.profileCurves
 import kotlin.math.PI
 import kotlin.math.abs
@@ -25,7 +27,7 @@ import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.sin
 
-enum class SketchTool { Select, Line, Rectangle, Circle, Arc, Point, Dimension, Trim, Extend }
+enum class SketchTool { Select, Line, Rectangle, Circle, Arc, Point, Spline, Polygon, Slot, Dimension, Trim, Extend }
 
 /** Something in a sketch that can be tapped and selected. */
 sealed class SketchItem {
@@ -69,7 +71,14 @@ class ConstraintChoice(val label: String, val make: () -> Constraint)
  * drawing in progress, and undo. Positions are in the sketch plane's mm; the
  * overlay converts touches and passes a snapping distance in mm.
  */
-class SketchEditor(val plane: SketchPlane, val name: String, val sketch: Sketch, private val finder: RegionFinder) {
+class SketchEditor(
+    val plane: SketchPlane,
+    val name: String,
+    val sketch: Sketch,
+    private val finder: RegionFinder,
+    /** The edges of the face it's on, for Project; null for a sketch that isn't on a face. */
+    val outline: (() -> List<ProfileCurve>?)? = null,
+) {
     /** Goes up whenever anything changes, so the overlay redraws. */
     var version by mutableIntStateOf(0)
         private set
@@ -118,8 +127,12 @@ class SketchEditor(val plane: SketchPlane, val name: String, val sketch: Sketch,
         version++
     }
 
-    /** Ends a chain of lines or a half-drawn shape; points it left on their own go. */
+    /** Ends a chain of lines or a half-drawn shape; points it left on their own go. A spline in progress is made. */
     fun endDrawing() {
+        if (tool == SketchTool.Spline && pending.size >= 2) {
+            sketch.addSpline(pending.toList(), construction)
+            placedForPending.clear()
+        }
         for (p in placedForPending) if (sketch.curves.none { p in it.points() } && sketch.constraints.none { p in it.points() }) sketch.removePoint(p)
         placedForPending.clear()
         pending.clear()
@@ -224,7 +237,13 @@ class SketchEditor(val plane: SketchPlane, val name: String, val sketch: Sketch,
         version++
     }
 
-    private fun isDrawing() = tool in setOf(SketchTool.Line, SketchTool.Rectangle, SketchTool.Circle, SketchTool.Arc, SketchTool.Point)
+    private fun isDrawing() = tool in setOf(
+        SketchTool.Line, SketchTool.Rectangle, SketchTool.Circle, SketchTool.Arc, SketchTool.Point,
+        SketchTool.Spline, SketchTool.Polygon, SketchTool.Slot,
+    )
+
+    /** How many sides the Polygon tool draws. */
+    var polygonSides by mutableIntStateOf(6)
 
     // Drawing.
 
@@ -312,9 +331,86 @@ class SketchEditor(val plane: SketchPlane, val name: String, val sketch: Sketch,
                     }
                 }
             }
+            SketchTool.Spline -> {
+                val first = pending.firstOrNull()
+                if (first == null) checkpoint()
+                if (s.point != null && s.point === pending.lastOrNull()) return
+                val p = placeForPending(s)
+                // Tapping the first point again closes the loop and finishes it.
+                if (p === first && pending.size >= 3) {
+                    sketch.addSpline(pending.toList() + p, construction)
+                    placedForPending.clear()
+                    pending.clear()
+                } else pending += p
+            }
+            SketchTool.Polygon -> {
+                val centre = pending.firstOrNull()
+                if (centre == null) {
+                    checkpoint()
+                    pending += placeForPending(s)
+                } else {
+                    val r = hypot(s.u - sketch.x(centre), s.v - sketch.y(centre))
+                    if (r < 1e-6) return
+                    checkpoint()
+                    polygon(centre, r, atan2(s.v - sketch.y(centre), s.u - sketch.x(centre)))
+                    placedForPending.clear()
+                    pending.clear()
+                }
+            }
+            SketchTool.Slot -> {
+                when (pending.size) {
+                    0 -> { checkpoint(); pending += placeForPending(s) }
+                    1 -> {
+                        if (s.point === pending[0]) return
+                        pending += placeForPending(s)
+                    }
+                    else -> {
+                        val a = pending[0]; val b = pending[1]
+                        // Half the width: how far the third tap is from the line between the centres.
+                        val dx = sketch.x(b) - sketch.x(a); val dy = sketch.y(b) - sketch.y(a)
+                        val len = hypot(dx, dy)
+                        val half = kotlin.math.abs(dx * (s.v - sketch.y(a)) - dy * (s.u - sketch.x(a))) / len
+                        if (half < 1e-6) return
+                        slot(a, b, half)
+                        placedForPending.clear()
+                        pending.clear()
+                    }
+                }
+            }
             else -> {}
         }
         changed()
+    }
+
+    /** A regular polygon round a construction circle, its corners on the circle and its sides equal. */
+    private fun polygon(centre: Point, r: Double, startAngle: Double) {
+        val n = polygonSides.coerceIn(3, 64)
+        val circle = sketch.addCircle(centre, r, construction = true)
+        val corners = (0 until n).map { i ->
+            val a = startAngle + 2 * PI * i / n
+            sketch.addPoint(sketch.x(centre) + r * cos(a), sketch.y(centre) + r * sin(a)).also { addQuietly(Constraint.OnCircle(it, circle)) }
+        }
+        val sides = (0 until n).map { i -> sketch.addLine(corners[i], corners[(i + 1) % n], construction) }
+        for (i in 1 until n) addQuietly(Constraint.Equal(sides[0], sides[i]))
+    }
+
+    /** A slot round two centres: an arc at each end joined by two straight sides. */
+    private fun slot(a: Point, b: Point, half: Double) {
+        val ax = sketch.x(a); val ay = sketch.y(a); val bx = sketch.x(b); val by = sketch.y(b)
+        val len = hypot(bx - ax, by - ay)
+        val nx = -(by - ay) / len * half; val ny = (bx - ax) / len * half
+        val a1 = sketch.addPoint(ax + nx, ay + ny); val a2 = sketch.addPoint(ax - nx, ay - ny)
+        val b1 = sketch.addPoint(bx + nx, by + ny); val b2 = sketch.addPoint(bx - nx, by - ny)
+        val endA = sketch.addArc(a, a1, a2, construction)
+        val endB = sketch.addArc(b, b2, b1, construction)
+        val side1 = sketch.addLine(a1, b1, construction)
+        val side2 = sketch.addLine(a2, b2, construction)
+        sketch.addLine(a, b, construction = true)
+        addQuietly(Constraint.TangentLine(side1, endA))
+        addQuietly(Constraint.TangentLine(side2, endA))
+        addQuietly(Constraint.TangentLine(side1, endB))
+        addQuietly(Constraint.TangentLine(side2, endB))
+        addQuietly(Constraint.Equal(endA, endB))
     }
 
     private fun placeForPending(s: Snap): Point {
@@ -387,6 +483,7 @@ class SketchEditor(val plane: SketchPlane, val name: String, val sketch: Sketch,
             if (t < 0 || t > 1) null else ax + t * dx to ay + t * dy
         }
         is Circle -> onCircle(sketch.x(c.centre), sketch.y(c.centre), sketch.radius(c), u, v)
+        is Spline -> sketch.sampleSpline(c).minByOrNull { hypot(it.first - u, it.second - v) }
         is Arc -> {
             val cx = sketch.x(c.centre); val cy = sketch.y(c.centre)
             if (onArc(c, atan2(v - cy, u - cx))) onCircle(cx, cy, sketch.radius(c), u, v) else null
@@ -450,6 +547,7 @@ class SketchEditor(val plane: SketchPlane, val name: String, val sketch: Sketch,
                 is Line -> DimensionEdit(null, { Constraint.Length(c, it) }, sketch.length(c), false, "Length")
                 is Circle -> DimensionEdit(null, { Constraint.Radius(c, true, it) }, 2 * sketch.radius(c), false, "Diameter")
                 is Arc -> DimensionEdit(null, { Constraint.Radius(c, false, it) }, sketch.radius(c), false, "Radius")
+                is Spline -> null
             }
         }
         if (points.size == 2) return DimensionEdit(null, { Constraint.Distance(points[0], points[1], it) }, sketch.distance(points[0], points[1]), false, "Distance")
@@ -531,6 +629,27 @@ class SketchEditor(val plane: SketchPlane, val name: String, val sketch: Sketch,
         version++
     }
 
+    /** Brings the face's edges into the sketch as fixed curves to draw against. */
+    fun projectOutline() {
+        val curves = outline?.invoke() ?: run { message = "The face's edges couldn't be found"; return }
+        checkpoint()
+        fun fixedPoint(u: Double, v: Double): Point {
+            sketch.points.firstOrNull { it !== sketch.origin && hypot(sketch.x(it) - u, sketch.y(it) - v) < 1e-6 }?.let { return it }
+            return sketch.addPoint(u, v).also { addQuietly(Constraint.Fixed(it, u, v)) }
+        }
+        for (c in curves) when (c.kind) {
+            ProfileCurve.Kind.Line -> sketch.addLine(fixedPoint(c.x1, c.y1), fixedPoint(c.x2, c.y2))
+            ProfileCurve.Kind.Circle -> sketch.addCircle(fixedPoint(c.x1, c.y1), c.r).also { addQuietly(Constraint.Radius(it, true, 2 * c.r)) }
+            ProfileCurve.Kind.Arc -> sketch.addArc(
+                fixedPoint(c.x1, c.y1),
+                fixedPoint(c.x1 + c.r * cos(c.a0), c.y1 + c.r * sin(c.a0)),
+                fixedPoint(c.x1 + c.r * cos(c.a1), c.y1 + c.r * sin(c.a1)),
+            )
+            ProfileCurve.Kind.Bezier -> {}
+        }
+        changed()
+    }
+
     // Offset and corner fillet, which ask for a number first.
 
     /** Curves selected, for offset. */
@@ -554,7 +673,7 @@ class SketchEditor(val plane: SketchPlane, val name: String, val sketch: Sketch,
     fun constraintChoices(): List<ConstraintChoice> {
         val points = selection.filterIsInstance<SketchItem.P>().map { it.point }
         val lines = selection.filterIsInstance<SketchItem.C>().map { it.curve }.filterIsInstance<Line>()
-        val rounds = selection.filterIsInstance<SketchItem.C>().map { it.curve }.filter { it !is Line }
+        val rounds = selection.filterIsInstance<SketchItem.C>().map { it.curve }.filter { it is Circle || it is Arc }
         val n = selection.size
         val out = mutableListOf<ConstraintChoice>()
         if (n == 1 && lines.size == 1) {
@@ -595,12 +714,14 @@ class SketchEditor(val plane: SketchPlane, val name: String, val sketch: Sketch,
         is Circle -> c.centre
         is Arc -> c.centre
         is Line -> c.a
+        is Spline -> c.through.first()
     }
 
     private fun sizeOf(c: Curve) = when (c) {
         is Circle -> sketch.radius(c)
         is Arc -> sketch.radius(c)
         is Line -> sketch.length(c)
+        is Spline -> 0.0
     }
 
     fun apply(choice: ConstraintChoice) {

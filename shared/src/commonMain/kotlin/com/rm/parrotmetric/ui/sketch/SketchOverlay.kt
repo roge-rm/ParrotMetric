@@ -34,6 +34,7 @@ import com.rm.parrotmetric.sketch.Constraint
 import com.rm.parrotmetric.sketch.Curve
 import com.rm.parrotmetric.sketch.Line
 import com.rm.parrotmetric.sketch.Point
+import com.rm.parrotmetric.sketch.Spline
 import com.rm.parrotmetric.ui.Palette
 import kotlin.math.PI
 import kotlin.math.abs
@@ -189,6 +190,11 @@ private fun DrawScope.drawSketch(editor: SketchEditor, proj: PlaneProjection, de
         drawCurve(c, editor, proj, colour, line * (if (SketchItem.C(c) in selected) 1.4f else 1f), effect)
     }
 
+    // A spline being drawn, through the points placed so far.
+    if (editor.tool == SketchTool.Spline && editor.pending.size >= 2 && editor.preview == null) {
+        drawPolyline(editor.pending.map { screen(it, editor, proj) }, free.copy(alpha = 0.9f), line, PathEffect.dashPathEffect(floatArrayOf(7 * dp, 6 * dp)))
+    }
+
     // Drawing in progress.
     editor.preview?.let { snap ->
         val end = proj.toScreen(snap.u, snap.v)
@@ -207,6 +213,21 @@ private fun DrawScope.drawSketch(editor: SketchEditor, proj: PlaneProjection, de
             SketchTool.Circle -> pending.firstOrNull()?.let {
                 val c = screen(it, editor, proj)
                 drawCircle(rubber, (end - c).getDistance(), c, style = Stroke(line, pathEffect = dash))
+            }
+            SketchTool.Spline -> if (pending.isNotEmpty()) {
+                val pts = pending.map { screen(it, editor, proj) } + end
+                drawPolyline(pts, rubber, line, dash)
+            }
+            SketchTool.Polygon -> pending.firstOrNull()?.let {
+                val cx = sketch.x(it); val cy = sketch.y(it)
+                val r = hypot(snap.u - cx, snap.v - cy)
+                val a0 = atan2(snap.v - cy, snap.u - cx)
+                val n = editor.polygonSides
+                drawPolyline((0..n).map { i -> val a = a0 + 2 * PI * i / n; proj.toScreen(cx + r * cos(a), cy + r * sin(a)) }, rubber, line, dash)
+            }
+            SketchTool.Slot -> if (pending.size >= 1) {
+                drawLine(rubber, screen(pending[0], editor, proj), if (pending.size == 2) screen(pending[1], editor, proj) else end, line, pathEffect = dash)
+                if (pending.size == 2) drawLine(rubber, screen(pending[1], editor, proj), end, line, pathEffect = dash)
             }
             SketchTool.Arc -> if (pending.size == 1) {
                 val c = screen(pending[0], editor, proj)
@@ -281,6 +302,7 @@ private fun centreOf(c: Curve): Point = when (c) {
     is Circle -> c.centre
     is Arc -> c.centre
     is Line -> c.a
+    is Spline -> c.through.first()
 }
 
 private fun screen(p: Point, editor: SketchEditor, proj: PlaneProjection) = proj.toScreen(editor.sketch.x(p), editor.sketch.y(p))
@@ -311,6 +333,7 @@ private fun DrawScope.drawCurve(c: Curve, editor: SketchEditor, proj: PlaneProje
             while (a1 <= a0) a1 += 2 * PI
             drawPolyline(arcPoints(cx, cy, s.radius(c), a0, a1).map { proj.toScreen(it.first, it.second) }, colour, width, effect)
         }
+        is Spline -> drawPolyline(s.sampleSpline(c).map { proj.toScreen(it.first, it.second) }, colour, width, effect)
     }
 }
 
@@ -380,6 +403,7 @@ private fun annotations(editor: SketchEditor, proj: PlaneProjection, dp: Float):
                     is Circle -> s.radius(curve)
                     is Arc -> s.radius(curve)
                     is Line -> s.length(curve)
+                    is Spline -> 0.0
                 }
                 val centre = proj.toScreen(cx, cy)
                 val rim = proj.toScreen(cx + r * cos(angle), cy + r * sin(angle))
@@ -391,7 +415,8 @@ private fun annotations(editor: SketchEditor, proj: PlaneProjection, dp: Float):
             }
             else -> {
                 // Glyphs sit beside the first line they're about, or beside the point.
-                val l = c.curves().firstOrNull { it is Line } as Line?
+                // Equal goes on the second, so a polygon's marks spread one to a side.
+                val l = (if (c is Constraint.Equal) c.curves().lastOrNull { it is Line } else c.curves().firstOrNull { it is Line }) as Line?
                 if (l != null) {
                     val n = stacked.getOrElse(l) { 0 }
                     stacked[l] = n + 1

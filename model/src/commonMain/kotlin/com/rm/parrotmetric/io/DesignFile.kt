@@ -1,7 +1,9 @@
 package com.rm.parrotmetric.io
 
 import com.rm.parrotmetric.design.Axis3
+import com.rm.parrotmetric.design.AxisFeature
 import com.rm.parrotmetric.design.AxisRef
+import com.rm.parrotmetric.design.PlaneFeature
 import com.rm.parrotmetric.design.CombineFeature
 import com.rm.parrotmetric.design.DraftFeature
 import com.rm.parrotmetric.design.HoleFeature
@@ -28,6 +30,7 @@ import com.rm.parrotmetric.sketch.Constraint
 import com.rm.parrotmetric.sketch.Line
 import com.rm.parrotmetric.sketch.Sketch
 import com.rm.parrotmetric.sketch.SketchPlane
+import com.rm.parrotmetric.sketch.Spline
 import com.rm.parrotmetric.sketch.Vec3
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
@@ -98,11 +101,17 @@ object DesignFile {
             is PatternFeature -> mapOf(
                 "type" to "pattern", "bodies" to f.bodies, "circular" to f.circular, "axis" to f.axis.name, "count" to f.count,
                 "spacing" to f.spacing, "angle" to f.angle, "axis2" to f.axis2?.name, "count2" to f.count2, "spacing2" to f.spacing2, "join" to f.join,
+                "axisFeature" to f.axisFeature,
             )
             is CombineFeature -> mapOf(
                 "type" to "combine", "target" to f.target, "tools" to f.tools, "operation" to f.operation.name, "keepTools" to f.keepTools,
             )
             is SplitFeature -> mapOf("type" to "split", "body" to f.body, "plane" to plane(f.plane))
+            is PlaneFeature -> mapOf(
+                "type" to "plane", "kind" to f.kind.name, "base" to plane(f.base), "offset" to f.offset, "angle" to f.angle,
+                "turnRoundY" to f.turnRoundY, "other" to f.other?.let { plane(it) },
+            )
+            is AxisFeature -> mapOf("type" to "axis", "x" to f.x, "y" to f.y, "z" to f.z, "along" to f.along.name)
             is MoveFeature -> mapOf(
                 "type" to "move", "bodies" to f.bodies, "dx" to f.dx, "dy" to f.dy, "dz" to f.dz, "axis" to f.axis.name, "angle" to f.angle, "copy" to f.copy,
             )
@@ -143,9 +152,15 @@ object DesignFile {
             "pattern" -> PatternFeature(
                 id, name, strings(o.arr("bodies")), o.bool("circular"), Axis3.valueOf(o.str("axis")), o.int("count"), o.num("spacing"), o.num("angle"),
                 (o["axis2"] as? Json.Str)?.let { Axis3.valueOf(it.value) }, o.int("count2"), o.num("spacing2"), o.bool("join"),
+                (o["axisFeature"] as? Json.Num)?.value?.toInt(),
             )
             "combine" -> CombineFeature(id, name, o.str("target"), strings(o.arr("tools")), Operation.valueOf(o.str("operation")), o.bool("keepTools"))
             "split" -> SplitFeature(id, name, o.str("body"), plane(o.obj("plane")))
+            "plane" -> PlaneFeature(
+                id, name, PlaneFeature.Kind.valueOf(o.str("kind")), plane(o.obj("base")), o.num("offset"), o.num("angle"),
+                o.bool("turnRoundY"), (o["other"] as? Json.Obj)?.let { plane(it) },
+            )
+            "axis" -> AxisFeature(id, name, o.num("x"), o.num("y"), o.num("z"), Axis3.valueOf(o.str("along")))
             "move" -> MoveFeature(
                 id, name, strings(o.arr("bodies")), o.num("dx"), o.num("dy"), o.num("dz"), Axis3.valueOf(o.str("axis")), o.num("angle"), o.bool("copy"),
             )
@@ -172,11 +187,14 @@ object DesignFile {
     private fun plane(p: PlaneRef): Map<String, Any?> = when (p) {
         is PlaneRef.Fixed -> mapOf("name" to p.plane.name, "origin" to vec(p.plane.origin), "x" to vec(p.plane.x), "y" to vec(p.plane.y))
         is PlaneRef.OnFace -> mapOf("face" to p.face, "x" to vec(p.x))
+        is PlaneRef.Construction -> mapOf("construction" to p.featureId)
     }
 
-    private fun plane(p: Json.Obj): PlaneRef =
-        if (p["face"] != null) PlaneRef.OnFace(p.str("face"), vec(p["x"]))
-        else PlaneRef.Fixed(SketchPlane(p.str("name"), vec(p["origin"]), vec(p["x"]), vec(p["y"])))
+    private fun plane(p: Json.Obj): PlaneRef = when {
+        p["construction"] != null -> PlaneRef.Construction(p.int("construction"))
+        p["face"] != null -> PlaneRef.OnFace(p.str("face"), vec(p["x"]))
+        else -> PlaneRef.Fixed(SketchPlane(p.str("name"), vec(p["origin"]), vec(p["x"]), vec(p["y"])))
+    }
 
     // Sketches: points, curves and constraints, each referring to the others by id.
 
@@ -187,6 +205,7 @@ object DesignFile {
                 is Line -> mapOf("type" to "line", "id" to c.id, "a" to c.a.id, "b" to c.b.id, "construction" to c.construction)
                 is Circle -> mapOf("type" to "circle", "id" to c.id, "centre" to c.centre.id, "r" to s.radius(c), "construction" to c.construction)
                 is Arc -> mapOf("type" to "arc", "id" to c.id, "centre" to c.centre.id, "start" to c.start.id, "end" to c.end.id, "construction" to c.construction)
+                is Spline -> mapOf("type" to "spline", "id" to c.id, "through" to c.through.map { it.id }, "construction" to c.construction)
             }
         },
         "constraints" to s.constraints.mapNotNull { constraint(it) },
@@ -232,6 +251,7 @@ object DesignFile {
                 "line" -> s.loadLine(id, pt(c, "a"), pt(c, "b"), cons)
                 "circle" -> s.loadCircle(id, pt(c, "centre"), c.num("r"), cons)
                 "arc" -> s.loadArc(id, pt(c, "centre"), pt(c, "start"), pt(c, "end"), cons)
+                "spline" -> s.loadSpline(id, c.arr("through").map { s.point((it as Json.Num).value.toInt()) ?: throw IllegalArgumentException("A sketch refers to a missing point") }, cons)
             }
         }
         fun line(c: Json.Obj, k: String) = s.curve(c.int(k)) as? Line ?: throw IllegalArgumentException("A sketch refers to a missing line")

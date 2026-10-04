@@ -61,3 +61,14 @@ TEST_CASE("two overlapping circles make three regions") {
 TEST_CASE("lines that don't close make no region") {
     CHECK(findRegions({line(1, 0, 0, 10, 0), line(2, 10, 0, 10, 10)}).empty());
 }
+
+TEST_CASE("a spline closing a shape with a line makes a region") {
+    // A curve over the top from (0,0) to (10,0), and a line back underneath.
+    SketchCurve b;
+    b.kind = SketchCurve::Bezier; b.id = 1;
+    b.x1 = 0; b.y1 = 0; b.cx1 = 0; b.cy1 = 8; b.cx2 = 10; b.cy2 = 8; b.x2 = 10; b.y2 = 0;
+    auto regions = findRegions({b, line(2, 10, 0, 0, 0)});
+    REQUIRE(regions.size() == 1);
+    // The area under it: the integral of y dx, 1440 times the integral of t²(1-t)², so 48.
+    CHECK(regions[0].area == Catch::Approx(48).epsilon(1e-3));
+}

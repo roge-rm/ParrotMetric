@@ -7,13 +7,16 @@ namespace pm {
 
 /** A sketch curve in the sketch plane's own x and y, in mm. Construction curves aren't passed in. */
 struct SketchCurve {
-    enum Kind { Line, Circle, Arc };
+    enum Kind { Line, Circle, Arc, Bezier };
     Kind kind = Line;
     int id = 0;
     // Line: from (x1, y1) to (x2, y2). Circle and arc: centre (x1, y1), radius r.
     double x1 = 0, y1 = 0, x2 = 0, y2 = 0, r = 0;
     // Arc: anticlockwise from angle a0 to a1, in radians.
     double a0 = 0, a1 = 0;
+    // Bezier: a cubic from (x1, y1) to (x2, y2) with control points (cx1, cy1) and (cx2, cy2).
+    // A spline is several of these with the same id.
+    double cx1 = 0, cy1 = 0, cx2 = 0, cy2 = 0;
 };
 
 /**

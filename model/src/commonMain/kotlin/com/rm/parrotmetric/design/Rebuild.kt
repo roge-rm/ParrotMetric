@@ -12,6 +12,8 @@ data class BodyState(val label: String, val handle: Long)
 /** What the history builds into. */
 class Built(
     val bodies: List<BodyState>,
+    /** Construction axes by feature id: a point on each and its direction. */
+    val axes: Map<Int, Pair<Vec3, Vec3>> = emptyMap(),
     /** Where each sketch ended up, by feature id. */
     val sketchPlanes: Map<Int, SketchPlane>,
     /** Why a feature couldn't be built, by feature id. */
@@ -33,6 +35,7 @@ class Rebuilder(private val kernel: Kernel) {
         val planes: Map<Int, SketchPlane>,
         val error: String?,
         val bodyCount: Int,
+        val axes: Map<Int, Pair<Vec3, Vec3>> = emptyMap(),
     )
 
     private val steps = mutableListOf<Step>()
@@ -59,6 +62,7 @@ class Rebuilder(private val kernel: Kernel) {
         val last = steps.lastOrNull()
         return Built(
             last?.bodies ?: emptyList(),
+            steps.fold(emptyMap()) { m, s -> m + s.axes },
             last?.planes ?: emptyMap(),
             steps.withIndex().mapNotNull { (i, s) -> s.error?.let { features[i].id to it } }.toMap(),
         )
@@ -76,9 +80,35 @@ class Rebuilder(private val kernel: Kernel) {
 
     private fun build(f: Feature, bodies: List<BodyState>, planes: Map<Int, SketchPlane>, made: Int, all: List<Feature>): Step = when (f) {
         is SketchFeature -> {
-            val plane = resolvePlane(f.plane, bodies, f.name)
+            val plane = resolvePlane(f.plane, bodies, f.name, planes)
             keep(bodies)
             Step(f.key(), bodies, planes + (f.id to plane), null, made)
+        }
+        is PlaneFeature -> {
+            val base = resolvePlane(f.base, bodies, f.name, planes)
+            val plane = when (f.kind) {
+                PlaneFeature.Kind.Offset -> base.copy(name = f.name, origin = base.origin + base.normal * f.offset)
+                PlaneFeature.Kind.Angle -> {
+                    // Turning round the base's own x (or y) through its origin.
+                    val axis = if (f.turnRoundY) base.y else base.x
+                    val r = Transforms.rotate(axis, f.angle)
+                    fun turn(v: Vec3) = Vec3(r[0] * v.x + r[1] * v.y + r[2] * v.z, r[4] * v.x + r[5] * v.y + r[6] * v.z, r[8] * v.x + r[9] * v.y + r[10] * v.z)
+                    SketchPlane(f.name, base.origin, turn(base.x), turn(base.y))
+                }
+                PlaneFeature.Kind.Midway -> {
+                    val other = resolvePlane(f.other ?: throw KernelException("Pick the second plane or face"), bodies, f.name, planes)
+                    if (kotlin.math.abs(kotlin.math.abs(base.normal.dot(other.normal)) - 1) > 1e-6) throw KernelException("The two aren't parallel")
+                    // Halfway along the base's normal to the other plane.
+                    val gap = (other.origin - base.origin).dot(base.normal)
+                    base.copy(name = f.name, origin = base.origin + base.normal * (gap / 2))
+                }
+            }
+            keep(bodies)
+            Step(f.key(), bodies, planes + (f.id to plane), null, made)
+        }
+        is AxisFeature -> {
+            keep(bodies)
+            Step(f.key(), bodies, planes, null, made, mapOf(f.id to (Vec3(f.x, f.y, f.z) to Transforms.unit(f.along))))
         }
         is ExtrudeFeature -> {
             val sketch = sketchOf(f.sketchId, all)
@@ -119,12 +149,15 @@ class Rebuilder(private val kernel: Kernel) {
             applyTool(f, tool, Operation.Cut, bodies, planes, made)
         }
         is MirrorFeature -> {
-            val plane = resolvePlane(f.plane, bodies, f.name)
+            val plane = resolvePlane(f.plane, bodies, f.name, planes)
             val m = Transforms.mirror(plane.origin, plane.normal)
             copies(f, bodies, planes, made, picked(f.bodies, bodies), f.join) { b -> listOf(kernel.transform(f.id, b.handle, m, "m")) }
         }
         is PatternFeature -> {
-            val mats = patternMatrices(f)
+            val axis = f.axisFeature?.let { id ->
+                steps.firstNotNullOfOrNull { it.axes[id] } ?: throw KernelException("Its axis has been deleted")
+            }
+            val mats = patternMatrices(f, axis)
             copies(f, bodies, planes, made, picked(f.bodies, bodies), f.join) { b ->
                 mats.mapIndexed { i, m -> kernel.transform(f.id, b.handle, m, "p$i") }
             }
@@ -132,7 +165,7 @@ class Rebuilder(private val kernel: Kernel) {
         is CombineFeature -> combineBodies(f, bodies, planes, made)
         is SplitFeature -> {
             val body = bodies.firstOrNull { it.label == f.body } ?: throw KernelException("${f.body} isn't there any more")
-            val plane = resolvePlane(f.plane, bodies, f.name)
+            val plane = resolvePlane(f.plane, bodies, f.name, planes)
             val pieces = kernel.split(f.id, body.handle, plane.origin, plane.normal)
             val out = mutableListOf<BodyState>()
             var count = made
@@ -215,13 +248,20 @@ class Rebuilder(private val kernel: Kernel) {
         return Step(f.key(), out + added, planes, null, count)
     }
 
-    private fun patternMatrices(f: PatternFeature): List<DoubleArray> {
+    private fun patternMatrices(f: PatternFeature, axis: Pair<Vec3, Vec3>?): List<DoubleArray> {
         if (f.count < 1 || f.count > 500 || f.count2 < 1 || f.count2 > 500) throw KernelException("Use between 1 and 500 copies")
         val out = mutableListOf<DoubleArray>()
         if (f.circular) {
             val full = kotlin.math.abs(kotlin.math.abs(f.angle) - 2 * kotlin.math.PI) < 1e-9
             val step = if (full) f.angle / f.count else f.angle / (f.count - 1).coerceAtLeast(1)
-            for (i in 1 until f.count) out += Transforms.rotate(Transforms.unit(f.axis), step * i)
+            for (i in 1 until f.count) {
+                if (axis == null) out += Transforms.rotate(Transforms.unit(f.axis), step * i)
+                else {
+                    // Round an axis through a point: move the point to the origin, turn, and move back.
+                    val (p, d) = axis
+                    out += Transforms.then(Transforms.then(Transforms.translate(-p), Transforms.rotate(d, step * i)), Transforms.translate(p))
+                }
+            }
         } else {
             val d1 = Transforms.unit(f.axis)
             val d2 = f.axis2?.let { Transforms.unit(it) }
@@ -266,8 +306,9 @@ class Rebuilder(private val kernel: Kernel) {
     private fun sketchOf(id: Int, all: List<Feature>): SketchFeature =
         all.firstOrNull { it.id == id } as? SketchFeature ?: throw KernelException("Its sketch has been deleted")
 
-    private fun resolvePlane(ref: PlaneRef, bodies: List<BodyState>, name: String): SketchPlane = when (val p = ref) {
+    private fun resolvePlane(ref: PlaneRef, bodies: List<BodyState>, name: String, planes: Map<Int, SketchPlane>): SketchPlane = when (val p = ref) {
         is PlaneRef.Fixed -> p.plane
+        is PlaneRef.Construction -> planes[p.featureId] ?: throw KernelException("Its plane has been deleted")
         is PlaneRef.OnFace -> {
             val body = bodies.firstOrNull { p.face in kernel.faceNames(it.handle) }
                 ?: throw KernelException("The face it's on isn't there any more")

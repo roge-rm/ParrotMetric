@@ -23,6 +23,9 @@ sealed class PlaneRef {
 
     /** On a face, with its x along [x] as far as the face allows. */
     data class OnFace(val face: String, val x: Vec3) : PlaneRef()
+
+    /** A construction plane made earlier in the history. */
+    data class Construction(val featureId: Int) : PlaneRef()
 }
 
 class SketchFeature(override val id: Int, override val name: String, val plane: PlaneRef, val sketch: Sketch) : Feature() {

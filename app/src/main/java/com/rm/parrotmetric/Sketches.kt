@@ -8,14 +8,15 @@ import com.rm.parrotmetric.sketch.ProfileCurve
 import com.rm.parrotmetric.sketch.RegionFinder
 import com.rm.parrotmetric.sketch.SketchPlane
 import com.rm.parrotmetric.sketch.SketchRegion
+import com.rm.parrotmetric.sketch.Vec3
 import com.rm.parrotmetric.ui.design.Viewport
 
-/** Curves as the core takes them: kinds, ids, and seven numbers each. */
+/** Curves as the core takes them: kinds, ids, and eleven numbers each (see curvesOf in jni.cpp). */
 private class Curves(curves: List<ProfileCurve>) {
     val kinds = IntArray(curves.size) { curves[it].kind.ordinal }
     val ids = IntArray(curves.size) { curves[it].id }
-    val nums = DoubleArray(curves.size * 7).also { n ->
-        curves.forEachIndexed { i, c -> doubleArrayOf(c.x1, c.y1, c.x2, c.y2, c.r, c.a0, c.a1).copyInto(n, i * 7) }
+    val nums = DoubleArray(curves.size * 11).also { n ->
+        curves.forEachIndexed { i, c -> doubleArrayOf(c.x1, c.y1, c.x2, c.y2, c.r, c.a0, c.a1, c.cx1, c.cy1, c.cx2, c.cy2).copyInto(n, i * 11) }
     }
 }
 
@@ -88,12 +89,29 @@ object CoreKernel : Kernel {
 
 /** The 3D view's side of the design editor. [gl] runs a call on the GL thread. */
 class CoreViewport(private val gl: (() -> Unit) -> Unit) : Viewport {
-    override fun show(bodies: List<Long>, sketches: List<Pair<SketchPlane, List<ProfileCurve>>>, refit: Boolean) {
+    override fun show(
+        bodies: List<Long>, sketches: List<Pair<SketchPlane, List<ProfileCurve>>>,
+        planes: List<SketchPlane>, axes: List<Pair<Vec3, Vec3>>, refit: Boolean,
+    ) {
         val all = sketches.flatMap { it.second }
         val c = Curves(all)
-        val planes = sketches.flatMap { it.first.numbers().asList() }.toDoubleArray()
-        Core.show(bodies.toLongArray(), planes, IntArray(sketches.size) { sketches[it].second.size }, c.kinds, c.ids, c.nums, refit)
+        val sketchPlanes = sketches.flatMap { it.first.numbers().asList() }.toDoubleArray()
+        val construction = planes.flatMap { it.numbers().asList() }.toDoubleArray()
+        val axisNumbers = axes.flatMap { (p, d) -> listOf(p.x, p.y, p.z, d.x, d.y, d.z) }.toDoubleArray()
+        Core.show(bodies.toLongArray(), sketchPlanes, IntArray(sketches.size) { sketches[it].second.size }, c.kinds, c.ids, c.nums, construction, axisNumbers, refit)
         gl {}
+    }
+
+    override fun selectedPlanes() = Core.selectedPlanes().toList()
+
+    override fun faceOutline(body: Long, face: String, plane: SketchPlane): List<ProfileCurve> {
+        val d = Core.faceOutline(body, face, plane.numbers())
+        return List(d[0].toInt()) { i ->
+            val o = 1 + i * 12
+            ProfileCurve(
+                ProfileCurve.Kind.entries[d[o].toInt()], 0, d[o + 1], d[o + 2], d[o + 3], d[o + 4], d[o + 5], d[o + 6], d[o + 7],
+            )
+        }
     }
 
     override fun selectedEdges() = Core.selectedEdges().toList()
