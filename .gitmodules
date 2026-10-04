@@ -1,0 +1,16 @@
+[submodule "third_party/occt"]
+	path = third_party/occt
+	url = https://github.com/Open-Cascade-SAS/OCCT.git
+	shallow = true
+[submodule "third_party/eigen"]
+	path = third_party/eigen
+	url = https://gitlab.com/libeigen/eigen.git
+	shallow = true
+[submodule "third_party/catch2"]
+	path = third_party/catch2
+	url = https://github.com/catchorg/Catch2.git
+	shallow = true
+[submodule "third_party/manifold"]
+	path = third_party/manifold
+	url = https://github.com/elalish/manifold.git
+	shallow = true
