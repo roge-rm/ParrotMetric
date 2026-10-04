@@ -56,6 +56,10 @@ interface NativeCore {
     fun shownTriangles(): Int
     /** Selects or unselects what's under the point. Returns selected face, edge, sketch region and plane counts. GL thread. */
     fun tap(x: Float, y: Float): IntArray
+    /** A click: selects what's under the point in place of the selection, or with add, adds or removes it. Counts as [tap]. GL thread. */
+    fun click(x: Float, y: Float, add: Boolean): IntArray
+    /** Selects what's in a screen box: partly in it with crossing, else wholly inside. Counts as [tap]. GL thread. */
+    fun selectBox(x0: Float, y0: Float, x1: Float, y1: Float, crossing: Boolean, add: Boolean): IntArray
     fun clearSelection()
     fun selectedEdges(): Array<String>
     /** "body number\tface name" each. */
@@ -76,6 +80,8 @@ interface NativeCore {
     fun orbit(dx: Float, dy: Float)
     fun pan(dx: Float, dy: Float)
     fun zoom(factor: Float)
+    /** Zooms towards the point under (x, y), which stays put. */
+    fun zoomAt(factor: Float, x: Float, y: Float)
     fun fit()
     /** Turns to look from a direction: yaw round Z from +X and pitch up, in radians. */
     fun viewFrom(yaw: Float, pitch: Float)

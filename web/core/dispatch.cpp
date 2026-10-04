@@ -37,6 +37,8 @@ JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_setSection(JNIEnv*, jobject
 JNIEXPORT jdoubleArray JNICALL Java_com_rm_parrotmetric_Core_faceOutline(JNIEnv*, jobject, jlong, jstring, jdoubleArray);
 JNIEXPORT jint JNICALL Java_com_rm_parrotmetric_Core_shownTriangles(JNIEnv*, jobject);
 JNIEXPORT jintArray JNICALL Java_com_rm_parrotmetric_Core_tap(JNIEnv*, jobject, jfloat, jfloat);
+JNIEXPORT jintArray JNICALL Java_com_rm_parrotmetric_Core_click(JNIEnv*, jobject, jfloat, jfloat, jboolean);
+JNIEXPORT jintArray JNICALL Java_com_rm_parrotmetric_Core_selectBox(JNIEnv*, jobject, jfloat, jfloat, jfloat, jfloat, jboolean, jboolean);
 JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_clearSelection(JNIEnv*, jobject);
 JNIEXPORT jobjectArray JNICALL Java_com_rm_parrotmetric_Core_selectedEdges(JNIEnv*, jobject);
 JNIEXPORT jobjectArray JNICALL Java_com_rm_parrotmetric_Core_selectedFaces(JNIEnv*, jobject);
@@ -50,6 +52,7 @@ JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_setDensity(JNIEnv*, jobject
 JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_orbit(JNIEnv*, jobject, jfloat, jfloat);
 JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_pan(JNIEnv*, jobject, jfloat, jfloat);
 JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_zoom(JNIEnv*, jobject, jfloat);
+JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_zoomAt(JNIEnv*, jobject, jfloat, jfloat, jfloat);
 JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_fit(JNIEnv*, jobject);
 JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_viewFrom(JNIEnv*, jobject, jfloat, jfloat);
 JNIEXPORT jfloatArray JNICALL Java_com_rm_parrotmetric_Core_cameraState(JNIEnv*, jobject);
@@ -332,33 +335,52 @@ void dispatch(int call, Reader& in, Writer& out, JNIEnv* env) {
             if (!failed()) out.put(r);
             break;
         }
-        case 33: {  // clearSelection
+        case 33: {  // click
+            auto a0 = in.f32();
+            auto a1 = in.f32();
+            auto a2 = in.boolean();
+            auto r = Java_com_rm_parrotmetric_Core_click(env, nullptr, a0, a1, a2);
+            if (!failed()) out.put(r);
+            break;
+        }
+        case 34: {  // selectBox
+            auto a0 = in.f32();
+            auto a1 = in.f32();
+            auto a2 = in.f32();
+            auto a3 = in.f32();
+            auto a4 = in.boolean();
+            auto a5 = in.boolean();
+            auto r = Java_com_rm_parrotmetric_Core_selectBox(env, nullptr, a0, a1, a2, a3, a4, a5);
+            if (!failed()) out.put(r);
+            break;
+        }
+        case 35: {  // clearSelection
             Java_com_rm_parrotmetric_Core_clearSelection(env, nullptr);
             break;
         }
-        case 34: {  // selectedEdges
+        case 36: {  // selectedEdges
             auto r = Java_com_rm_parrotmetric_Core_selectedEdges(env, nullptr);
             if (!failed()) out.put(r);
             break;
         }
-        case 35: {  // selectedFaces
+        case 37: {  // selectedFaces
             auto r = Java_com_rm_parrotmetric_Core_selectedFaces(env, nullptr);
             if (!failed()) out.put(r);
             break;
         }
-        case 36: {  // selectedRegions
+        case 38: {  // selectedRegions
             auto r = Java_com_rm_parrotmetric_Core_selectedRegions(env, nullptr);
             if (!failed()) out.put(r);
             break;
         }
-        case 37: {  // select
+        case 39: {  // select
             auto a0 = in.strings();
             auto a1 = in.ints();
             auto a2 = in.strings();
             Java_com_rm_parrotmetric_Core_select(env, nullptr, a0, a1, a2);
             break;
         }
-        case 38: {  // findRegions
+        case 40: {  // findRegions
             auto a0 = in.ints();
             auto a1 = in.ints();
             auto a2 = in.doubles();
@@ -366,54 +388,61 @@ void dispatch(int call, Reader& in, Writer& out, JNIEnv* env) {
             if (!failed()) out.put(r);
             break;
         }
-        case 39: {  // surfaceCreated
+        case 41: {  // surfaceCreated
             Java_com_rm_parrotmetric_Core_surfaceCreated(env, nullptr);
             break;
         }
-        case 40: {  // surfaceChanged
+        case 42: {  // surfaceChanged
             auto a0 = in.i32();
             auto a1 = in.i32();
             Java_com_rm_parrotmetric_Core_surfaceChanged(env, nullptr, a0, a1);
             break;
         }
-        case 41: {  // drawFrame
+        case 43: {  // drawFrame
             auto r = Java_com_rm_parrotmetric_Core_drawFrame(env, nullptr);
             if (!failed()) out.put(r);
             break;
         }
-        case 42: {  // setDensity
+        case 44: {  // setDensity
             auto a0 = in.f32();
             Java_com_rm_parrotmetric_Core_setDensity(env, nullptr, a0);
             break;
         }
-        case 43: {  // orbit
+        case 45: {  // orbit
             auto a0 = in.f32();
             auto a1 = in.f32();
             Java_com_rm_parrotmetric_Core_orbit(env, nullptr, a0, a1);
             break;
         }
-        case 44: {  // pan
+        case 46: {  // pan
             auto a0 = in.f32();
             auto a1 = in.f32();
             Java_com_rm_parrotmetric_Core_pan(env, nullptr, a0, a1);
             break;
         }
-        case 45: {  // zoom
+        case 47: {  // zoom
             auto a0 = in.f32();
             Java_com_rm_parrotmetric_Core_zoom(env, nullptr, a0);
             break;
         }
-        case 46: {  // fit
+        case 48: {  // zoomAt
+            auto a0 = in.f32();
+            auto a1 = in.f32();
+            auto a2 = in.f32();
+            Java_com_rm_parrotmetric_Core_zoomAt(env, nullptr, a0, a1, a2);
+            break;
+        }
+        case 49: {  // fit
             Java_com_rm_parrotmetric_Core_fit(env, nullptr);
             break;
         }
-        case 47: {  // viewFrom
+        case 50: {  // viewFrom
             auto a0 = in.f32();
             auto a1 = in.f32();
             Java_com_rm_parrotmetric_Core_viewFrom(env, nullptr, a0, a1);
             break;
         }
-        case 48: {  // cameraState
+        case 51: {  // cameraState
             auto r = Java_com_rm_parrotmetric_Core_cameraState(env, nullptr);
             if (!failed()) out.put(r);
             break;

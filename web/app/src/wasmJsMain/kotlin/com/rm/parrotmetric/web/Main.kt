@@ -32,6 +32,7 @@ import com.rm.parrotmetric.app.FileSink
 import com.rm.parrotmetric.app.PlatformFiles
 import com.rm.parrotmetric.ui.LaunchSplash
 import com.rm.parrotmetric.ui.ModelScreen
+import com.rm.parrotmetric.ui.SelectionBox
 import com.rm.parrotmetric.ui.ViewControls
 import com.rm.parrotmetric.ui.viewGestures
 import kotlinx.coroutines.channels.Channel
@@ -178,14 +179,22 @@ private fun WebApp() {
                 app.selectionChanged(WebCore.tap(x, y))
                 if (double) WebCore.fit()
             }
+            override fun zoomAt(factor: Float, x: Float, y: Float) = view.gl { WebCore.zoomAt(factor, x, y) }
+            override fun fit() = view.gl { WebCore.fit() }
+            override fun click(x: Float, y: Float, add: Boolean) = view.gl { app.selectionChanged(WebCore.click(x, y, add)) }
+            override fun box(rect: androidx.compose.ui.geometry.Rect, crossing: Boolean, add: Boolean) =
+                view.gl { app.selectionChanged(WebCore.selectBox(rect.left, rect.top, rect.right, rect.bottom, crossing, add)) }
+            override fun menu(x: Float, y: Float) = app.openMenu(x, y)
         }
     }
+    var box by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
     Box(Modifier.fillMaxSize()) {
     ModelScreen(
         viewport = {
-            Box(Modifier.fillMaxSize().onSizeChanged { view.resize(it.width, it.height) }.viewGestures(controls)) {
+            Box(Modifier.fillMaxSize().onSizeChanged { view.resize(it.width, it.height) }.viewGestures(controls) { box = it }) {
                 // A hole through the page's canvas to the 3D canvas under it.
                 Canvas(Modifier.fillMaxSize()) { drawRect(Color.Transparent, blendMode = BlendMode.Clear) }
+                SelectionBox(box)
                 view.problem?.let { Text("No 3D view: $it", Modifier.align(Alignment.Center).padding(24.dp), color = Color(0xFFE8DCC8)) }
             }
         },

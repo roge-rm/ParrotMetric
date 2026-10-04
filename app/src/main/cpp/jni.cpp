@@ -229,6 +229,14 @@ pm::DisplayMesh displaySketch(const gp_Ax3& plane, const std::vector<pm::SketchC
 }
 
 /** Selected faces, edges, sketch areas and construction planes, counted. */
+/** What a pick selects: sketch areas but not sketch lines, and planes by their square but not axes or outlines. */
+pm::Pick pickable(pm::Pick p) {
+    if (p.kind == pm::Pick::None || p.body >= shown.size()) return {};
+    if (shown[p.body].sketch && p.kind == pm::Pick::Edge) return {};
+    if (shown[p.body].plane != -1 && (shown[p.body].plane == -2 || p.kind == pm::Pick::Edge)) return {};
+    return p;
+}
+
 jintArray selectionCounts(JNIEnv* env) {
     jint counts[4] = {0, 0, 0, 0};
     for (const auto& p : selection) {
@@ -900,19 +908,47 @@ JNIEXPORT jint JNICALL Java_com_rm_parrotmetric_Core_shownTriangles(JNIEnv*, job
  */
 JNIEXPORT jintArray JNICALL Java_com_rm_parrotmetric_Core_tap(JNIEnv* env, jobject, jfloat x, jfloat y) {
     std::lock_guard<std::mutex> g(lock);
-    pm::Pick p = renderer.pick(x, y);
-    // Sketch lines aren't picked in 3D; their regions are.
-    if (p.kind != pm::Pick::None && p.body < shown.size() && shown[p.body].sketch && p.kind == pm::Pick::Edge) p.kind = pm::Pick::None;
-    if (p.kind != pm::Pick::None && p.body < shown.size() && shown[p.body].plane != -1) {
-        // A plane is picked by its square; axes and plane outlines aren't picked.
-        if (shown[p.body].plane == -2 || p.kind == pm::Pick::Edge) p.kind = pm::Pick::None;
-    }
+    pm::Pick p = pickable(renderer.pick(x, y));
     if (p.kind == pm::Pick::None) {
         selection.clear();
     } else {
         auto it = std::find(selection.begin(), selection.end(), p);
         if (it != selection.end()) selection.erase(it);
         else selection.push_back(p);
+    }
+    renderer.setSelection(selection);
+    return selectionCounts(env);
+}
+
+/** A click: selects what's under the point in place of the selection, or with add, adds it or takes it out. */
+JNIEXPORT jintArray JNICALL Java_com_rm_parrotmetric_Core_click(JNIEnv* env, jobject, jfloat x, jfloat y, jboolean add) {
+    std::lock_guard<std::mutex> g(lock);
+    pm::Pick p = pickable(renderer.pick(x, y));
+    auto it = std::find(selection.begin(), selection.end(), p);
+    if (!add) {
+        selection.clear();
+        if (p.kind != pm::Pick::None) selection.push_back(p);
+    } else if (p.kind != pm::Pick::None) {
+        if (it != selection.end()) selection.erase(it);
+        else selection.push_back(p);
+    }
+    renderer.setSelection(selection);
+    return selectionCounts(env);
+}
+
+/**
+ * Selects what's in a screen box: with crossing, anything partly in it;
+ * else what's wholly inside. In place of the selection, or added with add.
+ */
+JNIEXPORT jintArray JNICALL Java_com_rm_parrotmetric_Core_selectBox(JNIEnv* env, jobject, jfloat x0, jfloat y0, jfloat x1, jfloat y1,
+                                                                   jboolean crossing, jboolean add) {
+    std::lock_guard<std::mutex> g(lock);
+    if (!add) selection.clear();
+    for (pm::Pick p : renderer.pickBox(x0, y0, x1, y1, crossing)) {
+        p = pickable(p);
+        // Construction planes only by tapping them.
+        if (p.kind == pm::Pick::None || shown[p.body].plane >= 0) continue;
+        if (std::find(selection.begin(), selection.end(), p) == selection.end()) selection.push_back(p);
     }
     renderer.setSelection(selection);
     return selectionCounts(env);
@@ -1243,6 +1279,12 @@ JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_pan(JNIEnv*, jobject, jfloa
 JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_zoom(JNIEnv*, jobject, jfloat f) {
     std::lock_guard<std::mutex> g(lock);
     renderer.zoom(f);
+}
+
+/** Zooms towards the point under (x, y), screen pixels, which stays put. */
+JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_zoomAt(JNIEnv*, jobject, jfloat f, jfloat x, jfloat y) {
+    std::lock_guard<std::mutex> g(lock);
+    renderer.zoomAt(f, x, y);
 }
 
 JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_fit(JNIEnv*, jobject) {

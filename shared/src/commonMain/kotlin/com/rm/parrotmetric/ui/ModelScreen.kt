@@ -41,6 +41,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -75,6 +79,8 @@ data class ModelState(
     val camera: CameraState? = null,
     /** The sketch being edited, if any. */
     val sketch: SketchEditor? = null,
+    /** Where the right-click menu is open, in pixels on the view, or null. */
+    val menu: Offset? = null,
 )
 
 /** What the model screen asks the platform to do. */
@@ -89,11 +95,14 @@ interface ModelActions {
     fun viewFrom(yaw: Float, pitch: Float)
     fun pan(dx: Float, dy: Float)
     fun zoom(factor: Float)
+    /** Zooms towards the point under (x, y), pixels on the view, which stays put. */
+    fun zoomAt(factor: Float, x: Float, y: Float)
     /** Starts a sketch on a plane, or on the selected flat face when plane is null. */
     fun startSketch(plane: SketchPlane?)
     fun finishSketch()
     /** Opens a step of the history to change it. */
     fun openHistory(id: Int)
+    fun closeMenu()
 }
 
 /**
@@ -120,8 +129,9 @@ fun ModelScreen(
         // The view stays put while the controls over it change, so it keeps its GL context.
         Box(if (seeThrough) Modifier.fillMaxSize() else Modifier.fillMaxSize().background(Palette.ground)) {
             viewport()
+            state.menu?.let { at -> SelectionMenu(at, ToolContext(state, design, actions) { sheet = it }, actions::closeMenu) }
             if (sketch != null) {
-                state.camera?.let { SketchOverlay(sketch, PlaneProjection(it, sketch.plane), actions::pan, actions::zoom) }
+                state.camera?.let { SketchOverlay(sketch, PlaneProjection(it, sketch.plane), actions::pan, actions::zoom, actions::zoomAt) }
                 Column(Modifier.fillMaxSize().safeDrawingPadding()) {
                     SketchTopBar(sketch, actions::finishSketch)
                     Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -353,58 +363,11 @@ private fun GroupBar(open: ToolGroup?, onGroup: (ToolGroup) -> Unit) {
 }
 
 /** A tool in a group's sheet. A null action means it isn't built yet and shows greyed out. */
-private class Tool(val label: String, val icon: ImageVector, val action: (() -> Unit)?)
-
 @Composable
 private fun ToolSheet(group: ToolGroup, state: ModelState, design: DesignEditor, actions: ModelActions, onSheet: (String) -> Unit, close: () -> Unit) {
     var meshTools by remember(group) { mutableStateOf(false) }
-    val oneFace = (state.selectedFaces == 1 && state.selectedPlanes == 0 || state.selectedPlanes == 1 && state.selectedFaces == 0) && state.selectedEdges == 0
-    val tools = when (group) {
-        ToolGroup.Sketch -> listOf(
-            Tool("Top", Icons.plane) { actions.startSketch(SketchPlane.Top) },
-            Tool("Front", Icons.plane) { actions.startSketch(SketchPlane.Front) },
-            Tool("Right", Icons.plane) { actions.startSketch(SketchPlane.Right) },
-            Tool("On selected", Icons.sketch, if (oneFace) ({ actions.startSketch(null) }) else null),
-        )
-        ToolGroup.Create -> listOf(
-            Tool("Extrude", Icons.extrude) { design.startExtrude() },
-            Tool("Revolve", Icons.revolve) { design.startRevolve() },
-            Tool("Open", Icons.open) { actions.openFile() },
-        )
-        ToolGroup.Modify -> if (meshTools) listOf(
-            Tool("Plane cut", Icons.cut) { design.startPlaneCut() },
-            Tool("To solid", Icons.convert) { design.startConvert() },
-            Tool("Split", Icons.cut) { design.startSplit() },
-            Tool("Combine", Icons.combine) { design.startCombine() },
-            Tool("Mirror", Icons.mirror) { design.startMirror() },
-            Tool("Move", Icons.move) { design.startMove() },
-            Tool("Pattern", Icons.pattern) { design.startPattern() },
-            Tool("Hole", Icons.hole) { design.startHole() },
-        ) else listOf(
-            Tool("Fillet", Icons.fillet) { design.startFillet() },
-            Tool("Chamfer", Icons.chamfer) { design.startChamfer() },
-            Tool("Shell", Icons.shell) { design.startShell() },
-            Tool("Hole", Icons.hole) { design.startHole() },
-            Tool("Draft", Icons.draft) { design.startDraft() },
-            Tool("Mirror", Icons.mirror) { design.startMirror() },
-            Tool("Pattern", Icons.pattern) { design.startPattern() },
-            Tool("Combine", Icons.combine) { design.startCombine() },
-            Tool("Split", Icons.cut) { design.startSplit() },
-            Tool("Move", Icons.move) { design.startMove() },
-        )
-        ToolGroup.Construct -> listOf(
-            Tool("Offset plane", Icons.plane) { design.startPlane(com.rm.parrotmetric.design.PlaneFeature.Kind.Offset) },
-            Tool("Angled plane", Icons.plane) { design.startPlane(com.rm.parrotmetric.design.PlaneFeature.Kind.Angle) },
-            Tool("Midplane", Icons.plane) { design.startPlane(com.rm.parrotmetric.design.PlaneFeature.Kind.Midway) },
-            Tool("Axis", Icons.axis) { design.startAxis() },
-            Tool("Point", Icons.pointTool) { design.startPoint() },
-        )
-        ToolGroup.Inspect -> listOf(
-            Tool("Measure", Icons.measure) { design.startMeasuring(); onSheet("measure") },
-            Tool("Section", Icons.section) { design.startSection(); onSheet("section") },
-            Tool("Parameters", Icons.parameters) { onSheet("parameters") },
-        )
-    }
+    val context = ToolContext(state, design, actions, onSheet)
+    val tools = Tools.inGroup(group, meshTools)
     Surface(color = Palette.surface, shape = RoundedCornerShape(26.dp)) {
         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -414,9 +377,9 @@ private fun ToolSheet(group: ToolGroup, state: ModelState, design: DesignEditor,
             for (row in tools.chunked(4)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     for (t in row) {
-                        val enabled = t.action != null
+                        val enabled = t.enabled(context)
                         Surface(
-                            onClick = { t.action?.invoke(); close() },
+                            onClick = { Tools.run(t, context); close() },
                             enabled = enabled,
                             modifier = Modifier.weight(1f).height(72.dp),
                             shape = RoundedCornerShape(18.dp),
@@ -443,4 +406,29 @@ enum class ToolGroup(val label: String, val icon: ImageVector, val colour: Color
     Modify("Modify", Icons.modify, Palette.modify),
     Construct("Construct", Icons.construct, Palette.construct),
     Inspect("Inspect", Icons.inspect, Palette.inspect),
+}
+
+/**
+ * The right-click menu: the last tool again, the tools that suit what's
+ * selected, and a few things to do with the selection.
+ */
+@Composable
+private fun SelectionMenu(at: Offset, context: ToolContext, close: () -> Unit) {
+    val design = context.design
+    val state = context.state
+    val repeat = design.lastTool?.let { Tools.byId(it) }?.takeIf { it.enabled(context) }
+    val suggested = Tools.all.filter { it.suggest(state) && it.enabled(context) && it != repeat }
+    val px = with(LocalDensity.current) { DpOffset(at.x.toDp(), at.y.toDp()) }
+    Box(Modifier.offset(px.x, px.y)) {
+        val items = buildList<Pair<String, () -> Unit>> {
+            repeat?.let { add("Repeat ${it.label}" to { Tools.run(it, context) }) }
+            for (t in suggested) add(t.label to { Tools.run(t, context) })
+            if (state.selectedFaces > 0) add("Hide" to { design.hideSelectedBodies() })
+            add("Fit the view" to { context.actions.fit() })
+            if (state.selectedFaces + state.selectedEdges + state.selectedAreas + state.selectedPlanes > 0) add("Clear selection" to { context.actions.clearSelection() })
+        }
+        DropdownMenu(true, onDismissRequest = close, containerColor = Palette.raised) {
+            for ((label, action) in items) DropdownMenuItem({ Text(label) }, onClick = { close(); action() })
+        }
+    }
 }

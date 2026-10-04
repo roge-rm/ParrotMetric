@@ -85,6 +85,11 @@ class AppController(
         design.selectionChanged()
     }
 
+    /** A right click on the view at (x, y), pixels: opens the menu for the selection. Main thread. */
+    fun openMenu(x: Float, y: Float) {
+        state = state.copy(menu = androidx.compose.ui.geometry.Offset(x, y))
+    }
+
     private fun scheduleAutosave() {
         autosaveJob?.cancel()
         autosaveJob = scope.launch {
@@ -186,6 +191,7 @@ class AppController(
         override fun viewFrom(yaw: Float, pitch: Float) = gl { core.viewFrom(yaw, pitch) }
         override fun pan(dx: Float, dy: Float) = gl { core.pan(dx, dy) }
         override fun zoom(factor: Float) = gl { core.zoom(factor) }
+        override fun zoomAt(factor: Float, x: Float, y: Float) = gl { core.zoomAt(factor, x, y) }
 
         override fun startSketch(plane: SketchPlane?) {
             val name = design.nextSketchName()
@@ -208,6 +214,10 @@ class AppController(
             }
             newSketch = null
             state = state.copy(sketch = null)
+        }
+
+        override fun closeMenu() {
+            state = state.copy(menu = null)
         }
 
         override fun openHistory(id: Int) {

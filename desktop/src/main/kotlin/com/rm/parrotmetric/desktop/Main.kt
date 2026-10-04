@@ -122,7 +122,7 @@ fun main(args: Array<String>) {
             }
             Box(Modifier.fillMaxSize()) {
                 ModelScreen(
-                    viewport = { DesktopViewport(view) },
+                    viewport = { DesktopViewport(view, app::openMenu) },
                     logo = { painter?.let { Image(it, contentDescription = null, modifier = Modifier.size(34.dp)) } },
                     state = app.state,
                     design = app.design,

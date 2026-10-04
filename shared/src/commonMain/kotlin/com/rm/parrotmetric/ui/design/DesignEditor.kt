@@ -115,6 +115,8 @@ class DesignEditor(
     var triangles by mutableIntStateOf(0)
         private set
     var message by mutableStateOf<String?>(null)
+    /** The tool last started, by its id in Tools, for Repeat. */
+    var lastTool by mutableStateOf<String?>(null)
     var panel by mutableStateOf<FeatureDraft?>(null)
         private set
 
@@ -226,6 +228,15 @@ class DesignEditor(
     }
 
     fun setHidden(label: String, hidden: Boolean) = setInfo(label) { it.copy(hidden = hidden) }
+
+    /** Hides the bodies under the selected faces. */
+    fun hideSelectedBodies() {
+        val labels = pickedBodies()
+        if (labels.isEmpty()) return
+        checkpoint()
+        for (l in labels) design.bodies[l] = design.info(l).copy(hidden = true)
+        changed()
+    }
     fun rename(label: String, name: String) = setInfo(label) { it.copy(name = name.trim().ifEmpty { null }) }
     fun setComponent(label: String, component: String?) = setInfo(label) { it.copy(component = component) }
 

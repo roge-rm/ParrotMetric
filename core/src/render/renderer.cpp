@@ -361,20 +361,36 @@ void Renderer::orbit(float dx, float dy) {
     pitch_ = std::clamp(pitch_ + dy * 0.008f, -1.55f, 1.55f);
 }
 
+float Renderer::perPixel() const {
+    float distance = radius_ * 1.1f / std::sin(std::atan(std::tan(kHalfFov) * std::min(float(width_) / float(height_), 1.0f))) / zoom_;
+    return 2 * distance * std::tan(kHalfFov) / float(height_);
+}
+
 void Renderer::pan(float dx, float dy) {
     moving_ = false;
-    // Pixels to millimetres at the target's distance.
-    float distance = radius_ * 1.1f / std::sin(std::atan(std::tan(kHalfFov) * std::min(float(width_) / float(height_), 1.0f))) / zoom_;
-    float perPixel = 2 * distance * std::tan(kHalfFov) / float(height_);
+    float mm = perPixel();
     float cy = std::cos(yaw_), sy = std::sin(yaw_), cp = std::cos(pitch_), sp = std::sin(pitch_);
     float right[3] = {-sy, cy, 0};
     float up[3] = {-sp * cy, -sp * sy, cp};
-    for (int k = 0; k < 3; ++k) target_[k] += (-dx * right[k] + dy * up[k]) * perPixel;
+    for (int k = 0; k < 3; ++k) target_[k] += (-dx * right[k] + dy * up[k]) * mm;
 }
 
 void Renderer::zoom(float factor) {
     moving_ = false;
     zoom_ = std::clamp(zoom_ * factor, 0.05f, 40.0f);
+}
+
+void Renderer::zoomAt(float factor, float x, float y) {
+    float before = perPixel();
+    zoom(factor);
+    // The point under (x, y), on the plane through the target facing the
+    // view, keeps its place: the target moves towards it as the scale shrinks.
+    float shrink = before - perPixel();
+    float ox = x - float(width_) / 2, oy = y - float(height_) / 2;
+    float cy = std::cos(yaw_), sy = std::sin(yaw_), cp = std::cos(pitch_), sp = std::sin(pitch_);
+    float right[3] = {-sy, cy, 0};
+    float up[3] = {-sp * cy, -sp * sy, cp};
+    for (int k = 0; k < 3; ++k) target_[k] += (ox * right[k] - oy * up[k]) * shrink;
 }
 
 void Renderer::fit() {
@@ -558,7 +574,7 @@ void Renderer::ensurePickTarget() {
     pickHeight_ = height_;
 }
 
-Pick Renderer::pick(float x, float y) {
+void Renderer::drawIds() {
     if (bodiesDirty_) upload();
     ensurePickTarget();
     glBindFramebuffer(GL_FRAMEBUFFER, pickFbo_);
@@ -568,13 +584,49 @@ Pick Renderer::pick(float x, float y) {
     float vp[16], normal[9];
     camera(vp, normal);
     drawScene(true, vp, normal);
+}
 
+Pick Renderer::pick(float x, float y) {
+    drawIds();
     uint8_t px[4] = {0, 0, 0, 0};
     int ix = std::clamp(int(x), 0, width_ - 1), iy = std::clamp(height_ - 1 - int(y), 0, height_ - 1);
     glReadPixels(ix, iy, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, px);
     glBindFramebuffer(GL_FRAMEBUFFER, targetFramebuffer);
+    return fromId(uint32_t(px[0]) | uint32_t(px[1]) << 8 | uint32_t(px[2]) << 16);
+}
 
-    uint32_t v = uint32_t(px[0]) | uint32_t(px[1]) << 8 | uint32_t(px[2]) << 16;
+std::vector<Pick> Renderer::pickBox(float x0, float y0, float x1, float y1, bool crossing) {
+    drawIds();
+    std::vector<uint8_t> px(size_t(width_) * size_t(height_) * 4);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glReadPixels(0, 0, width_, height_, GL_RGBA, GL_UNSIGNED_BYTE, px.data());
+    glBindFramebuffer(GL_FRAMEBUFFER, targetFramebuffer);
+    int left = std::clamp(int(std::min(x0, x1)), 0, width_ - 1), right = std::clamp(int(std::max(x0, x1)), 0, width_ - 1);
+    int top = std::clamp(int(std::min(y0, y1)), 0, height_ - 1), bottom = std::clamp(int(std::max(y0, y1)), 0, height_ - 1);
+    // Ids seen inside the box, and (unless crossing) those also seen outside it.
+    std::vector<uint32_t> inside, outside;
+    for (int row = 0; row < height_; ++row) {
+        int y = height_ - 1 - row;  // GL rows run bottom up.
+        bool rowIn = y >= top && y <= bottom;
+        for (int x = 0; x < width_; ++x) {
+            const uint8_t* p = px.data() + (size_t(row) * size_t(width_) + size_t(x)) * 4;
+            uint32_t v = uint32_t(p[0]) | uint32_t(p[1]) << 8 | uint32_t(p[2]) << 16;
+            if (v == 0) continue;
+            if (rowIn && x >= left && x <= right) inside.push_back(v);
+            else if (!crossing) outside.push_back(v);
+        }
+    }
+    std::sort(inside.begin(), inside.end());
+    inside.erase(std::unique(inside.begin(), inside.end()), inside.end());
+    std::sort(outside.begin(), outside.end());
+    outside.erase(std::unique(outside.begin(), outside.end()), outside.end());
+    std::vector<Pick> out;
+    for (uint32_t v : inside)
+        if (crossing || !std::binary_search(outside.begin(), outside.end(), v)) out.push_back(fromId(v));
+    return out;
+}
+
+Pick Renderer::fromId(uint32_t v) {
     if (v == 0) return {};
     v -= 1;
     Pick p;

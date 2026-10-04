@@ -44,6 +44,12 @@ public:
     void setBodies(std::vector<DisplayMesh> bodies, bool refit);
     void setSelection(const std::vector<Pick>& selection);
     Pick pick(float x, float y);
+    /**
+     * What's drawn in the box from (x0, y0) to (x1, y1), screen pixels: with
+     * crossing, anything with some of it in the box; else only what's wholly
+     * inside it, as far as it can be seen.
+     */
+    std::vector<Pick> pickBox(float x0, float y0, float x1, float y1, bool crossing);
 
     /** Turns the camera around the model, in screen pixels dragged. */
     void orbit(float dx, float dy);
@@ -51,6 +57,8 @@ public:
     void pan(float dx, float dy);
     /** Zooms by a factor; above 1 moves closer. */
     void zoom(float factor);
+    /** Zooms by a factor towards the point under (x, y) on screen, which stays where it is. */
+    void zoomAt(float factor, float x, float y);
     /** Frames the whole model again, smoothly. */
     void fit();
     /** Turns smoothly to look from a direction, in radians: yaw round Z from +X, pitch up from the XY plane. */
@@ -83,6 +91,11 @@ private:
     void camera(float* viewProjection, float* normal) const;
     void drawScene(bool ids, const float* vp, const float* normal);
     void ensurePickTarget();
+    /** Draws face and edge ids into the pick buffer, which is left bound. */
+    void drawIds();
+    /** Millimetres per screen pixel at the target's distance. */
+    float perPixel() const;
+    static Pick fromId(uint32_t v);
     void animate();
 
     // GL objects.

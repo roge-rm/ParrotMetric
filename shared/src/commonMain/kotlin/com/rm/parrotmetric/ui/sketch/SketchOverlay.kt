@@ -24,6 +24,8 @@ import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.isSecondaryPressed
+import androidx.compose.ui.input.pointer.isTertiaryPressed
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.platform.LocalDensity
@@ -71,6 +73,7 @@ fun SketchOverlay(
     projection: PlaneProjection,
     onPan: (dx: Float, dy: Float) -> Unit,
     onZoom: (factor: Float) -> Unit,
+    onZoomAt: (factor: Float, x: Float, y: Float) -> Unit = { f, _, _ -> onZoom(f) },
 ) {
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current.density
@@ -88,6 +91,11 @@ fun SketchOverlay(
                 while (true) {
                     val e = awaitPointerEvent()
                     val c = e.changes.firstOrNull() ?: continue
+                    // The wheel zooms towards the pointer; a notch is at most three steps, as browsers give big ones.
+                    if (e.type == PointerEventType.Scroll && c.scrollDelta.y != 0f) {
+                        onZoomAt(1.15f.pow(-c.scrollDelta.y.coerceIn(-3f, 3f)), c.position.x, c.position.y)
+                        continue
+                    }
                     if (c.type != PointerType.Mouse || c.pressed) continue
                     when (e.type) {
                         PointerEventType.Move -> proj.toPlane(c.position)?.let { editor.hover(it.first, it.second, reach * proj.mmPerPixel()) }
@@ -106,7 +114,9 @@ fun SketchOverlay(
                 var last = down.position
                 var lastSpan = 0f
                 val start = plane(down.position)
-                val grabbed = start != null && editor.press(start.first, start.second, tol())
+                // The middle (or right) mouse button pans; only the left draws and picks.
+                val panButton = down.type == PointerType.Mouse && (currentEvent.buttons.isTertiaryPressed || currentEvent.buttons.isSecondaryPressed)
+                val grabbed = !panButton && start != null && editor.press(start.first, start.second, tol())
                 down.consume()
                 while (true) {
                     val event = awaitPointerEvent()
@@ -133,7 +143,7 @@ fun SketchOverlay(
                     event.changes.forEach { it.consume() }
                     if (pressed.isEmpty()) {
                         touching = false
-                        if (!multi) {
+                        if (!multi && !panButton) {
                             val up = event.changes.firstOrNull()?.position ?: last
                             val tappedNote = if (!moved && editor.tool in setOf(SketchTool.Select, SketchTool.Dimension)) {
                                 annotations(editor, proj, density).minByOrNull { (it.centre - up).getDistance() }

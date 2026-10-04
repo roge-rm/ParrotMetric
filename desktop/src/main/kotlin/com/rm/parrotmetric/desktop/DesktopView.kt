@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.rm.parrotmetric.Core
 import com.rm.parrotmetric.DesktopGl
+import com.rm.parrotmetric.ui.SelectionBox
 import com.rm.parrotmetric.ui.ViewControls
 import com.rm.parrotmetric.ui.viewGestures
 import org.jetbrains.skia.ColorAlphaType
@@ -79,11 +80,17 @@ class DesktopView(
         if (drawQueued.compareAndSet(false, true)) thread.execute(::drawNow)
     }
 
-    /** A click: selects what's under it; a double click also fits the view. */
+    /** A tap: selects or unselects what's under it; a double tap also fits the view. */
     fun tap(x: Float, y: Float, double: Boolean) = gl {
         val counts = Core.tap(x, y)
         SwingUtilities.invokeLater { onSelection(counts) }
         if (double) Core.fit()
+    }
+
+    /** A selection change on the GL thread, reported on the main one. */
+    fun select(change: () -> IntArray) = gl {
+        val counts = change()
+        SwingUtilities.invokeLater { onSelection(counts) }
     }
 
     private fun ready(): Boolean {
@@ -127,21 +134,29 @@ class DesktopView(
     }
 }
 
-/** Shows [view], with the shared gestures (see viewGestures). */
+/** Shows [view], with the shared gestures (see viewGestures). [onMenu] opens the right-click menu at a point. */
 @Composable
-fun DesktopViewport(view: DesktopView) {
+fun DesktopViewport(view: DesktopView, onMenu: (Float, Float) -> Unit) {
     val density = LocalDensity.current.density
     SideEffect { view.density = density }
+    var box by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
     val controls = remember(view) {
         object : ViewControls {
             override fun orbit(dx: Float, dy: Float) = view.gl { Core.orbit(dx, dy) }
             override fun pan(dx: Float, dy: Float) = view.gl { Core.pan(dx, dy) }
             override fun zoom(factor: Float) = view.gl { Core.zoom(factor) }
+            override fun zoomAt(factor: Float, x: Float, y: Float) = view.gl { Core.zoomAt(factor, x, y) }
+            override fun fit() = view.gl { Core.fit() }
             override fun tap(x: Float, y: Float, double: Boolean) = view.tap(x, y, double)
+            override fun click(x: Float, y: Float, add: Boolean) = view.select { Core.click(x, y, add) }
+            override fun box(rect: androidx.compose.ui.geometry.Rect, crossing: Boolean, add: Boolean) =
+                view.select { Core.selectBox(rect.left, rect.top, rect.right, rect.bottom, crossing, add) }
+            override fun menu(x: Float, y: Float) = onMenu(x, y)
         }
     }
-    Box(Modifier.fillMaxSize().onSizeChanged { view.resize(it) }.viewGestures(controls)) {
+    Box(Modifier.fillMaxSize().onSizeChanged { view.resize(it) }.viewGestures(controls) { box = it }) {
         view.frame?.let { image -> Canvas(Modifier.fillMaxSize()) { drawImage(image) } }
+        SelectionBox(box)
         view.problem?.let {
             Text("No 3D view: $it", Modifier.align(Alignment.Center).padding(24.dp), color = Color(0xFFE8DCC8))
         }

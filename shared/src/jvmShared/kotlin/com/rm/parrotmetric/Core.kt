@@ -57,6 +57,10 @@ object Core : NativeCore {
     override external fun shownTriangles(): Int
     /** Selects or unselects what's under the point. Returns selected face, edge, sketch region and plane counts. GL thread. */
     override external fun tap(x: Float, y: Float): IntArray
+    /** A click: selects what's under the point in place of the selection, or with add, adds or removes it. Counts as [tap]. GL thread. */
+    override external fun click(x: Float, y: Float, add: Boolean): IntArray
+    /** Selects what's in a screen box: partly in it with crossing, else wholly inside. Counts as [tap]. GL thread. */
+    override external fun selectBox(x0: Float, y0: Float, x1: Float, y1: Float, crossing: Boolean, add: Boolean): IntArray
     override external fun clearSelection()
     override external fun selectedEdges(): Array<String>
     /** "body number\tface name" each. */
@@ -77,6 +81,8 @@ object Core : NativeCore {
     override external fun orbit(dx: Float, dy: Float)
     override external fun pan(dx: Float, dy: Float)
     override external fun zoom(factor: Float)
+    /** Zooms towards the point under (x, y), which stays put. */
+    override external fun zoomAt(factor: Float, x: Float, y: Float)
     override external fun fit()
     /** Turns to look from a direction: yaw round Z from +X and pitch up, in radians. */
     override external fun viewFrom(yaw: Float, pitch: Float)
