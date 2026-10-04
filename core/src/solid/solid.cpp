@@ -1,4 +1,5 @@
 #include "solid/solid.h"
+#include "parallel.h"
 
 #include <BRepBuilderAPI_MakeShape.hxx>
 #include <BRepCheck_Analyzer.hxx>
@@ -49,7 +50,7 @@ Solid Solid::filletAllEdges(double radius) const {
 Mesh Solid::tessellate(const Tessellation& t) const {
     // Meshes the shape in place: OCCT keeps the triangles on the faces, so a
     // second call with the same settings costs nothing.
-    BRepMesh_IncrementalMesh(*shape_, t.chord, false, t.angle, false);
+    BRepMesh_IncrementalMesh(*shape_, t.chord, false, t.angle, useCores());
     // Faces get their own nodes; the ones along a shared edge sit at the same
     // place, so welding gives a closed mesh.
     MeshBuilder builder(float(t.chord * 0.01));
@@ -76,7 +77,7 @@ Mesh Solid::tessellate(const Tessellation& t) const {
 }
 
 DisplayMesh Solid::display(const Tessellation& t) const {
-    BRepMesh_IncrementalMesh(*shape_, t.chord, false, t.angle, false);
+    BRepMesh_IncrementalMesh(*shape_, t.chord, false, t.angle, useCores());
     DisplayMesh d;
     TopTools_IndexedMapOfShape faces;
     TopExp::MapShapes(*shape_, TopAbs_FACE, faces);

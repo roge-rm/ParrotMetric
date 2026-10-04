@@ -54,6 +54,10 @@ interface NativeCore {
     /** A face's edges as sketch curves on a plane; see jni.cpp. */
     fun faceOutline(body: Long, face: String, plane: DoubleArray): DoubleArray
     fun shownTriangles(): Int
+    /** How finely solids are meshed for display, 0 low to 2 high; takes effect at the next show. */
+    fun setDisplayDetail(level: Int)
+    /** Times a short piece of fixed work, in ms, to judge the device. Off the main thread. */
+    fun speedTest(): Double
     /** Selects or unselects what's under the point. Returns selected face, edge, sketch region and plane counts. GL thread. */
     fun tap(x: Float, y: Float): IntArray
     /** A click: selects what's under the point in place of the selection, or with add, adds or removes it. Counts as [tap]. GL thread. */

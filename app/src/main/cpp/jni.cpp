@@ -22,6 +22,8 @@
 #include <TopoDS_Compound.hxx>
 
 #include <algorithm>
+#include <atomic>
+#include <unordered_map>
 #include <cmath>
 #include <memory>
 #include <mutex>
@@ -41,6 +43,7 @@
 #include "sketch/region_faces.h"
 #include "sketch/regions.h"
 #include "solid/solid.h"
+#include "solid/speed.h"
 
 namespace {
 
@@ -172,15 +175,39 @@ pm::Mesh readMesh(const std::vector<uint8_t>& bytes, int format) {
 
 // Display.
 
-pm::DisplayMesh displayOf(const pm::Body& b, Shown& s, size_t& triangles) {
+// How finely solids are meshed for display: 0 low, 1 medium, 2 high.
+std::atomic<int> displayDetail{2};
+
+pm::Tessellation displayTessellation() {
+    static const pm::Tessellation levels[3] = {{0.1, 0.4}, {0.05, 0.3}, {0.01, 0.25}};
+    return levels[std::clamp(displayDetail.load(), 0, 2)];
+}
+
+/** A body as shown, kept by its handle: bodies never change, so it's reused until the body goes or the detail changes. */
+struct DisplayCached {
+    int detail = 0;
+    std::shared_ptr<const pm::DisplayMesh> mesh;
+    std::vector<std::string> faceNames, edgeNames;
+    size_t triangles = 0;  // Mesh bodies' own triangles.
+};
+std::unordered_map<jlong, DisplayCached> displayCache;  // Only show() uses it, one call at a time.
+
+const DisplayCached& displayOf(jlong handle, const pm::Body& b) {
+    int detail = b.solid ? displayDetail.load() : -1;
+    auto found = displayCache.find(handle);
+    if (found != displayCache.end() && found->second.detail == detail) return found->second;
+    DisplayCached c;
+    c.detail = detail;
     if (b.solid) {
-        s.faceNames = b.solid->faceNames();
-        s.edgeNames = b.solid->edgeNames();
-        return pm::Solid::fromShape(b.solid->shape).display();
+        c.faceNames = b.solid->faceNames();
+        c.edgeNames = b.solid->edgeNames();
+        c.mesh = std::make_shared<pm::DisplayMesh>(pm::Solid::fromShape(b.solid->shape).display(displayTessellation()));
+    } else {
+        pm::Mesh m = b.mesh->toMesh();
+        c.triangles = m.triangles.size();
+        c.mesh = std::make_shared<pm::DisplayMesh>(pm::displayMesh(m));
     }
-    pm::Mesh m = b.mesh->toMesh();
-    triangles += m.triangles.size();
-    return pm::displayMesh(m);
+    return displayCache[handle] = std::move(c);
 }
 
 /** A sketch's regions as see-through faces, and its curves as light lines. */
@@ -847,11 +874,21 @@ JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_show(JNIEnv* env, jobject, 
     std::vector<Shown> nextShown;
     std::vector<pm::DisplayMesh> meshes;
     size_t triangles = 0;
-    for (const auto& b : bodies) {
+    for (size_t i = 0; i < bodies.size(); ++i) {
+        const pm::Body& b = bodies[i];
+        const DisplayCached& c = displayOf(h[i], b);
         Shown s;
-        meshes.push_back(displayOf(b, s, triangles));
-        if (b.mesh) s.mesh = std::make_shared<pm::DisplayMesh>(meshes.back());
+        s.faceNames = c.faceNames;
+        s.edgeNames = c.edgeNames;
+        triangles += c.triangles;
+        meshes.push_back(*c.mesh);
+        if (b.mesh) s.mesh = std::const_pointer_cast<pm::DisplayMesh>(c.mesh);
         nextShown.push_back(std::move(s));
+    }
+    // Forget bodies no longer shown.
+    for (auto it = displayCache.begin(); it != displayCache.end();) {
+        if (std::find(h.begin(), h.end(), it->first) == h.end()) it = displayCache.erase(it);
+        else ++it;
     }
     size_t start = 0;
     for (size_t s = 0; s < counts.size(); ++s) {
@@ -892,6 +929,16 @@ JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_show(JNIEnv* env, jobject, 
     shownTriangles = triangles;
     selection.clear();
     renderer.setBodies(std::move(meshes), refit);
+}
+
+/** How finely solids are meshed for display, 0 low to 2 high; takes effect at the next show(). */
+JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_setDisplayDetail(JNIEnv*, jobject, jint level) {
+    displayDetail = std::clamp(int(level), 0, 2);
+}
+
+/** A short piece of fixed work, timed in ms, to judge this device. Takes a fraction of a second; call it off the main thread. */
+JNIEXPORT jdouble JNICALL Java_com_rm_parrotmetric_Core_speedTest(JNIEnv*, jobject) {
+    return pm::speedTest();
 }
 
 JNIEXPORT jint JNICALL Java_com_rm_parrotmetric_Core_shownTriangles(JNIEnv*, jobject) {

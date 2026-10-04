@@ -71,6 +71,13 @@ object DesignFile {
             .mapValues { it.value.toList() },
     ).toString()
 
+    /** A file's title and how many steps it has, without reading the steps; null if it isn't a design file. */
+    fun summary(text: String): Pair<String, Int>? {
+        val root = try { Json.parse(text) as? Json.Obj } catch (e: Exception) { null } ?: return null
+        if (root["format"] != Json.Str("parrotmetric")) return null
+        return ((root["title"] as? Json.Str)?.value ?: "Untitled") to root.arr("features").size
+    }
+
     /** Reads a file into the design. Returns its title. Throws IllegalArgumentException if it can't. */
     fun read(text: String, into: Design): String {
         val root = Json.parse(text) as? Json.Obj ?: throw IllegalArgumentException("Not a design file")

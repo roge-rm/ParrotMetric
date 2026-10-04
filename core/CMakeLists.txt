@@ -11,6 +11,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 option(PM_TESTS "Build the host tests" OFF)
+option(PM_BENCH "Build the benchmark, to run on a device" OFF)
 # Which OCCT install: the Android ABI, or a name the desktop and browser builds pass in.
 if(ANDROID)
     set(PM_OCCT_TARGET ${ANDROID_ABI})
@@ -54,7 +55,8 @@ add_library(pmcore STATIC
         src/model/named_shape.cpp
         src/model/operations.cpp
         src/model/store.cpp
-        src/solid/solid.cpp)
+        src/solid/solid.cpp
+        src/solid/speed.cpp)
 # The renderer: OpenGL ES 3 on Android, WebGL 2 in the browser, and on desktop
 # whatever GL the machine has, loaded at run time (render/gl.h).
 target_sources(pmcore PRIVATE src/render/renderer.cpp src/render/gl_loader.cpp)
@@ -90,4 +92,9 @@ if(PM_TESTS)
     target_link_libraries(pmcore_tests PRIVATE pmcore Catch2::Catch2WithMain)
     include(CTest)
     add_test(NAME pmcore_tests COMMAND pmcore_tests)
+endif()
+
+if(PM_BENCH)
+    add_executable(pmcore_bench bench/bench.cpp)
+    target_link_libraries(pmcore_bench PRIVATE pmcore)
 endif()

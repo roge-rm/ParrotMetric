@@ -46,6 +46,12 @@ private fun pixelRatio(): Double = js("window.devicePixelRatio || 1")
 private fun storageGet(key: String): String? = js("(() => { try { return localStorage.getItem(key); } catch (e) { return null; } })()")
 private fun storageSet(key: String, value: String): Unit = js("(() => { try { localStorage.setItem(key, value); } catch (e) {} })()")
 
+/** Calls [then] when the tab is hidden or the page closes, while there's still time to save. */
+private fun onPageHidden(then: () -> Unit): Unit = js("""{
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') then(); });
+    window.addEventListener('pagehide', () => then());
+}""")
+
 /** Asks for a file; calls back with an object holding its name and bytes. */
 private fun pickFile(then: (JsAny) -> Unit): Unit = js(
     """(() => {
@@ -162,9 +168,10 @@ private fun WebApp() {
     app = remember {
         WebCore.setScratchDirectory("/tmp")
         view.start()
-        AppController(WebCore, WebFiles, scope) { work -> view.gl(work) }
+        AppController(WebCore, WebFiles, scope, gl = { work -> view.gl(work) })
     }
     LaunchedEffect(view) { view.drawLoop() }
+    LaunchedEffect(Unit) { onPageHidden { app.autosaveText()?.let { storageSet("parrotmetric.autosave", it) } } }
     var logo by remember { mutableStateOf<ImageBitmap?>(null) }
     var full by remember { mutableStateOf<ImageBitmap?>(null) }
     LaunchedEffect(Unit) {
@@ -205,6 +212,7 @@ private fun WebApp() {
         design = app.design,
         actions = app.actions,
         seeThrough = true,
+        startIcon = full?.let { androidx.compose.ui.graphics.painter.BitmapPainter(it) },
     )
     LaunchSplash(full?.let { androidx.compose.ui.graphics.painter.BitmapPainter(it) })
     }

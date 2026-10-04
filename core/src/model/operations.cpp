@@ -1,4 +1,5 @@
 #include "model/operations.h"
+#include "parallel.h"
 
 #include <BRepAdaptor_Curve.hxx>
 #include <BRepAdaptor_Surface.hxx>
@@ -254,10 +255,17 @@ NamedShape combine(int id, const NamedShape& target, const NamedShape& tool, Com
     try {
         std::unique_ptr<BRepAlgoAPI_BooleanOperation> op;
         switch (how) {
-            case Combine::Join: op = std::make_unique<BRepAlgoAPI_Fuse>(target.shape, tool.shape); break;
-            case Combine::Cut: op = std::make_unique<BRepAlgoAPI_Cut>(target.shape, tool.shape); break;
-            case Combine::Intersect: op = std::make_unique<BRepAlgoAPI_Common>(target.shape, tool.shape); break;
+            case Combine::Join: op = std::make_unique<BRepAlgoAPI_Fuse>(); break;
+            case Combine::Cut: op = std::make_unique<BRepAlgoAPI_Cut>(); break;
+            case Combine::Intersect: op = std::make_unique<BRepAlgoAPI_Common>(); break;
         }
+        TopTools_ListOfShape args, tools;
+        args.Append(target.shape);
+        tools.Append(tool.shape);
+        op->SetArguments(args);
+        op->SetTools(tools);
+        op->SetRunParallel(useCores());
+        op->Build();
         if (!op->IsDone()) throw std::runtime_error("The bodies couldn't be combined");
         NamedShape out = carryNames({&target, &tool}, *op, op->Shape(), prefix(id));
         if (volume(out.shape) < 1e-9) throw std::runtime_error(how == Combine::Cut ? "The cut removes the whole body" : "The bodies don't overlap");
@@ -597,6 +605,7 @@ std::vector<NamedShape> split(int id, const NamedShape& body, const gp_Pnt& orig
         tools.Append(sheet);
         op.SetArguments(args);
         op.SetTools(tools);
+        op.SetRunParallel(useCores());
         op.Build();
         if (!op.IsDone()) throw std::runtime_error("The body couldn't be split");
         NamedShape all = carryNames({&body}, op, op.Shape(), prefix(id));

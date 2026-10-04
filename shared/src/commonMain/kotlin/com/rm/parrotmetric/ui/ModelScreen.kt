@@ -85,6 +85,13 @@ data class ModelState(
     /** Where the right-click menu is open, in pixels on the view, or null. */
     val menu: Offset? = null,
     val layout: LayoutMode = LayoutMode.Automatic,
+    val screen: AppScreen = AppScreen.Start,
+    /** The autosaved design, for Continue: its title and number of steps. */
+    val lastDesign: Pair<String, Int>? = null,
+    val detail: DisplayDetail = DisplayDetail.Automatic,
+    /** What Automatic picks on this device, once it's been measured. */
+    val autoDetail: DisplayDetail? = null,
+    val canQuit: Boolean = false,
 )
 
 /** Which screen layout: by the window's width, or always the phone one or the large-screen one. */
@@ -115,6 +122,13 @@ interface ModelActions {
     fun openHistory(id: Int)
     fun closeMenu()
     fun setLayout(mode: LayoutMode)
+    /** Opens the autosaved design. */
+    fun continueLast()
+    fun showScreen(screen: AppScreen)
+    /** Back from settings to the screen before. */
+    fun closeSettings()
+    fun setDetail(detail: DisplayDetail)
+    fun quit()
 }
 
 /**
@@ -132,6 +146,8 @@ fun ModelScreen(
     actions: ModelActions,
     /** True where the 3D view is drawn behind the screen (the browser), so the screen leaves it showing. */
     seeThrough: Boolean = false,
+    /** The app's icon for the start screen. */
+    startIcon: androidx.compose.ui.graphics.painter.Painter? = null,
 ) {
     var openGroup by remember { mutableStateOf<ToolGroup?>(null) }
     // A sheet over the bottom: the parts list or export.
@@ -146,6 +162,14 @@ fun ModelScreen(
                 LayoutMode.Large -> true
             }
             viewport()
+            if (state.screen == AppScreen.Start) {
+                StartScreen(startIcon, state, actions)
+                return@BoxWithConstraints
+            }
+            if (state.screen == AppScreen.Settings) {
+                SettingsScreen(state, actions, actions::closeSettings)
+                return@BoxWithConstraints
+            }
             state.menu?.let { at -> SelectionMenu(at, ToolContext(state, design, actions) { sheet = it }, actions::closeMenu) }
             if (sketch != null) {
                 state.camera?.let { SketchOverlay(sketch, PlaneProjection(it, sketch.plane), actions::pan, actions::zoom, actions::zoomAt) }
@@ -223,12 +247,8 @@ private fun TopBar(logo: @Composable () -> Unit, state: ModelState, design: Desi
                 DropdownMenuItem({ Text("Save as…") }, onClick = { menu = false; actions.saveAs() }, leadingIcon = { Icon(Icons.save, null, tint = Palette.mint) })
                 DropdownMenuItem({ Text("Export…") }, onClick = { menu = false; onExport() }, leadingIcon = { Icon(Icons.export, null, tint = Palette.mint) })
                 androidx.compose.material3.HorizontalDivider(color = Palette.line)
-                for (mode in LayoutMode.entries) {
-                    DropdownMenuItem(
-                        { Text(mode.label, color = if (state.layout == mode) Palette.mint else Palette.text) },
-                        onClick = { menu = false; actions.setLayout(mode) },
-                    )
-                }
+                DropdownMenuItem({ Text("Settings…") }, onClick = { menu = false; actions.showScreen(AppScreen.Settings) }, leadingIcon = { Icon(Icons.parameters, null, tint = Palette.mint) })
+                DropdownMenuItem({ Text("Main menu") }, onClick = { menu = false; actions.showScreen(AppScreen.Start) }, leadingIcon = { Icon(Icons.close, null, tint = Palette.mint) })
             }
         }
         Column(Modifier.weight(1f).padding(start = 2.dp)) {

@@ -55,6 +55,8 @@ object Core : NativeCore {
     /** A face's edges as sketch curves on a plane; see jni.cpp. */
     override external fun faceOutline(body: Long, face: String, plane: DoubleArray): DoubleArray
     override external fun shownTriangles(): Int
+    override external fun setDisplayDetail(level: Int)
+    override external fun speedTest(): Double
     /** Selects or unselects what's under the point. Returns selected face, edge, sketch region and plane counts. GL thread. */
     override external fun tap(x: Float, y: Float): IntArray
     /** A click: selects what's under the point in place of the selection, or with add, adds or removes it. Counts as [tap]. GL thread. */

@@ -1,5 +1,6 @@
 package com.rm.parrotmetric
 
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
@@ -16,7 +17,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.viewModelScope
 import com.rm.parrotmetric.app.AppController
 import com.rm.parrotmetric.app.FileSink
 import com.rm.parrotmetric.app.PlatformFiles
@@ -26,9 +30,34 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/**
+ * Keeps the app while the activity is made again, as when a setting such as
+ * the font size changes, so the design and screen carry on.
+ */
+class AppHolder : ViewModel() {
+    var activity: MainActivity? = null
+
+    /** The files of whichever activity is current. */
+    private val forward = object : PlatformFiles {
+        private val current get() = activity!!.files
+        override fun open(then: (String, ByteArray?) -> Unit) = current.open(then)
+        override fun create(suggested: String, then: (FileSink) -> Unit) = current.create(suggested, then)
+        override fun readAutosave() = current.readAutosave()
+        override suspend fun writeAutosave(text: String) = current.writeAutosave(text)
+        override fun readSettings() = current.readSettings()
+        override suspend fun writeSettings(text: String) = current.writeSettings(text)
+    }
+
+    /** Made on first use, once [activity] is set, since it reads the settings through it. */
+    val app by lazy {
+        AppController(Core, forward, viewModelScope, { work -> activity?.view?.gl(work) }) { activity?.finishAndRemoveTask() }
+    }
+}
+
 class MainActivity : ComponentActivity() {
-    private var view: ModelView? = null
-    private lateinit var app: AppController
+    internal var view: ModelView? = null
+    private lateinit var holder: AppHolder
+    private val app get() = holder.app
 
     private var onOpened: ((String, ByteArray?) -> Unit)? = null
     private val openFile = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -58,7 +87,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private val files = object : PlatformFiles {
+    internal val files = object : PlatformFiles {
         override fun open(then: (String, ByteArray?) -> Unit) {
             onOpened = then
             openFile.launch(arrayOf("*/*"))
@@ -93,9 +122,11 @@ class MainActivity : ComponentActivity() {
         )
         super.onCreate(savedInstanceState)
         Core.setScratchDirectory(cacheDir.absolutePath)
-        app = AppController(Core, files, lifecycleScope) { work -> view?.gl(work) }
+        holder = ViewModelProvider(this)[AppHolder::class.java]
+        holder.activity = this
         // Only when the app starts, not when the activity is made again on turning the phone.
         val starting = savedInstanceState == null
+        if (starting) openFrom(intent)
         setContent {
             Box(Modifier.fillMaxSize()) {
             ModelScreen(
@@ -111,10 +142,43 @@ class MainActivity : ComponentActivity() {
                 state = app.state,
                 design = app.design,
                 actions = app.actions,
+                startIcon = painterResource(R.drawable.logo_full),
             )
             LaunchSplash(painterResource(R.drawable.logo_full), starting)
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        openFrom(intent)
+    }
+
+    /** A file opened or shared from another app. */
+    private fun openFrom(intent: Intent?) {
+        val uri = when (intent?.action) {
+            Intent.ACTION_VIEW -> intent.data
+            @Suppress("DEPRECATION")
+            Intent.ACTION_SEND -> intent.getParcelableExtra(Intent.EXTRA_STREAM) as? Uri
+            else -> null
+        } ?: return
+        lifecycleScope.launch {
+            val bytes = withContext(Dispatchers.IO) {
+                try { contentResolver.openInputStream(uri)?.use { it.readBytes() } } catch (e: Exception) { null }
+            }
+            app.opened(displayName(uri), bytes)
+        }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // Going to the background, where Android may close the app without warning.
+        holder.viewModelScope.launch { app.saveNow() }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        if (holder.activity === this) holder.activity = null
     }
 
     override fun onResume() {
@@ -128,7 +192,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun displayName(uri: Uri): String =
-        contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
+        if (uri.scheme == "file") uri.lastPathSegment.orEmpty() else contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
             if (it.moveToFirst()) it.getString(0) else null
         } ?: uri.lastPathSegment.orEmpty()
 }

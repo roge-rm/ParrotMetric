@@ -23,6 +23,7 @@ import com.rm.parrotmetric.ui.ModelScreen
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import java.awt.FileDialog
 import java.awt.Frame
@@ -116,11 +117,18 @@ fun main(args: Array<String>) {
         )
         val painter = remember { image("parrotmetric-small.png") }
         val full = remember { image("parrotmetric.png") }
-        Window(onCloseRequest = ::exitApplication, title = "ParrotMetric", icon = painter, state = window) {
+        var running: AppController? = null
+        // Closing the window saves the design for next time first.
+        val close = {
+            running?.let { a -> runBlocking { a.saveNow() } }
+            exitApplication()
+        }
+        Window(onCloseRequest = close, title = "ParrotMetric", icon = painter, state = window) {
             val scope = rememberCoroutineScope()
             lateinit var app: AppController
             val view = remember { DesktopView(onCamera = { app.cameraChanged(it) }, onSelection = { app.selectionChanged(it) }) }
-            app = remember { AppController(Core, files, scope) { work -> view.gl(work) } }
+            app = remember { AppController(Core, files, scope, { work -> view.gl(work) }, close) }
+            running = app
             // A file named on the command line, as when opened from a file manager.
             LaunchedEffect(Unit) {
                 args.firstOrNull()?.let { File(it) }?.takeIf { it.isFile }?.let { app.opened(it.name, runCatching { it.readBytes() }.getOrNull()) }
@@ -132,6 +140,7 @@ fun main(args: Array<String>) {
                     state = app.state,
                     design = app.design,
                     actions = app.actions,
+                    startIcon = full,
                 )
                 LaunchSplash(full)
             }

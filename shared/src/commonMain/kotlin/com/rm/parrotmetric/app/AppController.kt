@@ -8,6 +8,9 @@ import com.rm.parrotmetric.design.SketchFeature
 import com.rm.parrotmetric.sketch.ProfileCurve
 import com.rm.parrotmetric.sketch.Sketch
 import com.rm.parrotmetric.sketch.SketchPlane
+import com.rm.parrotmetric.io.DesignFile
+import com.rm.parrotmetric.ui.AppScreen
+import com.rm.parrotmetric.ui.DisplayDetail
 import com.rm.parrotmetric.ui.LayoutMode
 import com.rm.parrotmetric.ui.ModelActions
 import com.rm.parrotmetric.ui.ModelState
@@ -52,6 +55,8 @@ class AppController(
     private val files: PlatformFiles,
     private val scope: CoroutineScope,
     private val gl: (() -> Unit) -> Unit,
+    /** Closes the app, where the platform can; null hides Quit. */
+    private val quit: (() -> Unit)? = null,
 ) {
     var state by mutableStateOf(ModelState())
         private set
@@ -63,21 +68,92 @@ class AppController(
     /** Where Save writes: the design file last opened or saved, if any. */
     private var document: FileSink? = null
     private var autosaveJob: Job? = null
+    /** A design was started or opened this session, so autosave may write over the last one. */
+    private var designOpen = false
+    /** Changes not yet autosaved. */
+    private var unsaved = false
+    /** Where Settings goes back to. */
+    private var beforeSettings = AppScreen.Start
+
+    /** The saved settings, as "key=value" lines in the platform's settings file. */
+    private val settings = mutableMapOf<String, String>()
 
     init {
-        files.readSettings()?.lines()?.firstNotNullOfOrNull { line ->
-            if (line.startsWith("layout=")) LayoutMode.entries.firstOrNull { it.name == line.removePrefix("layout=") } else null
-        }?.let { state = state.copy(layout = it) }
+        files.readSettings()?.lines()?.forEach { line ->
+            val at = line.indexOf('=')
+            if (at > 0) settings[line.substring(0, at)] = line.substring(at + 1)
+        }
+        state = state.copy(
+            layout = LayoutMode.entries.firstOrNull { it.name == settings["layout"] } ?: LayoutMode.Automatic,
+            detail = DisplayDetail.entries.firstOrNull { it.name == settings["detail"] } ?: DisplayDetail.Automatic,
+            autoDetail = settings["speed"]?.toDoubleOrNull()?.let(::detailFor),
+            canQuit = quit != null,
+            lastDesign = files.readAutosave()?.let { DesignFile.summary(it) },
+        )
+        applyDetail()
+        if (state.autoDetail == null) measureSpeed()
         design.onShown = { state = state.copy(selectedFaces = 0, selectedEdges = 0, selectedAreas = 0, selectedPlanes = 0) }
         design.onHistoryChanged = ::scheduleAutosave
-        // Carry on from where the last session left off.
-        files.readAutosave()?.let { text ->
-            try {
-                state = state.copy(title = design.openFile(text))
-            } catch (e: IllegalArgumentException) {
-                design.message = "The last design couldn't be read back"
+        // Saves now and then while there are changes, besides shortly after each.
+        scope.launch {
+            while (true) {
+                delay(30_000)
+                if (unsaved) saveNow()
             }
         }
+    }
+
+    private fun saveSettings() {
+        val text = settings.entries.joinToString("") { "${it.key}=${it.value}\n" }
+        scope.launch { files.writeSettings(text) }
+    }
+
+    /** Automatic display detail for a speed test's time in ms: a desktop takes about 60, a slow tablet 250. */
+    private fun detailFor(ms: Double) = when {
+        ms < 100 -> DisplayDetail.High
+        ms < 200 -> DisplayDetail.Medium
+        else -> DisplayDetail.Low
+    }
+
+    private fun measureSpeed() {
+        scope.launch {
+            // Once, the first time the app runs; the result is kept with the settings.
+            val ms = withContext(Dispatchers.Default) { core.speedTest() }
+            settings["speed"] = ms.toInt().toString()
+            saveSettings()
+            state = state.copy(autoDetail = detailFor(ms))
+            applyDetail()
+        }
+    }
+
+    private fun applyDetail() {
+        val chosen = if (state.detail == DisplayDetail.Automatic) state.autoDetail ?: DisplayDetail.Medium else state.detail
+        core.setDisplayDetail(chosen.ordinal - 1)
+        if (design.design.features.isNotEmpty()) design.rebuild()
+    }
+
+    /** Writes the design to autosave now, if one is open: when the app goes to the background or closes. */
+    suspend fun saveNow() {
+        autosaveJob?.cancel()
+        if (!designOpen) return
+        unsaved = false
+        files.writeAutosave(design.fileText(state.title))
+    }
+
+    /**
+     * The design's autosave text, if one is open, for a platform that must
+     * write it at once, such as a browser tab closing; it counts as saved.
+     */
+    fun autosaveText(): String? {
+        if (!designOpen) return null
+        autosaveJob?.cancel()
+        unsaved = false
+        return design.fileText(state.title)
+    }
+
+    private fun opening() {
+        designOpen = true
+        state = state.copy(screen = AppScreen.Model)
     }
 
     /** The core's camera state changed (see NativeCore.cameraState). Main thread. */
@@ -98,10 +174,12 @@ class AppController(
     }
 
     private fun scheduleAutosave() {
+        if (!designOpen) return
+        unsaved = true
         autosaveJob?.cancel()
         autosaveJob = scope.launch {
             delay(800)
-            files.writeAutosave(design.fileText(state.title))
+            saveNow()
         }
     }
 
@@ -115,6 +193,7 @@ class AppController(
             try {
                 state = state.copy(title = design.openFile(bytes.decodeToString()))
                 document = null
+                opening()
             } catch (e: IllegalArgumentException) {
                 design.message = e.message
             }
@@ -125,6 +204,13 @@ class AppController(
             design.message = "Open a design, or an STL, 3MF, OBJ, STEP or IGES file"
             return
         }
+        // From the start screen, a mesh or solid file starts a new design.
+        if (state.screen != AppScreen.Model) {
+            design.newDesign()
+            document = null
+            state = state.copy(title = "Untitled")
+        }
+        opening()
         scope.launch {
             if (design.design.features.isEmpty()) state = state.copy(title = name.substringBeforeLast('.'))
             // Meshes are repaired as they come in; say what was done.
@@ -176,6 +262,44 @@ class AppController(
             design.newDesign()
             document = null
             state = state.copy(title = "Untitled")
+            opening()
+        }
+
+        override fun continueLast() {
+            val text = files.readAutosave() ?: return
+            try {
+                state = state.copy(title = design.openFile(text))
+                document = null
+                opening()
+            } catch (e: IllegalArgumentException) {
+                design.message = "The last design couldn't be read back"
+            }
+        }
+
+        override fun showScreen(screen: AppScreen) {
+            if (screen == AppScreen.Settings) beforeSettings = state.screen
+            if (screen == AppScreen.Start) {
+                // Leaving the design: keep it for Continue.
+                scope.launch { saveNow() }
+                state = state.copy(lastDesign = if (designOpen) state.title to design.design.features.size else state.lastDesign)
+            }
+            state = state.copy(screen = if (screen == AppScreen.Model && !designOpen) AppScreen.Start else screen)
+        }
+
+        override fun closeSettings() = showScreen(beforeSettings)
+
+        override fun setDetail(detail: DisplayDetail) {
+            state = state.copy(detail = detail)
+            settings["detail"] = detail.name
+            saveSettings()
+            applyDetail()
+        }
+
+        override fun quit() {
+            scope.launch {
+                saveNow()
+                quit?.invoke()
+            }
         }
 
         override fun save() {
@@ -225,7 +349,8 @@ class AppController(
 
         override fun setLayout(mode: LayoutMode) {
             state = state.copy(layout = mode)
-            scope.launch { files.writeSettings("layout=${mode.name}\n") }
+            settings["layout"] = mode.name
+            saveSettings()
         }
 
         override fun closeMenu() {

@@ -1,0 +1,181 @@
+// Times the core's heavy work on the device it runs on, one core and then
+// all of them, and OCCT's meshing options. Build with -DPM_BENCH=ON, then on
+// a phone or tablet:
+//   adb push pmcore_bench /data/local/tmp && adb shell /data/local/tmp/pmcore_bench
+// "pmcore_bench files" writes the test parts (plate.step, sphere.stl) instead.
+#include <BRepAlgoAPI_Cut.hxx>
+#include <BRepAlgoAPI_Fuse.hxx>
+#include <BRepFilletAPI_MakeFillet.hxx>
+#include <BRepPrimAPI_MakeBox.hxx>
+#include <BRepPrimAPI_MakeCylinder.hxx>
+#include <BRepPrimAPI_MakeSphere.hxx>
+#include <BRepMesh_IncrementalMesh.hxx>
+#include <BRepTools.hxx>
+#include <BRep_Tool.hxx>
+#include <Poly_Triangulation.hxx>
+#include <TopExp_Explorer.hxx>
+#include <TopTools_ListOfShape.hxx>
+#include <TopoDS.hxx>
+#include <gp_Ax2.hxx>
+
+#include <chrono>
+#include <cstdio>
+#include <cstring>
+#include <fstream>
+#include <functional>
+#include <thread>
+
+#include "display/display_mesh.h"
+#include "io/exchange.h"
+#include "mesh/mesh_body.h"
+#include "mesh/repair.h"
+#include "mesh/stl.h"
+#include "parallel.h"
+#include "solid/solid.h"
+#include "solid/speed.h"
+
+using Clock = std::chrono::steady_clock;
+
+// Runs work a few times and gives the fastest, in ms.
+static double best(int runs, const std::function<void()>& work) {
+    double fastest = 1e30;
+    for (int i = 0; i < runs; ++i) {
+        auto t0 = Clock::now();
+        work();
+        fastest = std::min(fastest, std::chrono::duration<double, std::milli>(Clock::now() - t0).count());
+    }
+    return fastest;
+}
+
+// A plate with a grid of n by n holes: lots of faces, the kind of part people print.
+static TopoDS_Shape plate(int n) {
+    TopoDS_Shape out = BRepPrimAPI_MakeBox(10.0 * n + 10, 10.0 * n + 10, 6).Shape();
+    TopTools_ListOfShape args, tools;
+    args.Append(out);
+    for (int i = 0; i < n; ++i)
+        for (int j = 0; j < n; ++j)
+            tools.Append(BRepPrimAPI_MakeCylinder(gp_Ax2(gp_Pnt(10.0 + 10 * i, 10.0 + 10 * j, -1), gp::DZ()), 3, 8).Shape());
+    BRepAlgoAPI_Cut cut;
+    cut.SetArguments(args);
+    cut.SetTools(tools);
+    cut.SetRunParallel(pm::useCores());
+    cut.Build();
+    return cut.Shape();
+}
+
+static void row(const char* what, double one, double all) {
+    std::printf("%-34s %9.1f %9.1f  %4.2fx\n", what, one, all, one / all);
+}
+
+static void save(const char* path, const std::vector<uint8_t>& bytes) {
+    std::ofstream(path, std::ios::binary).write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
+}
+
+int main(int argc, char** argv) {
+    // "files": only write the test parts, for opening in the app.
+    if (argc > 1 && std::strcmp(argv[1], "files") == 0) {
+        pm::setScratchDirectory(".");
+        save("plate.step", pm::writeSolid(pm::Solid::fromShape(plate(12)), pm::SolidFormat::Step));
+        TopoDS_Shape ball = BRepPrimAPI_MakeSphere(40).Shape();
+        save("sphere.stl", pm::writeStl(pm::Solid::fromShape(ball).tessellate({0.002, 0.05})));
+        return 0;
+    }
+    std::printf("cores: %u\n", std::thread::hardware_concurrency());
+    pm::speedTest();
+    std::printf("speed test: %.1f ms\n", best(3, [] { pm::speedTest(); }));
+    std::printf("%-34s %9s %9s\n", "", "1 core ms", "all ms");
+
+    double t[2];
+    TopoDS_Shape holes = plate(12);
+
+    for (int p = 0; p < 2; ++p) {
+        pm::useCores() = p == 1;
+        t[p] = best(3, [] { plate(12); });
+    }
+    row("cut 144 holes in a plate", t[0], t[1]);
+
+    for (int p = 0; p < 2; ++p) {
+        pm::useCores() = p == 1;
+        t[p] = best(3, [&] {
+            BRepTools::Clean(holes);
+            pm::Solid::fromShape(holes).display();
+        });
+    }
+    row("mesh it for display", t[0], t[1]);
+
+
+    // Display meshing at other settings, all cores: time and triangles.
+    pm::useCores() = true;
+    const double settings[][2] = {{0.01, 0.25}, {0.05, 0.25}, {0.1, 0.35}};
+    for (auto& st : settings) {
+        size_t triangles = 0;
+        double ms = best(2, [&] {
+            BRepTools::Clean(holes);
+            triangles = pm::Solid::fromShape(holes).display({st[0], st[1]}).indices.size() / 3;
+        });
+        std::printf("display at chord %.2f angle %.2f   %9.1f ms  %zu triangles\n", st[0], st[1], ms, triangles);
+    }
+
+    // OCCT's meshing options, all cores.
+    struct Way { const char* name; bool control; IMeshTools_MeshAlgoType algo; };
+    const Way ways[] = {
+        {"as now", true, IMeshTools_MeshAlgoType_Watson},
+        {"no surface check", false, IMeshTools_MeshAlgoType_Watson},
+        {"Delabella", true, IMeshTools_MeshAlgoType_Delabella},
+        {"Delabella, no surface check", false, IMeshTools_MeshAlgoType_Delabella},
+    };
+    for (auto& st : settings) for (auto& w : ways) {
+        size_t triangles = 0;
+        double ms = best(2, [&] {
+            BRepTools::Clean(holes);
+            BRepMesh_IncrementalMesh m;
+            m.SetShape(holes);
+            IMeshTools_Parameters& prm = m.ChangeParameters();
+            prm.Deflection = st[0];
+            prm.Angle = st[1];
+            prm.InParallel = true;
+            prm.ControlSurfaceDeflection = w.control;
+            prm.MeshAlgo = w.algo;
+            m.Perform();
+            triangles = 0;
+            for (TopExp_Explorer e(holes, TopAbs_FACE); e.More(); e.Next()) {
+                TopLoc_Location loc;
+                auto tri = BRep_Tool::Triangulation(TopoDS::Face(e.Current()), loc);
+                if (!tri.IsNull()) triangles += size_t(tri->NbTriangles());
+            }
+        });
+        std::printf("%.2f/%.2f %-28s %9.1f ms  %zu triangles\n", st[0], st[1], w.name, ms, triangles);
+    }
+
+    // Fillets don't use threads; timed once for scale.
+    pm::useCores() = false;
+    double fillet = best(2, [&] {
+        BRepFilletAPI_MakeFillet f(holes);
+        for (TopExp_Explorer e(holes, TopAbs_EDGE); e.More(); e.Next()) {
+            // The holes' top and bottom rims.
+            f.Add(0.5, TopoDS::Edge(e.Current()));
+        }
+        f.Build();
+    });
+    std::printf("%-34s %9.1f\n", "fillet every edge", fillet);
+
+    // Mesh bodies: a fine sphere as a big STL.
+    TopoDS_Shape ball = BRepPrimAPI_MakeSphere(40).Shape();
+    pm::Mesh sphere = pm::Solid::fromShape(ball).tessellate({0.002, 0.05});
+    std::vector<uint8_t> stl = pm::writeStl(sphere);
+    std::printf("%-34s %zu triangles, %zu kB\n", "test STL", sphere.triangleCount(), stl.size() / 1024);
+    double read = best(3, [&] { pm::readStl(stl); });
+    std::printf("%-34s %9.1f\n", "read the STL", read);
+    pm::Mesh readBack = pm::readStl(stl);
+    double fix = best(3, [&] { pm::RepairReport r; pm::repair(readBack, r); });
+    std::printf("%-34s %9.1f\n", "repair check", fix);
+    double show = best(3, [&] { pm::displayMesh(readBack); });
+    std::printf("%-34s %9.1f\n", "display mesh for it", show);
+    pm::MeshBody body = pm::MeshBody::fromMesh(readBack);
+    pm::MeshBody other = body.translated(30, 0, 0);
+    std::printf("%-34s %zu triangles\n", "as a mesh body", body.triangleCount());
+    // Manifold works booleans out when the result is read.
+    double boolean = best(3, [&] { body.boolean(other, pm::BooleanOp::Cut).triangleCount(); });
+    std::printf("%-34s %9.1f\n", "mesh cut, sphere from sphere", boolean);
+    return 0;
+}
