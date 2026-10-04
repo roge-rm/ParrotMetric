@@ -3,6 +3,10 @@
 
 #include <BRepAdaptor_Curve.hxx>
 #include <BRepAlgoAPI_Splitter.hxx>
+#include <TopTools_ShapeMapHasher.hxx>
+#include <NCollection_DataMap.hxx>
+#include <BRep_Builder.hxx>
+#include <BRepTools_ReShape.hxx>
 #include <BRepBndLib.hxx>
 #include <BRepBuilderAPI_MakeEdge.hxx>
 #include <BRepBuilderAPI_MakeFace.hxx>
@@ -53,6 +57,37 @@ TopoDS_Edge makeEdge(const SketchCurve& c) {
 }
 
 /** Points along a wire in order, in the face's direction. */
+/**
+ * The face without curves that end inside it, such as a line poking into a
+ * rectangle: they're left in its boundary running both ways, and a face
+ * like that can't be extruded.
+ */
+TopoDS_Face withoutDangling(const TopoDS_Face& face) {
+    NCollection_DataMap<TopoDS_Shape, int, TopTools_ShapeMapHasher> uses;
+    for (TopExp_Explorer e(face, TopAbs_EDGE); e.More(); e.Next()) {
+        if (int* n = uses.ChangeSeek(e.Current())) ++*n;
+        else uses.Bind(e.Current(), 1);
+    }
+    Handle(BRepTools_ReShape) reshape = new BRepTools_ReShape;
+    bool any = false;
+    for (TopExp_Explorer e(face, TopAbs_EDGE); e.More(); e.Next()) {
+        TopAbs_Orientation o = e.Current().Orientation();
+        if (uses.Find(e.Current()) > 1 || o == TopAbs_INTERNAL || o == TopAbs_EXTERNAL) {
+            reshape->Remove(e.Current());
+            any = true;
+        }
+    }
+    if (!any) return face;
+    TopoDS_Shape cut = reshape->Apply(face);
+    // Wires left with no edges go.
+    TopoDS_Face out = TopoDS::Face(face.EmptyCopied());
+    BRep_Builder builder;
+    for (TopExp_Explorer w(cut, TopAbs_WIRE); w.More(); w.Next()) {
+        if (TopExp_Explorer(w.Current(), TopAbs_EDGE).More()) builder.Add(out, w.Current());
+    }
+    return out;
+}
+
 Region::Loop sampleWire(const TopoDS_Wire& wire, const TopoDS_Face& face) {
     Region::Loop loop;
     for (BRepTools_WireExplorer w(wire, face); w.More(); w.Next()) {
@@ -112,15 +147,15 @@ std::vector<RegionFace> buildRegionFaces(const std::vector<SketchCurve>& curves)
             if (fx0 <= x0 + tol || fy0 <= y0 + tol || fx1 >= x1 - tol || fy1 >= y1 - tol) continue;
 
             RegionFace rf;
-            rf.face = face;
+            rf.face = withoutDangling(face);
             Region& r = rf.info;
-            TopoDS_Wire outer = BRepTools::OuterWire(face);
-            r.loops.push_back(sampleWire(outer, face));
-            for (TopExp_Explorer w(face, TopAbs_WIRE); w.More(); w.Next()) {
-                if (!w.Current().IsSame(outer)) r.loops.push_back(sampleWire(TopoDS::Wire(w.Current()), face));
+            TopoDS_Wire outer = BRepTools::OuterWire(rf.face);
+            r.loops.push_back(sampleWire(outer, rf.face));
+            for (TopExp_Explorer w(rf.face, TopAbs_WIRE); w.More(); w.Next()) {
+                if (!w.Current().IsSame(outer)) r.loops.push_back(sampleWire(TopoDS::Wire(w.Current()), rf.face));
             }
             // Which input curve each of its edges came from.
-            for (TopExp_Explorer e(face, TopAbs_EDGE); e.More(); e.Next()) {
+            for (TopExp_Explorer e(rf.face, TopAbs_EDGE); e.More(); e.Next()) {
                 for (const auto& [input, id] : inputs) {
                     bool from = e.Current().IsSame(input);
                     if (!from) {
@@ -138,7 +173,7 @@ std::vector<RegionFace> buildRegionFaces(const std::vector<SketchCurve>& curves)
             std::sort(r.curveIds.begin(), r.curveIds.end());
             r.curveIds.erase(std::unique(r.curveIds.begin(), r.curveIds.end()), r.curveIds.end());
             GProp_GProps props;
-            BRepGProp::SurfaceProperties(face, props);
+            BRepGProp::SurfaceProperties(rf.face, props);
             r.area = std::abs(props.Mass());
             // A point inside: the middle of the bounds if it's in, else the first of a finer and finer grid that is.
             BRepTopAdaptor_FClass2d classify(face, 1e-7);

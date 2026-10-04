@@ -13,6 +13,7 @@
 #include <cmath>
 
 #include "model/operations.h"
+#include "sketch/regions.h"
 
 using namespace pm;
 
@@ -262,4 +263,13 @@ TEST_CASE("scaling unevenly keeps flat faces flat") {
     CHECK(volume(rounded) < volume(out));
     gp_Ax3 onTop = facePlane(out, "F9.s(F1.end)");
     CHECK(onTop.Location().Z() == Catch::Approx(20));
+}
+
+TEST_CASE("a line poking into a rectangle doesn't stop it extruding") {
+    auto curves = rectangle(40, 20);
+    curves.push_back(line(5, 20, -10, 20, 10));
+    auto regions = findRegions(curves);
+    REQUIRE(regions.size() == 1);
+    NamedShape body = extrude(1, top, curves, {{regions[0].curveIds, 30, 15}}, 10, 0);
+    CHECK(volume(body) == Catch::Approx(8000));
 }
