@@ -88,6 +88,12 @@ fun FeaturePanel(editor: DesignEditor) {
                 is DesignEditor.MeshEditDraft -> MeshEditSettings(editor, d)
                 is DesignEditor.RibDraft -> RibSettings(editor, d)
                 is DesignEditor.JointDraft -> JointSettings(editor, d)
+                is DesignEditor.EmbossDraft -> {
+                    Header("Emboss", Icons.emboss, Palette.modify, if (d.regions.isEmpty()) null else count(d.regions.size, "area", "areas"))
+                    Segmented(listOf("Raised", "Sunk"), if (d.sink) 1 else 0) { d.sink = it == 1; editor.draftChanged() }
+                    Field(editor, d, "size", "Depth", d.depth, "mm", allowNegative = false) { d.depth = it; editor.draftChanged() }
+                    if (d.face == null) Text("Tap the face to put it on", fontSize = 14.sp, color = Palette.muted)
+                }
                 is DesignEditor.PatchDraft -> {
                     Header("Patch", Icons.patch, Palette.create, if (d.byEdges) count(d.edges.size, "edge", "edges").takeIf { d.edges.isNotEmpty() } else null)
                     Segmented(listOf("Sketch areas", "Fill edges"), if (d.byEdges) 1 else 0) { d.byEdges = it == 1; editor.draftChanged() }

@@ -33,6 +33,9 @@ interface Kernel {
     fun meshEdit(id: Int, body: Long, kind: Int, size: Double, steps: Int): Long = throw KernelException("Not here")
     /** A rib or web from open curves, grown until it meets the body and joined to it; see RibFeature. */
     fun rib(id: Int, body: Long, plane: SketchPlane, curves: List<ProfileCurve>, thickness: Double, flip: Boolean, web: Boolean): Long = throw KernelException("Not here")
+    /** Sketch areas projected onto a face of the body along the sketch's normal, raised or sunk; see EmbossFeature. */
+    fun emboss(id: Int, body: Long, face: String, plane: SketchPlane, curves: List<ProfileCurve>, regions: List<RegionRef>, depth: Double, sink: Boolean): Long =
+        throw KernelException("Not here")
     /** Sketch areas as flat surfaces. */
     fun patch(id: Int, plane: SketchPlane, curves: List<ProfileCurve>, regions: List<RegionRef>): Long = throw KernelException("Not here")
     /** A surface filling a closed loop of a body's edges. */

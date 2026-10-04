@@ -71,6 +71,7 @@ object Tools {
         ToolDef("deleteface", "Delete face", Icons.deleteFace, ToolGroup.Modify, suggest = ::faces, cluster = "Faces") { it.design.startDeleteFace() },
         ToolDef("rib", "Rib", Icons.rib, ToolGroup.Modify, cluster = "Ribs") { it.design.startRib(web = false) },
         ToolDef("web", "Web", Icons.rib, ToolGroup.Modify, cluster = "Ribs") { it.design.startRib(web = true) },
+        ToolDef("emboss", "Emboss", Icons.emboss, ToolGroup.Modify, suggest = { it.selectedAreas > 0 && it.selectedFaces > 0 }) { it.design.startEmboss() },
         ToolDef("hole", "Hole", Icons.hole, ToolGroup.Modify, key = "H", mesh = true, cluster = "Holes and threads") { it.design.startHole() },
         ToolDef("thread", "Thread", Icons.thread, ToolGroup.Modify, cluster = "Holes and threads") { it.design.startThread() },
         ToolDef("draft", "Draft", Icons.draft, ToolGroup.Modify, key = "Shift+D", suggest = ::faces, cluster = "Faces") { it.design.startDraft() },

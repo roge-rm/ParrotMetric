@@ -506,3 +506,21 @@ TEST_CASE("surfaces: patch, stitch, thicken and trim") {
     CHECK(volume(sewn) == Catch::Approx(8000));
     CHECK(has(sewn.faceNames(), "F4.end"));
 }
+
+TEST_CASE("areas are raised from and sunk into a round face") {
+    NamedShape rod = extrude(1, top, {circle(1, 0, 0, 10)}, {{{1}, 0, 0}}, 30, 0);
+    std::string side;
+    for (const auto& f : rod.faceNames()) if (f != "F1.start" && f != "F1.end") side = f;
+    // Looking at the rod from in front, a 4 by 4 square halfway up.
+    gp_Ax3 front(gp_Pnt(0, -20, 0), gp_Dir(0, 1, 0), gp_Dir(1, 0, 0));
+    std::vector<SketchCurve> square = {line(1, -2, -13, 2, -13), line(2, 2, -13, 2, -17), line(3, 2, -17, -2, -17), line(4, -2, -17, -2, -13)};
+    const double before = volume(rod);
+    NamedShape raised = emboss(2, rod, side, front, square, {{{1, 2, 3, 4}, 0, -15}}, 1, false);
+    // Close to 4 x 4 x 1, a little more out where the face curves away.
+    CHECK(volume(raised) - before > 15);
+    CHECK(volume(raised) - before < 18);
+    NamedShape sunk = emboss(3, rod, side, front, square, {{{1, 2, 3, 4}, 0, -15}}, 1, true);
+    CHECK(before - volume(sunk) > 14);
+    CHECK(before - volume(sunk) < 17);
+    CHECK_THROWS(emboss(4, rod, "F1.end", front, square, {{{1, 2, 3, 4}, 0, -15}}, 1, false));
+}

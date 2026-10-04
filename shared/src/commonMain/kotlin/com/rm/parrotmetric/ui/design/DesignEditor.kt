@@ -573,6 +573,7 @@ class DesignEditor(
                 is ExtrudeFeature -> it.sketchId
                 is RevolveFeature -> it.sketchId
                 is com.rm.parrotmetric.design.RibFeature -> it.sketchId
+                is com.rm.parrotmetric.design.EmbossFeature -> it.sketchId
                 else -> null
             }
         }.toSet()
@@ -595,6 +596,16 @@ class DesignEditor(
     }
 
     fun startStitch() = openBodies(StitchDraft(null))
+
+    fun startEmboss() {
+        val d = EmbossDraft(null)
+        embossFace(d)
+        openArea(d)
+    }
+
+    private fun embossFace(d: EmbossDraft) {
+        viewport.selectedFaces().lastOrNull { it.second.isNotEmpty() }?.let { d.face = it.second }
+    }
 
     fun startJoint() {
         val comps = components()
@@ -976,6 +987,7 @@ class DesignEditor(
             is com.rm.parrotmetric.design.MeshEditFeature -> MeshEditDraft(f, f.kind)
             is com.rm.parrotmetric.design.RibFeature -> RibDraft(f, f.web)
             is com.rm.parrotmetric.design.PatchFeature -> PatchDraft(f)
+            is com.rm.parrotmetric.design.EmbossFeature -> EmbossDraft(f)
             is com.rm.parrotmetric.design.JointFeature -> JointDraft(f)
             is com.rm.parrotmetric.design.StitchFeature -> StitchDraft(f)
             is com.rm.parrotmetric.design.ThickenFeature -> ThickenDraft(f)
@@ -1020,6 +1032,11 @@ class DesignEditor(
         when (val d = panel) {
             is JointDraft -> {
                 jointPick(d)
+                rebuild()
+            }
+            is EmbossDraft -> {
+                takeAreas(d)
+                embossFace(d)
                 rebuild()
             }
             is PatchDraft -> {
@@ -1101,6 +1118,7 @@ class DesignEditor(
     private fun highlight(d: FeatureDraft) {
         when (d) {
             is PatchDraft -> viewport.select(d.edges, regionPairs(d.sketchId, d.regions))
+            is EmbossDraft -> viewport.select(emptyList(), regionPairs(d.sketchId, d.regions), listOfNotNull(d.face))
             is JointDraft -> viewport.select(listOfNotNull(d.edge), emptyList(), listOfNotNull(d.face))
             is SweepDraft -> viewport.select(d.pathEdges, regionPairs(d.sketchId, d.regions))
             is PipeDraft -> viewport.select(d.pathEdges, emptyList())
@@ -1540,6 +1558,27 @@ class DesignEditor(
             if (kind == com.rm.parrotmetric.design.JointKind.Slide) value else value * PI / 180, value2,
         )
         override fun missing() = "Pick the components"
+    }
+
+    /** Sketch areas raised from or sunk into a face. */
+    inner class EmbossDraft(editing: com.rm.parrotmetric.design.EmbossFeature?) : AreaDraft(editing) {
+        private val name = editing?.name ?: nextName("Emboss", design.features.count { it is com.rm.parrotmetric.design.EmbossFeature })
+        var face by mutableStateOf(editing?.face)
+        var depth by mutableStateOf(editing?.depth ?: 1.0)
+        var sink by mutableStateOf(editing?.sink ?: false)
+        init {
+            if (editing != null) {
+                sketchId = editing.sketchId
+                regions = editing.regions
+            }
+        }
+        override fun feature(): Feature? {
+            val s = sketchId ?: return null
+            val f = face ?: return null
+            if (regions.isEmpty()) return null
+            return com.rm.parrotmetric.design.EmbossFeature(id, name, s, regions, f, depth, sink)
+        }
+        override fun missing() = if (regions.isEmpty()) "Tap an area of a sketch" else "Tap the face to put it on"
     }
 
     /** A surface from sketch areas, or filling a loop of edges. */

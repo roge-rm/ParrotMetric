@@ -174,6 +174,14 @@ NamedShape thread(int id, const NamedShape& body, const std::string& face, doubl
  */
 NamedShape rib(int id, const NamedShape& body, const gp_Ax3& plane, const std::vector<SketchCurve>& curves, double thickness, bool flip, bool web);
 
+/**
+ * Sketch areas projected along the sketch's normal onto a face of the body,
+ * flat or curved, and raised out of it or with [sink] sunk into it, [depth]
+ * mm measured square to the face. New faces are F<id>.e<n>.
+ */
+NamedShape emboss(int id, const NamedShape& body, const std::string& face, const gp_Ax3& plane, const std::vector<SketchCurve>& curves,
+                  const std::vector<RegionPick>& picks, double depth, bool sink);
+
 /** Sketch areas as flat surfaces with no thickness. Faces are F<id>.a<n>. */
 NamedShape patch(int id, const gp_Ax3& plane, const std::vector<SketchCurve>& curves, const std::vector<RegionPick>& picks);
 

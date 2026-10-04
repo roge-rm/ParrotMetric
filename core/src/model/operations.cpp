@@ -1421,6 +1421,65 @@ NamedShape rib(int id, const NamedShape& body, const gp_Ax3& plane, const std::v
     }
 }
 
+NamedShape emboss(int id, const NamedShape& body, const std::string& face, const gp_Ax3& plane, const std::vector<SketchCurve>& curves,
+                  const std::vector<RegionPick>& picks, double depth, bool sink) {
+    if (depth <= 0) throw std::runtime_error("The depth has to be more than 0");
+    auto found = body.findFaces(face);
+    if (found.empty()) throw std::runtime_error("The face it's on isn't there any more");
+    try {
+        Bnd_Box box;
+        BRepBndLib::Add(body.shape, box);
+        const double far = std::sqrt(box.SquareExtent()) * 2 + 10;
+        const gp_Vec n(plane.Direction());
+        // The layer the depth makes over (or under) the face.
+        BRep_Builder b;
+        BRepOffsetAPI_MakeThickSolid thick;
+        thick.MakeThickSolidBySimple(found[0], sink ? -depth : depth);
+        if (!thick.IsDone()) throw std::runtime_error("The face can't take that depth");
+        TopoDS_Compound layer;
+        b.MakeCompound(layer);
+        for (TopExp_Explorer s(thick.Shape(), TopAbs_SOLID); s.More(); s.Next()) {
+            TopoDS_Solid solid = TopoDS::Solid(s.Current());
+            BRepLib::OrientClosedSolid(solid);
+            b.Add(layer, solid);
+        }
+        // Each area as a column right through, along the sketch's normal, where it
+        // crosses the layer; only the nearest crossing on the side the sketch faces,
+        // or if there's none that side, the nearest behind it.
+        auto regions = buildRegionFaces(curves);
+        TopLoc_Location loc(placeOn(plane));
+        gp_Trsf back;
+        back.SetTranslation(n * -far);
+        TopoDS_Compound pieces;
+        b.MakeCompound(pieces);
+        int count = 0;
+        for (const RegionFace* r : choose(regions, picks)) {
+            ++count;
+            TopoDS_Shape start = r->face.Moved(loc).Moved(TopLoc_Location(back));
+            BRepAlgoAPI_Common where(BRepPrimAPI_MakePrism(start, n * (2 * far)).Shape(), layer);
+            where.SetRunParallel(useCores());
+            where.Build();
+            if (!where.IsDone()) throw std::runtime_error("The areas couldn't be laid on the face");
+            TopoDS_Shape nearest;
+            double best = 1e300;
+            for (TopExp_Explorer s(where.Shape(), TopAbs_SOLID); s.More(); s.Next()) {
+                GProp_GProps g;
+                BRepGProp::VolumeProperties(s.Current(), g);
+                double along = gp_Vec(plane.Location(), g.CentreOfMass()).Dot(n);
+                double d = along >= 0 ? along : far - along;
+                if (d < best) { best = d; nearest = s.Current(); }
+            }
+            if (!nearest.IsNull()) b.Add(pieces, nearest);
+        }
+        if (count == 0) throw std::runtime_error("Pick an area of the sketch");
+        TopoDS_Shape piece = pieces;
+        if (volume(piece) < 1e-9) throw std::runtime_error("The areas don't land on that face");
+        return combine(id, body, nameAll(id, piece, TopoDS_Shape(), TopoDS_Shape(), "e"), sink ? Combine::Cut : Combine::Join);
+    } catch (const Standard_Failure&) {
+        throw std::runtime_error("It couldn't be embossed");
+    }
+}
+
 NamedShape patch(int id, const gp_Ax3& plane, const std::vector<SketchCurve>& curves, const std::vector<RegionPick>& picks) {
     try {
         auto regions = buildRegionFaces(curves);

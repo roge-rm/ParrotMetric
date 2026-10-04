@@ -39,6 +39,22 @@ data class RibFeature(
     override fun key() = this
 }
 
+/**
+ * Sketch areas projected along the sketch's normal onto [face], flat or
+ * curved, and raised out of it [depth] mm, or sunk into it with [sink].
+ */
+data class EmbossFeature(
+    override val id: Int,
+    override val name: String,
+    val sketchId: Int,
+    val regions: List<RegionRef>,
+    val face: String,
+    val depth: Double,
+    val sink: Boolean,
+) : Feature() {
+    override fun key() = this
+}
+
 /** A surface: sketch areas laid flat ([sketchId] and [regions]), or filling a loop of body [edges]. */
 data class PatchFeature(
     override val id: Int,

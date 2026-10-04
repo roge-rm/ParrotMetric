@@ -1948,4 +1948,25 @@ JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_thicken(JNIEnv* env, jobje
     }
 }
 
+JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_emboss(JNIEnv* env, jobject, jint id, jlong body, jstring face, jdoubleArray plane, jintArray kinds,
+                                                            jintArray ids, jdoubleArray nums, jintArray pickCounts, jintArray pickIds,
+                                                            jdoubleArray pickPoints, jdouble depth, jboolean sink) {
+    try {
+        const char* c = env->GetStringUTFChars(face, nullptr);
+        std::string name(c);
+        env->ReleaseStringUTFChars(face, c);
+        auto p = doubles(env, plane);
+        auto k = ints(env, kinds), i = ints(env, ids);
+        auto n = doubles(env, nums);
+        auto picks = picksOf(ints(env, pickCounts), ints(env, pickIds), doubles(env, pickPoints));
+        std::unique_lock<std::mutex> g(lock);
+        pm::NamedShape s = solidOf(body);
+        g.unlock();
+        return keep(pm::emboss(id, s, name, planeOf(p.data()), curvesOf(k.data(), i.data(), n.data(), k.size()), picks, depth, sink));
+    } catch (const std::exception& e) {
+        fail(env, e.what());
+        return 0;
+    }
+}
+
 }  // extern "C"

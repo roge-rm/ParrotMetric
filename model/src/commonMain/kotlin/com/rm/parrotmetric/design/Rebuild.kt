@@ -421,6 +421,14 @@ class Rebuilder(private val kernel: Kernel) {
             val (body, h) = made2 ?: throw KernelException(why ?: "There's no body for it to meet")
             replace(f, bodies, planes, made, body) { h }
         }
+        is EmbossFeature -> {
+            val sketch = sketchOf(f.sketchId, all)
+            val plane = planes[f.sketchId] ?: throw KernelException("Its sketch couldn't be built")
+            if (f.regions.isEmpty()) throw KernelException("Pick an area of the sketch")
+            val face = ref(f, f.face, false, bodies)
+            val body = bodyWithFace(face, bodies) ?: throw KernelException("The face it's on isn't there any more")
+            replace(f, bodies, planes, made, body) { kernel.emboss(f.id, body.handle, face, plane, sketch.curves(), f.regions, f.depth, f.sink) }
+        }
         is PatchFeature -> {
             if (f.sketchId != null) {
                 val sketch = sketchOf(f.sketchId, all)

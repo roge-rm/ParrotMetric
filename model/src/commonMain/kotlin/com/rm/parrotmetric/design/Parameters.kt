@@ -81,6 +81,7 @@ object Parametrics {
             is OffsetFaceFeature -> if (field == "size") f.copy(distance = v) else f
             is RibFeature -> if (field == "size") f.copy(thickness = v) else f
             is ThickenFeature -> if (field == "size") f.copy(thickness = v) else f
+            is EmbossFeature -> if (field == "size") f.copy(depth = v) else f
             is JointFeature -> when (field) {
                 "value" -> f.copy(value = if (f.kind == JointKind.Slide) v else rad)
                 "value2" -> f.copy(value2 = v)

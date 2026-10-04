@@ -94,6 +94,7 @@ class DesignFileTest {
             com.rm.parrotmetric.design.OffsetFaceFeature(d.newId(), "Press pull", listOf("F1.end"), -2.5),
             com.rm.parrotmetric.design.DeleteFaceFeature(d.newId(), "Delete face", listOf("F4.r(F1.s1|F1.end)")),
             com.rm.parrotmetric.design.RibFeature(d.newId(), "Web", 1, 2.5, true, true),
+            com.rm.parrotmetric.design.EmbossFeature(d.newId(), "Emboss", 1, listOf(com.rm.parrotmetric.design.RegionRef(listOf(1, 2), 0.5, 0.5)), "F2.side", 0.8, true),
             com.rm.parrotmetric.design.PatchFeature(d.newId(), "Patch", 1, listOf(com.rm.parrotmetric.design.RegionRef(listOf(1, 2), 0.5, 0.5)), emptyList()),
             com.rm.parrotmetric.design.PatchFeature(d.newId(), "Fill", null, emptyList(), listOf("F1.s1|F1.end")),
             com.rm.parrotmetric.design.StitchFeature(d.newId(), "Stitch", listOf("Body 1", "Body 2")),
