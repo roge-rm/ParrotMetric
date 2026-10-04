@@ -4,5 +4,4 @@
         <item name="android:windowBackground">@color/page</item>
     </style>
     <color name="page">#1C1F24</color>
-    <color name="ic_launcher_background">#2F6B4F</color>
 </resources>
