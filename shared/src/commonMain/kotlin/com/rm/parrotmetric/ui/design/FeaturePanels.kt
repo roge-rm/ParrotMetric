@@ -22,6 +22,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -30,7 +31,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -229,12 +234,31 @@ fun NumberRow(
     var field by remember(value, expression) { mutableStateOf(TextFieldValue(expression ?: text(value))) }
     var bad by remember { mutableStateOf(false) }
     var focused by remember { mutableStateOf(false) }
+    // Started by a typed digit: keep what was typed in place of selecting it all.
+    var started by remember { mutableStateOf(false) }
+    val focus = remember { FocusRequester() }
+    val chain = com.rm.parrotmetric.ui.LocalFieldChain.current
+    // Focus is taken just after the key that started the field is done with.
+    var starts by remember { mutableStateOf(0) }
+    LaunchedEffect(starts) { if (starts > 0) focus.requestFocus() }
+    val link = remember {
+        com.rm.parrotmetric.ui.FieldChain.Field(focus) { c ->
+            started = true
+            field = TextFieldValue(c.toString(), TextRange(1))
+            starts++
+        }
+    }
+    DisposableEffect(chain) {
+        chain?.add(link)
+        onDispose { chain?.remove(link) }
+    }
     // Select it all once focused, after the tap has placed the cursor, so typing replaces it.
     LaunchedEffect(focused) {
-        if (focused) {
+        if (focused && !started) {
             delay(30)
             field = field.copy(selection = TextRange(0, field.text.length))
         }
+        if (!focused) started = false
     }
     fun apply() {
         val v = Expression.evaluate(field.text, names)
@@ -251,10 +275,13 @@ fun NumberRow(
             BasicTextField(
                 field,
                 onValueChange = { field = it },
-                modifier = Modifier.weight(1f).onFocusChanged {
-                    if (focused && !it.isFocused) apply()
-                    focused = it.isFocused
-                },
+                modifier = Modifier.weight(1f).focusRequester(focus)
+                    .onGloballyPositioned { val at = it.positionInRoot(); link.x = at.x; link.y = at.y }
+                    .onFocusChanged {
+                        if (focused && !it.isFocused) apply()
+                        focused = it.isFocused
+                        link.focused = it.isFocused
+                    },
                 textStyle = TextStyle(color = Palette.text, fontSize = 19.sp, fontFamily = FontFamily.Monospace),
                 cursorBrush = SolidColor(Palette.mint),
                 singleLine = true,

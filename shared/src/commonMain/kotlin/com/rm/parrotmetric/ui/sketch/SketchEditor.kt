@@ -133,6 +133,7 @@ class SketchEditor(
 
     /** Ends a chain of lines or a half-drawn shape; points it left on their own go. A spline in progress is made. */
     fun endDrawing() {
+        typed = null
         if (tool == SketchTool.Spline && pending.size >= 2) {
             sketch.addSpline(pending.toList(), construction)
             placedForPending.clear()
@@ -187,7 +188,12 @@ class SketchEditor(
 
     /** The mouse moved with no button down: the shape being drawn follows it. Null when it leaves the sketch. */
     fun hover(u: Double?, v: Double, tol: Double) {
-        preview = if (u != null && isDrawing()) snap(u, v, tol) else null
+        if (u != null) aim = u to v
+        preview = when {
+            u == null || !isDrawing() -> null
+            typed != null -> typedTarget(u, v).let { Snap(it.first, it.second) }
+            else -> snap(u, v, tol)
+        }
     }
 
     /** A second finger came down: whatever the first was doing stops. */
@@ -202,7 +208,8 @@ class SketchEditor(
 
     fun move(u: Double, v: Double, tol: Double) {
         if (isDrawing()) {
-            preview = snap(u, v, tol)
+            aim = u to v
+            preview = if (typed != null) typedTarget(u, v).let { Snap(it.first, it.second) } else snap(u, v, tol)
             return
         }
         if (dragging.isEmpty()) return
@@ -218,6 +225,14 @@ class SketchEditor(
 
     /** The finger lifted. [moved] if it went further than a tap. */
     fun release(u: Double, v: Double, tol: Double, moved: Boolean) {
+        if (isDrawing() && typed != null && pending.isNotEmpty()) {
+            // Sizes were typed: the click places the shape at them, towards the pointer.
+            aim = u to v
+            applyTyped()
+            startedShape = false
+            pressedAt = null
+            return
+        }
         if (isDrawing()) {
             val start = pressedAt
             // A line dragged out away from the chain's end starts a new chain where the drag began.
@@ -288,6 +303,194 @@ class SketchEditor(
 
     /** Arc through three points (its ends, then one on it) in place of centre, start and end. */
     var arcThroughPoints by mutableStateOf(false)
+
+
+    // Sizes typed while drawing.
+
+    /** Sizes typed for the shape being drawn, one per field; Tab moves between them and Enter places the shape. */
+    class TypedSizes(val labels: List<String>, val angle: List<Boolean>) {
+        val texts = mutableStateListOf<String>().apply { repeat(labels.size) { add("") } }
+        var active by mutableIntStateOf(0)
+    }
+
+    var typed by mutableStateOf<TypedSizes?>(null)
+        private set
+    /** Where the pointer last was on the plane, which way typed sizes go. */
+    private var aim: Pair<Double, Double>? = null
+
+    /** The sizes the shape being drawn can take next, as (label, is an angle), or null if none. */
+    private fun sizeFields(): List<Pair<String, Boolean>>? {
+        if (pending.isEmpty()) return null
+        return when (tool) {
+            SketchTool.Line -> listOf("Length" to false, "Angle" to true)
+            SketchTool.Rectangle -> listOf("Width" to false, "Height" to false)
+            SketchTool.Circle -> listOf("Diameter" to false)
+            SketchTool.Polygon -> listOf("Radius" to false)
+            SketchTool.Arc -> when {
+                arcThroughPoints -> if (pending.size == 1) listOf("Length" to false) else null
+                pending.size == 1 -> listOf("Radius" to false)
+                else -> listOf("Angle" to true)
+            }
+            SketchTool.Slot -> if (pending.size == 1) listOf("Length" to false) else listOf("Width" to false)
+            else -> null
+        }
+    }
+
+    /** A key typed while drawing. True if it went into a size: a digit starts one, then anything printable carries on. */
+    fun typeKey(c: Char): Boolean {
+        val t = typed ?: run {
+            if (!com.rm.parrotmetric.ui.startsNumber(c)) return false
+            val fields = sizeFields() ?: return false
+            TypedSizes(fields.map { it.first }, fields.map { it.second }).also { typed = it }
+        }
+        t.texts[t.active] = t.texts[t.active] + c
+        followAim()
+        return true
+    }
+
+    /** Backspace while typing a size. False when there's nothing typed. */
+    fun typedBackspace(): Boolean {
+        val t = typed ?: return false
+        val text = t.texts[t.active]
+        if (text.isNotEmpty()) t.texts[t.active] = text.dropLast(1)
+        if (t.texts.all { it.isEmpty() }) typed = null
+        followAim()
+        return true
+    }
+
+    /** Tab while typing a size: the next one, or with [back] the one before. */
+    fun typedNext(back: Boolean): Boolean {
+        val t = typed ?: run {
+            val fields = sizeFields() ?: return false
+            TypedSizes(fields.map { it.first }, fields.map { it.second }).also { typed = it }
+            return true
+        }
+        val n = t.labels.size
+        t.active = (t.active + (if (back) n - 1 else 1)) % n
+        return true
+    }
+
+    /** Drops what's been typed. False if nothing was. */
+    fun dropTyped(): Boolean {
+        if (typed == null) return false
+        typed = null
+        followAim()
+        return true
+    }
+
+    private fun typedValue(i: Int): Double? {
+        val text = typed?.texts?.getOrNull(i)?.takeIf { it.isNotBlank() } ?: return null
+        return Expression.evaluate(text, names())
+    }
+
+    /** Where the next point goes for the pointer at (u, v) with the sizes typed so far. */
+    private fun typedTarget(u: Double, v: Double): Pair<Double, Double> {
+        if (typed == null || pending.isEmpty()) return u to v
+        val p0 = pending.first()
+        val x0 = sketch.x(p0); val y0 = sketch.y(p0)
+        fun along(cx: Double, cy: Double, r: Double?): Pair<Double, Double> {
+            if (r == null) return u to v
+            val d = hypot(u - cx, v - cy)
+            return if (d < 1e-9) (cx + r) to cy else (cx + (u - cx) / d * r) to (cy + (v - cy) / d * r)
+        }
+        fun sign(d: Double) = if (d < 0) -1.0 else 1.0
+        return when (tool) {
+            SketchTool.Line -> {
+                val a = pending.last()
+                val ax = sketch.x(a); val ay = sketch.y(a)
+                val len = typedValue(0) ?: hypot(u - ax, v - ay)
+                val angle = typedValue(1)?.let { it * PI / 180 } ?: atan2(v - ay, u - ax)
+                (ax + len * cos(angle)) to (ay + len * sin(angle))
+            }
+            SketchTool.Rectangle -> {
+                val k = if (rectangleFromCentre) 0.5 else 1.0
+                val w = typedValue(0)?.let { sign(u - x0) * it * k } ?: (u - x0)
+                val h = typedValue(1)?.let { sign(v - y0) * it * k } ?: (v - y0)
+                (x0 + w) to (y0 + h)
+            }
+            SketchTool.Circle -> along(x0, y0, typedValue(0)?.let { it / 2 })
+            SketchTool.Polygon -> along(x0, y0, typedValue(0))
+            SketchTool.Arc -> if (arcThroughPoints || pending.size == 1) along(x0, y0, typedValue(0)) else {
+                val sweep = typedValue(0) ?: return u to v
+                val p1 = pending[1]
+                val r = sketch.distance(p0, p1)
+                val a = atan2(sketch.y(p1) - y0, sketch.x(p1) - x0) + sweep * PI / 180
+                (x0 + r * cos(a)) to (y0 + r * sin(a))
+            }
+            SketchTool.Slot -> if (pending.size == 1) along(x0, y0, typedValue(0)) else {
+                val half = typedValue(0)?.let { it / 2 } ?: return u to v
+                val b = pending[1]
+                val dx = sketch.x(b) - x0; val dy = sketch.y(b) - y0
+                val len = hypot(dx, dy).coerceAtLeast(1e-9)
+                val side = sign(dx * (v - y0) - dy * (u - x0))
+                (x0 - dy / len * half * side) to (y0 + dx / len * half * side)
+            }
+            else -> u to v
+        }
+    }
+
+    /** The pointer's position when there's been none, as with a finger: straight to the right of the last point. */
+    private fun aimOrDefault(): Pair<Double, Double> = aim ?: pending.lastOrNull()?.let { (sketch.x(it) + 1.0) to sketch.y(it) } ?: (1.0 to 0.0)
+
+    private fun followAim() {
+        if (isDrawing() && pending.isNotEmpty()) aimOrDefault().let { (u, v) -> preview = typedTarget(u, v).let { Snap(it.first, it.second) } }
+        version++
+    }
+
+    /**
+     * Places the next point at the typed sizes, towards the pointer, and holds
+     * those sizes with dimensions. False if nothing was typed.
+     */
+    fun applyTyped(): Boolean {
+        val t = typed ?: return false
+        val values = t.texts.indices.map { typedValue(it) }
+        for (i in t.texts.indices) {
+            val v = values[i]
+            if (t.texts[i].isNotBlank() && (v == null || (v <= 0 && !t.angle[i]))) {
+                message = "That isn't a number"
+                return true
+            }
+        }
+        val (u, v) = aimOrDefault()
+        val target = typedTarget(u, v)
+        val before = sketch.curves.size
+        val started = pending.toList()
+        val drawing = tool
+        typed = null
+        commit(Snap(target.first, target.second))
+        val made = sketch.curves.drop(before)
+        fun hold(d: Constraint.Dimension, i: Int) {
+            val text = t.texts[i].trim()
+            if (Expression.usesNames(text)) d.expression = text
+            addQuietly(d)
+        }
+        when (drawing) {
+            SketchTool.Line -> made.filterIsInstance<Line>().firstOrNull()?.let { l ->
+                values[0]?.let { hold(Constraint.Length(l, it), 0) }
+                values[1]?.let { a ->
+                    val m = ((a % 180) + 180) % 180
+                    if (m == 0.0) addQuietly(Constraint.Horizontal(l)) else if (m == 90.0) addQuietly(Constraint.Vertical(l))
+                }
+            }
+            SketchTool.Rectangle -> made.filterIsInstance<Line>().take(4).takeIf { it.size == 4 }?.let { sides ->
+                values[0]?.let { hold(Constraint.Length(sides[0], it), 0) }
+                values[1]?.let { hold(Constraint.Length(sides[1], it), 1) }
+            }
+            SketchTool.Circle -> made.filterIsInstance<Circle>().firstOrNull()?.let { c -> values[0]?.let { hold(Constraint.Radius(c, true, it), 0) } }
+            SketchTool.Polygon -> made.filterIsInstance<Circle>().firstOrNull()?.let { c -> values[0]?.let { hold(Constraint.Radius(c, false, it), 0) } }
+            SketchTool.Arc, SketchTool.Slot -> if (started.size == 1) {
+                // The second point: its distance from the first (a radius, or a length).
+                val p = pending.getOrNull(1)
+                if (p != null) values[0]?.let { hold(Constraint.Distance(started[0], p, it), 0) }
+            } else if (drawing == SketchTool.Slot) {
+                made.filterIsInstance<Arc>().firstOrNull()?.let { a -> values[0]?.let { hold(Constraint.Radius(a, false, it / 2), 0) } }
+            }
+            else -> {}
+        }
+        changed()
+        followAim()
+        return true
+    }
 
     // Drawing.
 
@@ -826,6 +1029,12 @@ class SketchEditor(
         changed()
     }
 
+    fun clearSelection() {
+        selection.clear()
+        dimensionPicks.clear()
+        version++
+    }
+
     fun deleteSelection() {
         if (selection.isEmpty()) return
         checkpoint()
@@ -873,6 +1082,7 @@ class SketchEditor(
 
     private fun restore(s: Sketch.Snapshot) {
         sketch.restore(s)
+        typed = null
         pending.clear()
         placedForPending.clear()
         selection.clear()

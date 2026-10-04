@@ -55,7 +55,19 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.pointerInput
 import com.rm.parrotmetric.sketch.SketchPlane
+import com.rm.parrotmetric.ui.sketch.SketchTool
 import com.rm.parrotmetric.ui.design.DesignEditor
 import com.rm.parrotmetric.ui.design.FeaturePanel
 import com.rm.parrotmetric.ui.design.HistoryEntry
@@ -148,20 +160,150 @@ fun ModelScreen(
     seeThrough: Boolean = false,
     /** The app's icon for the start screen. */
     startIcon: androidx.compose.ui.graphics.painter.Painter? = null,
+    /** A keyboard is attached (always so on desktop and in the browser): tools show their keys. */
+    hasKeyboard: Boolean = true,
+    /** The platform's back gesture, where there is one: enabled, then what it does. */
+    backHandler: @Composable (Boolean, () -> Unit) -> Unit = { _, _ -> },
 ) {
     var openGroup by remember { mutableStateOf<ToolGroup?>(null) }
     // A sheet over the bottom: the parts list or export.
     var sheet by remember { mutableStateOf<String?>(null) }
+    var finder by remember { mutableStateOf(false) }
+    var keyList by remember { mutableStateOf(false) }
+    // Any key pressed shows the keys, as on a phone with a keyboard plugged in later.
+    var keyboard by remember { mutableStateOf(hasKeyboard) }
+    val focus = remember { FocusRequester() }
+    val chain = remember { FieldChain() }
+    // A digit that started a field: the desktop sends it again as typed text, which the field mustn't get twice.
+    var started by remember { mutableStateOf<Char?>(null) }
+    // The screen itself has the keys, not a field in it.
+    var screenFocused by remember { mutableStateOf(false) }
+    val sketch = state.sketch
+    val context = ToolContext(state, design, actions) { sheet = it }
+    val shortcuts = when {
+        state.screen != AppScreen.Model -> emptyList()
+        sketch != null -> sketchShortcuts(sketch, actions, { finder = true }, { keyList = true })
+        else -> modelShortcuts(context, { finder = true }, { keyList = true }, design.panel != null)
+    }
+    fun closeSheet() {
+        when (sheet) {
+            "measure" -> design.stopMeasuring()
+            "section" -> design.stopSection()
+        }
+        sheet = null
+    }
+    // Esc, Backspace or Back: closes or cancels the nearest thing. False if there was nothing.
+    fun escape(): Boolean {
+        when {
+            finder -> finder = false
+            keyList -> keyList = false
+            state.screen == AppScreen.Settings -> actions.closeSettings()
+            state.screen != AppScreen.Model -> return false
+            sketch != null -> when {
+                sketch.editing != null -> sketch.cancelDimension()
+                sketch.dropTyped() -> {}
+                sketch.pending.isNotEmpty() -> sketch.endDrawing()
+                sketch.selection.isNotEmpty() -> sketch.clearSelection()
+                sketch.tool != SketchTool.Select -> sketch.selectTool(SketchTool.Select)
+                else -> return false
+            }
+            state.menu != null -> actions.closeMenu()
+            design.panel != null -> { focus.requestFocus(); design.cancelPanel() }
+            sheet != null -> closeSheet()
+            openGroup != null -> openGroup = null
+            state.selectedFaces + state.selectedEdges + state.selectedAreas + state.selectedPlanes > 0 -> actions.clearSelection()
+            else -> return false
+        }
+        return true
+    }
+    // Back, past what Esc closes: out of the sketch, then to the start screen.
+    backHandler(state.screen != AppScreen.Start) {
+        if (!escape()) {
+            if (sketch != null) actions.finishSketch() else actions.showScreen(AppScreen.Start)
+        }
+    }
+    // Keys come here when no field is focused, so the screen's own focus has to come back after fields and dialogs close.
+    LaunchedEffect(state.screen, sketch, design.panel, sketch?.editing, finder, keyList, sheet) {
+        if (!finder && sketch?.editing == null && !chain.focused) focus.requestFocus()
+    }
+    val keys = Modifier
+        .onPreviewKeyEvent { e ->
+            if (e.type != KeyEventType.KeyDown && e.type != KeyEventType.KeyUp) {
+                val again = started != null && typedChar(e) == started
+                started = null
+                return@onPreviewKeyEvent again
+            }
+            if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+            started = null
+            keyboard = true
+            val name = keyName(e) ?: return@onPreviewKeyEvent false
+            if (name == "Esc") return@onPreviewKeyEvent escape()
+            if (finder || keyList || state.screen != AppScreen.Model) return@onPreviewKeyEvent false
+            when {
+                name == "Ctrl+Enter" && sketch != null -> { actions.finishSketch(); true }
+                name == "Enter" && sketch != null -> when {
+                    sketch.editing != null -> false
+                    sketch.applyTyped() -> true
+                    sketch.pending.isNotEmpty() -> { sketch.endDrawing(); true }
+                    else -> { actions.finishSketch(); true }
+                }
+                name == "Enter" && design.panel != null -> {
+                    // Focus leaving a field applies what was typed in it.
+                    focus.requestFocus()
+                    design.confirmPanel()
+                    true
+                }
+                name == "Tab" || name == "Shift+Tab" -> {
+                    val back = name.startsWith("Shift")
+                    sketch?.typedNext(back) == true || (chain.any && chain.next(back))
+                }
+                // A field keeps its own undo, copy and paste.
+                name in fieldKeys && !screenFocused -> false
+                name.startsWith("Ctrl+") -> shortcuts.press(name)
+                else -> false
+            }
+        }
+        .onKeyEvent { e ->
+            // Only keys no field took; a field on the desktop lets key presses through, keeping the typed text.
+            if (e.type != KeyEventType.KeyDown || !screenFocused || finder || keyList || state.screen != AppScreen.Model) return@onKeyEvent false
+            val name = keyName(e)
+            val c = typedChar(e)
+            if (sketch != null && sketch.editing == null) {
+                if (c != null && sketch.typeKey(c)) return@onKeyEvent true
+                if (name == "Backspace") return@onKeyEvent when {
+                    sketch.typedBackspace() -> true
+                    sketch.selection.isNotEmpty() && sketch.tool == SketchTool.Select -> { sketch.deleteSelection(); true }
+                    else -> escape()
+                }
+            }
+            if (sketch == null && design.panel != null && c != null && startsNumber(c) && chain.startFirst(c)) {
+                started = c
+                return@onKeyEvent true
+            }
+            if (name == "Backspace") return@onKeyEvent escape()
+            name != null && shortcuts.press(name)
+        }
+        .onFocusChanged { screenFocused = it.isFocused }
+        .focusRequester(focus)
+        .focusable()
+    // A press on the model takes keys back from any field.
+    val refocus = Modifier.pointerInput(Unit) {
+        awaitPointerEventScope {
+            while (true) {
+                val e = awaitPointerEvent(PointerEventPass.Initial)
+                if (e.type == PointerEventType.Press) focus.requestFocus()
+            }
+        }
+    }
     MaterialTheme(colorScheme = Palette.scheme) {
-        val sketch = state.sketch
         // The view stays put while the controls over it change, so it keeps its GL context.
-        BoxWithConstraints(if (seeThrough) Modifier.fillMaxSize() else Modifier.fillMaxSize().background(Palette.ground)) {
+        BoxWithConstraints((if (seeThrough) Modifier.fillMaxSize() else Modifier.fillMaxSize().background(Palette.ground)).then(keys)) {
             val expanded = when (state.layout) {
                 LayoutMode.Automatic -> maxWidth >= 840.dp
                 LayoutMode.Phone -> false
                 LayoutMode.Large -> true
             }
-            viewport()
+            Box(Modifier.fillMaxSize().then(refocus)) { viewport() }
             if (state.screen == AppScreen.Start) {
                 StartScreen(startIcon, state, actions)
                 return@BoxWithConstraints
@@ -170,9 +312,14 @@ fun ModelScreen(
                 SettingsScreen(state, actions, actions::closeSettings)
                 return@BoxWithConstraints
             }
-            state.menu?.let { at -> SelectionMenu(at, ToolContext(state, design, actions) { sheet = it }, actions::closeMenu) }
+            androidx.compose.runtime.CompositionLocalProvider(LocalFieldChain provides chain, LocalKeyboard provides keyboard) {
+            state.menu?.let { at -> SelectionMenu(at, context, actions::closeMenu) }
             if (sketch != null) {
-                state.camera?.let { SketchOverlay(sketch, PlaneProjection(it, sketch.plane), actions::pan, actions::zoom, actions::zoomAt) }
+                state.camera?.let {
+                    Box(Modifier.fillMaxSize().then(refocus)) {
+                        SketchOverlay(sketch, PlaneProjection(it, sketch.plane), actions::pan, actions::zoom, actions::zoomAt)
+                    }
+                }
                 Column(Modifier.fillMaxSize().safeDrawingPadding()) {
                     SketchTopBar(sketch, actions::finishSketch)
                     Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -228,9 +375,18 @@ fun ModelScreen(
                     }
                 }
             }
+            if (finder) ToolFinder(shortcuts) { finder = false }
+            if (keyList) KeyList(shortcuts) { keyList = false }
+            }
         }
     }
 }
+
+/** Keys a text field handles itself when it has focus. */
+private val fieldKeys = setOf("Ctrl+Z", "Ctrl+Shift+Z", "Ctrl+Y", "Ctrl+A", "Ctrl+C", "Ctrl+V", "Ctrl+X")
+
+/** True when tools should show their keys. */
+val LocalKeyboard = androidx.compose.runtime.compositionLocalOf { false }
 
 @Composable
 private fun TopBar(logo: @Composable () -> Unit, state: ModelState, design: DesignEditor, actions: ModelActions, onParts: () -> Unit, onExport: () -> Unit) {
@@ -432,10 +588,13 @@ private fun ToolSheet(group: ToolGroup, state: ModelState, design: DesignEditor,
                             color = Palette.raised,
                             contentColor = if (enabled) Palette.text else Palette.faint,
                         ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                                Icon(t.icon, null, Modifier.size(24.dp), tint = if (enabled) group.colour else Palette.faint)
-                                Spacer(Modifier.height(6.dp))
-                                Text(t.label, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                            Box {
+                                Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                                    Icon(t.icon, null, Modifier.size(24.dp), tint = if (enabled) group.colour else Palette.faint)
+                                    Spacer(Modifier.height(6.dp))
+                                    Text(t.label, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                                }
+                                if (LocalKeyboard.current) t.key?.let { KeyBadge(it, Modifier.align(Alignment.TopEnd).padding(5.dp)) }
                             }
                         }
                     }
@@ -554,7 +713,7 @@ private fun ToolbarButton(t: ToolDef, context: ToolContext) {
         positionProvider = androidx.compose.material3.TooltipDefaults.rememberTooltipPositionProvider(
             androidx.compose.material3.TooltipAnchorPosition.Below,
         ),
-        tooltip = { PlainTooltip { Text(t.label) } },
+        tooltip = { PlainTooltip { Text(t.label + (t.key?.let { "   $it" } ?: "")) } },
         state = androidx.compose.material3.rememberTooltipState(),
     ) {
         Surface(

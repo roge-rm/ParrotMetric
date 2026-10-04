@@ -143,6 +143,8 @@ class MainActivity : ComponentActivity() {
                 design = app.design,
                 actions = app.actions,
                 startIcon = painterResource(R.drawable.logo_full),
+                hasKeyboard = resources.configuration.keyboard == android.content.res.Configuration.KEYBOARD_QWERTY,
+                backHandler = { enabled, onBack -> androidx.activity.compose.BackHandler(enabled, onBack) },
             )
             LaunchSplash(painterResource(R.drawable.logo_full), starting)
             }

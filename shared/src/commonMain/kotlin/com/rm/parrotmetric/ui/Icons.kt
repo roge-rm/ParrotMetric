@@ -38,6 +38,8 @@ object Icons {
     val fit = stroke("fit", "M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5")
     val close = stroke("close", "M6 6l12 12M18 6L6 18", width = 2.4f)
     val more = stroke("more", "M6 9l6 6 6-6", width = 2f)
+    /** The Shift key, for key badges. */
+    val shiftKey = stroke("shiftKey", "M12 4l8 9h-4.5v7h-7v-7H4z", width = 2.4f)
 
     val box = stroke("box", "M12 3l8 4.5v9L12 21l-8-4.5v-9z", "M12 12l8-4.5M12 12v9M12 12L4 7.5")
     val extrude = stroke("extrude", "M5 15l7 4 7-4", "M12 19V9", "M8.5 12.5L12 9l3.5 3.5", "M5 15V7l7-4 7 4v8")

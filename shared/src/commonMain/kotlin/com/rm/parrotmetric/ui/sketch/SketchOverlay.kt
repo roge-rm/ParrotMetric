@@ -348,6 +348,13 @@ private fun liveSize(editor: SketchEditor, u: Double, v: Double): String? {
     val s = editor.sketch
     val p = editor.pending
     if (p.isEmpty()) return null
+    // Sizes being typed: each with what's typed so far, the one taking keys marked.
+    editor.typed?.let { t ->
+        return t.labels.indices.joinToString("   ") { i ->
+            t.labels[i] + " " + t.texts[i].ifEmpty { if (i == t.active) "" else "–" } + (if (i == t.active) "▏" else "") +
+                (if (t.angle[i] && t.texts[i].isNotEmpty()) "°" else "")
+        }
+    }
     val x0 = s.x(p[0]); val y0 = s.y(p[0])
     return when (editor.tool) {
         SketchTool.Line -> {

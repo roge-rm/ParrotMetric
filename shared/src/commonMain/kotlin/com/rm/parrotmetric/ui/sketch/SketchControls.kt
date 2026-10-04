@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
@@ -246,6 +247,12 @@ private fun ChoiceRow(options: List<String>, chosen: Int, onPick: (Int) -> Unit)
     }
 }
 
+/** The drawing tools' keys, as the sketch shortcuts have them. */
+private val toolKeys = mapOf(
+    SketchTool.Line to "L", SketchTool.Rectangle to "R", SketchTool.Circle to "C", SketchTool.Arc to "A",
+    SketchTool.Point to "Shift+P", SketchTool.Spline to "Shift+S", SketchTool.Polygon to "G", SketchTool.Slot to "Shift+L",
+)
+
 @Composable
 private fun androidx.compose.foundation.layout.RowScope.ToolRow(editor: SketchEditor, tools: List<Triple<SketchTool, String, ImageVector>>) {
     run {
@@ -260,10 +267,15 @@ private fun androidx.compose.foundation.layout.RowScope.ToolRow(editor: SketchEd
                     color = if (active) Palette.sketch.copy(alpha = 0.16f) else Color.Transparent,
                     contentColor = if (active) Palette.sketch else Palette.text,
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                        Icon(icon, null, Modifier.size(24.dp), tint = Palette.sketch)
-                        Spacer(Modifier.height(4.dp))
-                        Text(label, fontSize = 11.sp, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium, maxLines = 1)
+                    Box {
+                        Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                            Icon(icon, null, Modifier.size(24.dp), tint = Palette.sketch)
+                            Spacer(Modifier.height(4.dp))
+                            Text(label, fontSize = 11.sp, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium, maxLines = 1)
+                        }
+                        if (com.rm.parrotmetric.ui.LocalKeyboard.current) toolKeys[tool]?.let {
+                            com.rm.parrotmetric.ui.KeyBadge(it, Modifier.align(Alignment.TopEnd).padding(4.dp))
+                        }
                     }
                 }
             }
