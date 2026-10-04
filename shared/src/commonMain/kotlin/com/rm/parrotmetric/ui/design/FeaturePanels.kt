@@ -42,6 +42,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rm.parrotmetric.design.AxisRef
 import com.rm.parrotmetric.design.Operation
+import com.rm.parrotmetric.design.SketchFeature
+import com.rm.parrotmetric.sketch.Line
 import com.rm.parrotmetric.sketch.Expression
 import com.rm.parrotmetric.ui.Icons
 import com.rm.parrotmetric.ui.Palette
@@ -109,8 +111,13 @@ private fun ExtrudeSettings(editor: DesignEditor, d: DesignEditor.ExtrudeDraft) 
 @Composable
 private fun RevolveSettings(editor: DesignEditor, d: DesignEditor.RevolveDraft) {
     Header("Revolve", Icons.revolve, Palette.create, if (d.regions.isEmpty()) null else count(d.regions.size, "area", "areas"))
-    Segmented(listOf("Round sketch Y", "Round sketch X"), if (d.axis == AxisRef.SketchX) 1 else 0) {
-        d.axis = if (it == 1) AxisRef.SketchX else AxisRef.SketchY
+    // The sketch's own axes, and any construction lines drawn in it.
+    val sketch = d.sketchId?.let { editor.design.feature(it) } as? SketchFeature
+    val lines = sketch?.sketch?.curves?.filter { it.construction && it is Line }.orEmpty()
+    val axes = listOf<AxisRef>(AxisRef.SketchY, AxisRef.SketchX) + lines.map { AxisRef.SketchLine(it.id) }
+    val labels = listOf("Y axis", "X axis") + lines.indices.map { if (lines.size == 1) "Its line" else "Line ${it + 1}" }
+    Segmented(labels, axes.indexOf(d.axis).coerceAtLeast(0)) {
+        d.axis = axes[it]
         editor.draftChanged()
     }
     NumberRow("Angle", d.degrees, "°", allowNegative = true) {

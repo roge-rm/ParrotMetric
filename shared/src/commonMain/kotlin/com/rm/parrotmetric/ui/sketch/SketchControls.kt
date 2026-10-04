@@ -128,6 +128,14 @@ private fun ChipRow(editor: SketchEditor, onConstrain: () -> Unit) {
             editor.selectTool(if (editor.tool == SketchTool.Dimension) SketchTool.Select else SketchTool.Dimension)
         }
         Chip("Constrain", Icons.constrain, enabled = choices.isNotEmpty(), onClick = onConstrain)
+        Chip("Trim", Icons.trim, active = editor.tool == SketchTool.Trim) {
+            editor.selectTool(if (editor.tool == SketchTool.Trim) SketchTool.Select else SketchTool.Trim)
+        }
+        Chip("Extend", Icons.extend, active = editor.tool == SketchTool.Extend) {
+            editor.selectTool(if (editor.tool == SketchTool.Extend) SketchTool.Select else SketchTool.Extend)
+        }
+        if (editor.selectedCurves.isNotEmpty()) Chip("Offset", Icons.offset) { editor.startOffset() }
+        if (editor.selectedCorner != null) Chip("Round corner", Icons.fillet) { editor.startCornerFillet() }
         Chip("Construction", Icons.construction, active = editor.construction && !hasSelection) { editor.toggleConstruction() }
         if (hasSelection) Chip("Delete", Icons.delete, tint = Palette.orange) { editor.deleteSelection() }
     }

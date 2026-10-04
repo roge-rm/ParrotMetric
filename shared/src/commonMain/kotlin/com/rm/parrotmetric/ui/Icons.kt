@@ -68,6 +68,9 @@ object Icons {
     val constrain = stroke("constrain", "M5 19L19 5", "M5 19h9")
     val construction = stroke("construction", "M4 20l2-2M8 16l2-2M12 12l2-2M16 8l2-2M20 4l0 0")
     val delete = stroke("delete", "M4 7h16", "M9 7V4h6v3", "M6 7l1 13h10l1-13")
+    val trim = stroke("trim", circle(6f, 18f, 2.5f), circle(18f, 18f, 2.5f), "M7.5 16L17 4M16.5 16L7 4")
+    val extend = stroke("extend", "M3 12h11", "M14 12h3", "M20 5v14", "M15 9l3 3-3 3")
+    val offset = stroke("offset", "M4 18h10a6 6 0 0 0 6-6V4", "M4 13h8a3 3 0 0 0 3-3V4")
     val check = stroke("check", "M5 12l5 5 9-10", width = 2.2f)
     val export = stroke("export", "M12 15V3M8 7l4-4 4 4", "M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6")
 }

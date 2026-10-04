@@ -15,6 +15,7 @@ import com.rm.parrotmetric.sketch.Point
 import com.rm.parrotmetric.sketch.RegionFinder
 import com.rm.parrotmetric.sketch.Sketch
 import com.rm.parrotmetric.sketch.SketchPlane
+import com.rm.parrotmetric.sketch.SketchOps
 import com.rm.parrotmetric.sketch.SketchRegion
 import com.rm.parrotmetric.sketch.profileCurves
 import kotlin.math.PI
@@ -24,7 +25,7 @@ import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.sin
 
-enum class SketchTool { Select, Line, Rectangle, Circle, Arc, Point, Dimension }
+enum class SketchTool { Select, Line, Rectangle, Circle, Arc, Point, Dimension, Trim, Extend }
 
 /** Something in a sketch that can be tapped and selected. */
 sealed class SketchItem {
@@ -56,6 +57,8 @@ class DimensionEdit(
     val initial: Double,
     val isAngle: Boolean,
     val label: String,
+    /** For a number that isn't a dimension, such as an offset: does the job, returning null or why it couldn't. */
+    val action: ((Double) -> String?)? = null,
 )
 
 /** A constraint that fits the selection, offered in the Constrain sheet. */
@@ -186,11 +189,24 @@ class SketchEditor(val plane: SketchPlane, val name: String, val sketch: Sketch,
             return
         }
         dragging = emptyList()
-        if (!moved) tap(hitTest(u, v, tol))
+        if (!moved) tap(hitTest(u, v, tol), u, v)
     }
 
     /** Something was tapped: from [release], or a dimension or glyph the overlay found on screen. */
-    fun tap(item: SketchItem?) {
+    fun tap(item: SketchItem?, u: Double = 0.0, v: Double = 0.0) {
+        if (tool == SketchTool.Trim || tool == SketchTool.Extend) {
+            val c = (item as? SketchItem.C)?.curve ?: return
+            checkpoint()
+            val why = if (tool == SketchTool.Trim) SketchOps.trim(sketch, c, u, v)
+            else if (c is Line) SketchOps.extend(sketch, c, u, v) else "Only lines can be extended"
+            if (why != null) {
+                undoStack.removeLastOrNull()
+                message = why
+            }
+            selection.clear()
+            changed()
+            return
+        }
         if (tool == SketchTool.Dimension) {
             pickForDimension(item)
             return
@@ -484,7 +500,11 @@ class SketchEditor(val plane: SketchPlane, val name: String, val sketch: Sketch,
         }
         val value = if (edit.isAngle) typed * PI / 180 else typed
         checkpoint()
-        val ok = if (edit.existing != null) {
+        val ok = if (edit.action != null) {
+            val why = edit.action.invoke(value)
+            if (why != null) message = why
+            why == null
+        } else if (edit.existing != null) {
             val d = edit.existing
             sketch.setDimension(d, if (d is Constraint.Angle && d.value < 0) -value else value)
         } else {
@@ -509,6 +529,24 @@ class SketchEditor(val plane: SketchPlane, val name: String, val sketch: Sketch,
         dimensionPicks.clear()
         if (tool == SketchTool.Dimension) selection.clear()
         version++
+    }
+
+    // Offset and corner fillet, which ask for a number first.
+
+    /** Curves selected, for offset. */
+    val selectedCurves get() = selection.filterIsInstance<SketchItem.C>().map { it.curve }
+    /** The one point selected, for a corner fillet. */
+    val selectedCorner get() = selection.singleOrNull()?.let { it as? SketchItem.P }?.point
+
+    fun startOffset() {
+        val curves = selectedCurves
+        if (curves.isEmpty()) return
+        editing = DimensionEdit(null, null, 2.0, false, "Offset", action = { d -> SketchOps.offset(sketch, curves, d).also { if (it == null) selection.clear() } })
+    }
+
+    fun startCornerFillet() {
+        val p = selectedCorner ?: return
+        editing = DimensionEdit(null, null, 2.0, false, "Radius", action = { r -> SketchOps.filletCorner(sketch, p, r).also { if (it == null) selection.clear() } })
     }
 
     // Constraints and the selection.

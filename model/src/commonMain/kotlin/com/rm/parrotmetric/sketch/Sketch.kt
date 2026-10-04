@@ -79,6 +79,12 @@ class Sketch {
         for (p in curve.points()) if (p !== origin && curves.none { p in it.points() }) removePoint(p)
     }
 
+    /** Removes a curve and the constraints on it, keeping its points. */
+    fun removeCurveOnly(curve: Curve) {
+        curveMap.remove(curve.id)
+        constraintList.removeAll { curve in it.curves() }
+    }
+
     fun removePoint(p: Point) {
         if (p === origin) return
         for (c in curves.filter { p in it.points() }) remove(c)
