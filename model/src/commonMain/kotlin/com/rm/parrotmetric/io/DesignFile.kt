@@ -36,6 +36,8 @@ import com.rm.parrotmetric.design.DeleteFaceFeature
 import com.rm.parrotmetric.design.MeshEdit
 import com.rm.parrotmetric.design.RibFeature
 import com.rm.parrotmetric.design.PatchFeature
+import com.rm.parrotmetric.design.JointFeature
+import com.rm.parrotmetric.design.JointKind
 import com.rm.parrotmetric.design.StitchFeature
 import com.rm.parrotmetric.design.ThickenFeature
 import com.rm.parrotmetric.design.MeshEditFeature
@@ -183,6 +185,10 @@ object DesignFile {
             is MirrorFeature -> mapOf("type" to "mirror", "bodies" to f.bodies, "plane" to plane(f.plane), "join" to f.join, "features" to f.features)
             is OffsetFaceFeature -> mapOf("type" to "offsetFace", "faces" to f.faces, "distance" to f.distance)
             is DeleteFaceFeature -> mapOf("type" to "deleteFace", "faces" to f.faces)
+            is JointFeature -> mapOf(
+                "type" to "joint", "kind" to f.kind.name, "moving" to f.moving, "fixed" to f.fixed, "edge" to f.edge, "face" to f.face,
+                "axisFeature" to f.axisFeature, "axis" to f.axis.name, "value" to f.value, "value2" to f.value2,
+            )
             is PatchFeature -> mapOf("type" to "patch", "sketch" to f.sketchId, "regions" to writeRegions(f.regions), "edges" to f.edges)
             is StitchFeature -> mapOf("type" to "stitch", "bodies" to f.bodies)
             is ThickenFeature -> mapOf("type" to "thicken", "body" to f.body, "thickness" to f.thickness, "both" to f.both)
@@ -280,6 +286,10 @@ object DesignFile {
             "mirror" -> MirrorFeature(id, name, strings(o.arr("bodies")), plane(o.obj("plane")), o.bool("join"), ints(o["features"]))
             "offsetFace" -> OffsetFaceFeature(id, name, strings(o.arr("faces")), o.num("distance"))
             "deleteFace" -> DeleteFaceFeature(id, name, strings(o.arr("faces")))
+            "joint" -> JointFeature(
+                id, name, JointKind.valueOf(o.str("kind")), o.str("moving"), (o["fixed"] as? Json.Str)?.value, (o["edge"] as? Json.Str)?.value,
+                (o["face"] as? Json.Str)?.value, (o["axisFeature"] as? Json.Num)?.value?.toInt(), Axis3.valueOf(o.str("axis")), o.num("value"), o.num("value2"),
+            )
             "patch" -> PatchFeature(id, name, (o["sketch"] as? Json.Num)?.value?.toInt(), readRegions(o.arr("regions")), strings(o.arr("edges")))
             "stitch" -> StitchFeature(id, name, strings(o.arr("bodies")))
             "thicken" -> ThickenFeature(id, name, o.str("body"), o.num("thickness"), o.bool("both"))

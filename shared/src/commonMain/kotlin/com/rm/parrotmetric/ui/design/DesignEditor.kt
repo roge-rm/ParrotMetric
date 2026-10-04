@@ -489,12 +489,13 @@ class DesignEditor(
                 pendingRefit = false
                 val features = featuresToBuild()
                 val hints = design.hints.toMap()
+                val components = design.bodies.mapNotNull { (label, info) -> info.component?.let { label to it } }.toMap()
                 val draft = panel
                 // The first body to appear is framed.
                 val hadBodies = built?.bodies?.isNotEmpty() == true
                 val result = withContext(Dispatchers.Default) {
                     lock.withLock {
-                        val b = rebuilder.rebuild(features, hints)
+                        val b = rebuilder.rebuild(features, hints, components)
                         val sketches = sketchesToShow(features, draft)
                         val shown = sketches.mapNotNull { s -> b.sketchPlanes[s.id]?.let { s to it } }
                         val refit = refitNow || (!hadBodies && b.bodies.isNotEmpty())
@@ -594,6 +595,25 @@ class DesignEditor(
     }
 
     fun startStitch() = openBodies(StitchDraft(null))
+
+    fun startJoint() {
+        val comps = components()
+        if (comps.isEmpty()) {
+            message = "Put bodies into components first, in the parts list"
+            return
+        }
+        val d = JointDraft(null)
+        // The component of the body tapped, if any, moves.
+        pickedBodies().firstOrNull()?.let { design.info(it).component }?.let { d.moving = it }
+        jointPick(d)
+        panel = d
+        rebuild()
+    }
+
+    private fun jointPick(d: JointDraft) {
+        viewport.selectedEdges().lastOrNull()?.let { d.edge = it; d.face = null }
+            ?: viewport.selectedFaces().lastOrNull { it.second.isNotEmpty() }?.let { d.face = it.second; d.edge = null }
+    }
     fun startThicken() = openBodies(ThickenDraft(null))
 
     fun startPipe() {
@@ -956,6 +976,7 @@ class DesignEditor(
             is com.rm.parrotmetric.design.MeshEditFeature -> MeshEditDraft(f, f.kind)
             is com.rm.parrotmetric.design.RibFeature -> RibDraft(f, f.web)
             is com.rm.parrotmetric.design.PatchFeature -> PatchDraft(f)
+            is com.rm.parrotmetric.design.JointFeature -> JointDraft(f)
             is com.rm.parrotmetric.design.StitchFeature -> StitchDraft(f)
             is com.rm.parrotmetric.design.ThickenFeature -> ThickenDraft(f)
             is PointFeature -> PointDraft(f)
@@ -997,6 +1018,10 @@ class DesignEditor(
     fun selectionChanged() {
         if (measuring) measureLines = viewport.measure()
         when (val d = panel) {
+            is JointDraft -> {
+                jointPick(d)
+                rebuild()
+            }
             is PatchDraft -> {
                 if (d.byEdges) d.edges = viewport.selectedEdges() else takeAreas(d)
                 rebuild()
@@ -1076,6 +1101,7 @@ class DesignEditor(
     private fun highlight(d: FeatureDraft) {
         when (d) {
             is PatchDraft -> viewport.select(d.edges, regionPairs(d.sketchId, d.regions))
+            is JointDraft -> viewport.select(listOfNotNull(d.edge), emptyList(), listOfNotNull(d.face))
             is SweepDraft -> viewport.select(d.pathEdges, regionPairs(d.sketchId, d.regions))
             is PipeDraft -> viewport.select(d.pathEdges, emptyList())
             is LoftDraft -> viewport.select(emptyList(), d.sections.flatMap { regionPairs(it.sketchId, listOf(it.region)) })
@@ -1492,6 +1518,28 @@ class DesignEditor(
         init { if (editing != null) bodies = listOf(editing.body) }
         override fun feature(): Feature? = bodies.firstOrNull()?.let { com.rm.parrotmetric.design.ConvertFeature(id, name, it) }
         override fun missing() = "Tap the mesh to make solid"
+    }
+
+    /** A joint between components; see JointFeature. Angles here are in degrees. */
+    inner class JointDraft(editing: com.rm.parrotmetric.design.JointFeature?) : FeatureDraft() {
+        val id = editing?.id ?: newId()
+        private val name = editing?.name ?: nextName("Joint", design.features.count { it is com.rm.parrotmetric.design.JointFeature })
+        var kind by mutableStateOf(editing?.kind ?: com.rm.parrotmetric.design.JointKind.Turn)
+        var moving by mutableStateOf(editing?.moving ?: components().first())
+        var fixed by mutableStateOf(editing?.fixed)
+        var edge by mutableStateOf(editing?.edge)
+        var face by mutableStateOf(editing?.face)
+        var axis by mutableStateOf(editing?.axis ?: Axis3.Z)
+        /** Degrees for a turn, mm for a slide. */
+        var value by mutableStateOf(editing?.let { if (it.kind == com.rm.parrotmetric.design.JointKind.Slide) it.value else it.value * 180 / PI } ?: 0.0)
+        var value2 by mutableStateOf(editing?.value2 ?: 0.0)
+        val turns get() = kind == com.rm.parrotmetric.design.JointKind.Turn || kind == com.rm.parrotmetric.design.JointKind.TurnSlide
+
+        override fun feature(): Feature = com.rm.parrotmetric.design.JointFeature(
+            id, name, kind, moving, fixed, edge, face, null, axis,
+            if (kind == com.rm.parrotmetric.design.JointKind.Slide) value else value * PI / 180, value2,
+        )
+        override fun missing() = "Pick the components"
     }
 
     /** A surface from sketch areas, or filling a loop of edges. */

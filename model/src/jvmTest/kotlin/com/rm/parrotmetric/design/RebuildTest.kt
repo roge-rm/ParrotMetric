@@ -541,4 +541,26 @@ class RebuildTest {
         r.clear()
         assertTrue(k.bodies.isEmpty())
     }
+
+    @Test
+    fun jointsMoveComponentsAndRigidOnesGoTogether() {
+        val k = FakeKernel()
+        val d = Design()
+        extrude(d, sketchAt(d, 0.0, 10.0), Operation.NewBody)
+        extrude(d, sketchAt(d, 20.0, 10.0), Operation.NewBody)
+        extrude(d, sketchAt(d, 40.0, 10.0), Operation.NewBody)
+        d.add(JointFeature(d.newId(), "Held", JointKind.Rigid, "Knob", "Lid"))
+        val slide = JointFeature(d.newId(), "Slide", JointKind.Slide, "Lid", "Base", axis = Axis3.X, value = 5.0)
+        d.add(slide)
+        val r = Rebuilder(k)
+        val comps = mapOf("Body 1" to "Base", "Body 2" to "Lid", "Body 3" to "Knob")
+        val built = r.rebuild(d.active, components = comps)
+        assertTrue(built.errors.isEmpty(), built.errors.toString())
+        assertEquals(listOf(0.0, 25.0, 45.0), built.bodies.map { k.bodies.getValue(it.handle).from })
+        // Taking the knob out of its component leaves it behind.
+        val again = r.rebuild(d.active, components = comps - "Body 3")
+        assertEquals(40.0, k.bodies.getValue(again.bodies[2].handle).from)
+        r.clear()
+        assertTrue(k.bodies.isEmpty())
+    }
 }

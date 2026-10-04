@@ -87,6 +87,7 @@ fun FeaturePanel(editor: DesignEditor) {
                 is DesignEditor.ConvertDraft -> Header("To solid", Icons.convert, Palette.modify, d.bodies.firstOrNull())
                 is DesignEditor.MeshEditDraft -> MeshEditSettings(editor, d)
                 is DesignEditor.RibDraft -> RibSettings(editor, d)
+                is DesignEditor.JointDraft -> JointSettings(editor, d)
                 is DesignEditor.PatchDraft -> {
                     Header("Patch", Icons.patch, Palette.create, if (d.byEdges) count(d.edges.size, "edge", "edges").takeIf { d.edges.isNotEmpty() } else null)
                     Segmented(listOf("Sketch areas", "Fill edges"), if (d.byEdges) 1 else 0) { d.byEdges = it == 1; editor.draftChanged() }
@@ -549,6 +550,42 @@ internal fun FaceSettings(editor: DesignEditor, d: DesignEditor.FaceDraft) {
         DesignEditor.FaceTool.Shell -> Field(editor, d, "size", "Walls", d.size, "mm", allowNegative = false) { d.size = it; editor.draftChanged() }
         DesignEditor.FaceTool.PressPull -> Field(editor, d, "size", "Distance", d.size, "mm", allowNegative = true) { d.size = it; editor.draftChanged() }
         DesignEditor.FaceTool.Delete -> {}
+    }
+}
+
+@Composable
+private fun JointSettings(editor: DesignEditor, d: DesignEditor.JointDraft) {
+    Header("Joint", Icons.joint, Palette.modify, d.moving)
+    Segmented(listOf("Rigid", "Turn", "Slide", "Both"), d.kind.ordinal) {
+        d.kind = com.rm.parrotmetric.design.JointKind.entries[it]
+        d.value = 0.0
+        d.exprs.remove("value")
+        editor.draftChanged()
+    }
+    val comps = editor.components()
+    Text("Moving", fontSize = 13.sp, color = Palette.muted)
+    Segmented(comps, comps.indexOf(d.moving).coerceAtLeast(0)) { d.moving = comps[it]; editor.draftChanged() }
+    val others = listOf<String?>(null) + comps.filter { it != d.moving }
+    Text("Joined to", fontSize = 13.sp, color = Palette.muted)
+    Segmented(others.map { it ?: "In place" }, others.indexOf(d.fixed).coerceAtLeast(0)) { d.fixed = others[it]; editor.draftChanged() }
+    if (d.kind == com.rm.parrotmetric.design.JointKind.Rigid) return
+    if (d.edge != null || d.face != null) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(if (d.edge != null) "Round the edge picked" else "Round the face picked", Modifier.weight(1f), fontSize = 14.sp, color = Palette.text)
+            androidx.compose.material3.TextButton(onClick = { d.edge = null; d.face = null; editor.draftChanged() }) { Text("Use an axis", color = Palette.mint) }
+        }
+    } else AxisRow("Round", d.axis, false) { d.axis = it!!; editor.draftChanged() }
+    val turnLabel = if (d.turns) "Turned" else "Slid"
+    Field(editor, d, "value", turnLabel, d.value, if (d.turns) "°" else "mm", allowNegative = true) { d.value = it; editor.draftChanged() }
+    // Drag to move it.
+    androidx.compose.material3.Slider(
+        value = d.value.toFloat().coerceIn(if (d.turns) -180f else -100f, if (d.turns) 180f else 100f),
+        onValueChange = { d.value = kotlin.math.round(it).toDouble(); d.exprs.remove("value"); editor.draftChanged() },
+        valueRange = if (d.turns) -180f..180f else -100f..100f,
+        colors = androidx.compose.material3.SliderDefaults.colors(thumbColor = Palette.mint, activeTrackColor = Palette.mint),
+    )
+    if (d.kind == com.rm.parrotmetric.design.JointKind.TurnSlide) {
+        Field(editor, d, "value2", "Slid", d.value2, "mm", allowNegative = true) { d.value2 = it; editor.draftChanged() }
     }
 }
 

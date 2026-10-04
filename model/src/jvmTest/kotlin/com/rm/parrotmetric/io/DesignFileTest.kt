@@ -97,6 +97,8 @@ class DesignFileTest {
             com.rm.parrotmetric.design.PatchFeature(d.newId(), "Patch", 1, listOf(com.rm.parrotmetric.design.RegionRef(listOf(1, 2), 0.5, 0.5)), emptyList()),
             com.rm.parrotmetric.design.PatchFeature(d.newId(), "Fill", null, emptyList(), listOf("F1.s1|F1.end")),
             com.rm.parrotmetric.design.StitchFeature(d.newId(), "Stitch", listOf("Body 1", "Body 2")),
+            com.rm.parrotmetric.design.JointFeature(d.newId(), "Hinge", com.rm.parrotmetric.design.JointKind.Turn, "Lid", "Case", edge = "F1.s1|F1.end", value = 0.5),
+            com.rm.parrotmetric.design.JointFeature(d.newId(), "Held", com.rm.parrotmetric.design.JointKind.Rigid, "Knob", null, axis = com.rm.parrotmetric.design.Axis3.X),
             com.rm.parrotmetric.design.ThickenFeature(d.newId(), "Thicken", "Body 1", 1.5, true),
             com.rm.parrotmetric.design.MeshEditFeature(d.newId(), "Smooth", "Body 2", com.rm.parrotmetric.design.MeshEdit.Smooth, 40.0, 3),
             com.rm.parrotmetric.design.FilletFeature(d.newId(), "Variable", listOf("F1.s1|F1.end"), 1.0, com.rm.parrotmetric.design.FilletKind.Variable, 3.0),

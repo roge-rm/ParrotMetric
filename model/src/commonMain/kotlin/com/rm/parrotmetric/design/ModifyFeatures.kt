@@ -60,6 +60,34 @@ data class ThickenFeature(override val id: Int, override val name: String, val b
     override fun key() = this
 }
 
+enum class JointKind { Rigid, Turn, Slide, TurnSlide }
+
+/**
+ * Joins component [moving] to [fixed] (or to the origin when null) where
+ * they are, and moves it as the joint allows: turned [value] radians round
+ * the axis, slid [value] mm along it, or turned [value] and slid [value2].
+ * Rigid moves nothing, but from then on the two move together.
+ *
+ * The axis is a straight or round edge or a cylinder's face ([edge] or
+ * [face]), a construction axis ([axisFeature]), or else [axis] through the
+ * origin.
+ */
+data class JointFeature(
+    override val id: Int,
+    override val name: String,
+    val kind: JointKind,
+    val moving: String,
+    val fixed: String?,
+    val edge: String? = null,
+    val face: String? = null,
+    val axisFeature: Int? = null,
+    val axis: Axis3 = Axis3.Z,
+    val value: Double = 0.0,
+    val value2: Double = 0.0,
+) : Feature() {
+    override fun key() = this
+}
+
 enum class MeshEdit { Reduce, Remesh, Smooth }
 
 /**

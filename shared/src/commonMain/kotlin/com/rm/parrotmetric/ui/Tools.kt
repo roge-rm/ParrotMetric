@@ -87,6 +87,7 @@ object Tools {
         ToolDef("tosolid", "To solid", Icons.convert, ToolGroup.Modify, solid = false, mesh = true) { it.design.startConvert() },
         ToolDef("mirror", "Mirror", Icons.mirror, ToolGroup.Modify, key = "Shift+M", mesh = true, cluster = "Mirror and pattern") { it.design.startMirror() },
         ToolDef("pattern", "Pattern", Icons.pattern, ToolGroup.Modify, key = "P", mesh = true, cluster = "Mirror and pattern") { it.design.startPattern() },
+        ToolDef("joint", "Joint", Icons.joint, ToolGroup.Modify, mesh = true) { it.design.startJoint() },
         ToolDef("combine", "Combine", Icons.combine, ToolGroup.Modify, key = "J", mesh = true) { it.design.startCombine() },
         ToolDef("split", "Split", Icons.cut, ToolGroup.Modify, key = "X", mesh = true, cluster = "Split and cut") { it.design.startSplit() },
         ToolDef("move", "Move", Icons.move, ToolGroup.Modify, key = "M", mesh = true, suggest = ::faces) { it.design.startMove() },

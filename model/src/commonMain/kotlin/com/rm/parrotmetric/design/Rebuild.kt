@@ -62,14 +62,22 @@ class Rebuilder(private val kernel: Kernel) {
     }
 
     private val steps = mutableListOf<Step>()
+    /** Each body's component, by label, for joints. */
+    private var components: Map<String, String> = emptyMap()
     private var hints = mutableMapOf<String, DoubleArray>()
     private val found = mutableMapOf<String, String>()
 
     /** Builds the features. [hints] are those from the last build (Built.hints), to find lost faces and edges again. */
-    fun rebuild(features: List<Feature>, hints: Map<String, DoubleArray> = emptyMap()): Built {
+    fun rebuild(features: List<Feature>, hints: Map<String, DoubleArray> = emptyMap(), components: Map<String, String> = emptyMap()): Built {
         this.hints = hints.toMutableMap()
         var from = 0
         while (from < steps.size && from < features.size && steps[from].key == features[from].key()) from++
+        // Joints move whole components: what's in them changing redoes them.
+        if (components != this.components) {
+            val firstJoint = features.indexOfFirst { it is JointFeature }
+            if (firstJoint >= 0) from = minOf(from, firstJoint)
+            this.components = components
+        }
         discardFrom(from)
 
         for (i in from until features.size) {
@@ -443,6 +451,38 @@ class Rebuilder(private val kernel: Kernel) {
             val body = bodies.firstOrNull { it.label == f.body } ?: throw KernelException("${f.body} isn't there any more")
             replace(f, bodies, planes, made, body) { kernel.thicken(f.id, body.handle, f.thickness, f.both) }
         }
+        is JointFeature -> {
+            if (f.moving == f.fixed) throw KernelException("Join two different components")
+            if (bodies.none { components[it.label] == f.moving }) throw KernelException("${f.moving} has no bodies")
+            if (f.kind == JointKind.Rigid) {
+                keep(bodies)
+                Step(f.key(), bodies, planes, null, made)
+            } else {
+                val (p, d) = jointAxis(f, bodies)
+                val turn = if (f.kind == JointKind.Slide) 0.0 else f.value
+                val slide = when (f.kind) {
+                    JointKind.Slide -> f.value
+                    JointKind.TurnSlide -> f.value2
+                    else -> 0.0
+                }
+                val m = Transforms.then(
+                    Transforms.then(Transforms.then(Transforms.translate(-p), Transforms.rotate(d, turn)), Transforms.translate(p)),
+                    Transforms.translate(d * slide),
+                )
+                val group = rigidWith(f.moving, f.fixed, all.subList(0, all.indexOf(f).coerceAtLeast(0)))
+                val out = mutableListOf<BodyState>()
+                try {
+                    for (b in bodies) {
+                        if (components[b.label] in group) out += BodyState(b.label, kernel.transform(f.id, b.handle, m, "j"))
+                        else { kernel.retain(b.handle); out += b }
+                    }
+                } catch (e: KernelException) {
+                    out.forEach { kernel.release(it.handle) }
+                    throw e
+                }
+                Step(f.key(), out, planes, null, made)
+            }
+        }
         is MeshEditFeature -> {
             val body = bodies.firstOrNull { it.label == f.body } ?: throw KernelException("${f.body} isn't there any more")
             replace(f, bodies, planes, made, body) { kernel.meshEdit(f.id, body.handle, f.kind.ordinal, f.size, f.steps) }
@@ -473,6 +513,34 @@ class Rebuilder(private val kernel: Kernel) {
             }
         }
         else -> throw KernelException("This version can't build ${f.name}")
+    }
+
+    /** A joint's axis: a point on it and its unit direction. */
+    private fun jointAxis(f: JointFeature, bodies: List<BodyState>): Pair<Vec3, Vec3> {
+        f.axisFeature?.let { id -> return steps.firstNotNullOfOrNull { it.axes[id] } ?: throw KernelException("Its axis has been deleted") }
+        val picked = f.edge?.let { n -> ref(f, n, true, bodies).let { r -> bodies.firstNotNullOfOrNull { kernel.shapeOf(it.handle, r, true) } } }
+            ?: f.face?.let { n -> ref(f, n, false, bodies).let { r -> bodies.firstNotNullOfOrNull { kernel.shapeOf(it.handle, r, false) } } }
+        if (f.edge != null || f.face != null) {
+            if (picked == null || picked[0] > 2.0) throw KernelException("Its axis edge or face isn't there any more")
+            val d = Vec3(picked[4], picked[5], picked[6])
+            return Vec3(picked[1], picked[2], picked[3]) to d * (1 / sqrt(d.dot(d)))
+        }
+        return Vec3(0.0, 0.0, 0.0) to Transforms.unit(f.axis)
+    }
+
+    /** A component and those joined rigidly to it by earlier joints, other than [fixed]. */
+    private fun rigidWith(moving: String, fixed: String?, before: List<Feature>): Set<String> {
+        val pairs = before.filterIsInstance<JointFeature>().filter { it.kind == JointKind.Rigid }.mapNotNull { j -> j.fixed?.let { j.moving to it } }
+        val group = mutableSetOf(moving)
+        var grew = true
+        while (grew) {
+            grew = false
+            for ((a, b) in pairs) {
+                if (a in group && b !in group && b != fixed) { group += b; grew = true }
+                if (b in group && a !in group && a != fixed) { group += a; grew = true }
+            }
+        }
+        return group
     }
 
     /** A path as the kernel takes it. */
