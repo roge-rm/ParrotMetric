@@ -2,8 +2,11 @@ package com.rm.parrotmetric.sketch
 
 import kotlin.math.atan2
 
-/** A closed area of a sketch, found by the geometry kernel. Loops are x, y pairs; the outline first, then holes. */
-class SketchRegion(val loops: List<FloatArray>, val curveIds: List<Int>, val area: Double)
+/**
+ * A closed area of a sketch, found by the geometry kernel. Loops are x, y
+ * pairs; the outline first, then holes. (insideU, insideV) is a point in it.
+ */
+class SketchRegion(val loops: List<FloatArray>, val curveIds: List<Int>, val area: Double, val insideU: Double, val insideV: Double)
 
 /** Finds a sketch's closed regions. The platform supplies it, from the C++ core. */
 fun interface RegionFinder {
@@ -11,7 +14,7 @@ fun interface RegionFinder {
 }
 
 /** A curve as the region finder takes it: a line from (x1, y1) to (x2, y2), or a circle or arc round (x1, y1). */
-class ProfileCurve(
+data class ProfileCurve(
     val kind: Kind, val id: Int,
     val x1: Double, val y1: Double, val x2: Double = 0.0, val y2: Double = 0.0,
     val r: Double = 0.0, val a0: Double = 0.0, val a1: Double = 0.0,
