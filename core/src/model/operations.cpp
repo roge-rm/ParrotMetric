@@ -1,10 +1,20 @@
 #include "model/operations.h"
 
+#include <BRepAdaptor_Curve.hxx>
 #include <BRepAdaptor_Surface.hxx>
 #include <BRepAlgoAPI_Common.hxx>
 #include <BRepAlgoAPI_Cut.hxx>
 #include <BRepAlgoAPI_Fuse.hxx>
+#include <BRepAlgoAPI_Section.hxx>
 #include <BRepAlgoAPI_Splitter.hxx>
+#include <BRepBuilderAPI_MakePolygon.hxx>
+#include <BRepBuilderAPI_MakeSolid.hxx>
+#include <BRepBuilderAPI_Sewing.hxx>
+#include <BRepClass3d_SolidClassifier.hxx>
+#include <BRep_Tool.hxx>
+#include <ShapeUpgrade_UnifySameDomain.hxx>
+#include <TopoDS_Shell.hxx>
+#include <gp_Circ.hxx>
 #include <BRepBuilderAPI_MakeFace.hxx>
 #include <BRepBuilderAPI_Transform.hxx>
 #include <BRepOffsetAPI_DraftAngle.hxx>
@@ -39,6 +49,7 @@
 #include <limits>
 #include <stdexcept>
 
+#include "mesh/mesh.h"
 #include "sketch/region_faces.h"
 
 namespace pm {
@@ -359,6 +370,96 @@ NamedShape holeTool(int id, const gp_Ax3& plane, const std::vector<std::pair<dou
         return out;
     } catch (const Standard_Failure&) {
         throw std::runtime_error("The hole couldn't be made");
+    }
+}
+
+std::vector<SketchCurve> curvesOnPlane(const TopoDS_Shape& edges, const gp_Ax3& plane) {
+    gp_Trsf toPlane;
+    toPlane.SetTransformation(plane);  // World to the plane's own coordinates.
+    std::vector<SketchCurve> out;
+    auto line = [&](const gp_Pnt& a, const gp_Pnt& b) {
+        if (a.Distance(b) < 1e-7) return;
+        SketchCurve c;
+        c.kind = SketchCurve::Line; c.x1 = a.X(); c.y1 = a.Y(); c.x2 = b.X(); c.y2 = b.Y();
+        out.push_back(c);
+    };
+    for (TopExp_Explorer e(edges, TopAbs_EDGE); e.More(); e.Next()) {
+        const TopoDS_Edge& edge = TopoDS::Edge(e.Current());
+        if (BRep_Tool::Degenerated(edge)) continue;
+        BRepAdaptor_Curve curve(edge);
+        auto local = [&](double t) { return curve.Value(t).Transformed(toPlane); };
+        double t0 = curve.FirstParameter(), t1 = curve.LastParameter();
+        if (curve.GetType() == GeomAbs_Line) {
+            line(local(t0), local(t1));
+        } else if (curve.GetType() == GeomAbs_Circle) {
+            gp_Circ circ = curve.Circle();
+            gp_Pnt centre = circ.Location().Transformed(toPlane);
+            SketchCurve c;
+            c.x1 = centre.X(); c.y1 = centre.Y(); c.r = circ.Radius();
+            if (std::abs(t1 - t0 - 2 * M_PI) < 1e-9) {
+                c.kind = SketchCurve::Circle;
+            } else {
+                gp_Pnt a = local(t0), b = local(t1), m = local((t0 + t1) / 2);
+                double a0 = std::atan2(a.Y() - c.y1, a.X() - c.x1), a1 = std::atan2(b.Y() - c.y1, b.X() - c.x1);
+                double am = std::atan2(m.Y() - c.y1, m.X() - c.x1);
+                // Arcs go anticlockwise; if the middle isn't on the way round from a to b, swap the ends.
+                auto span = [](double from, double to) { double d = to - from; while (d < 0) d += 2 * M_PI; return d; };
+                if (span(a0, am) > span(a0, a1)) std::swap(a0, a1);
+                c.kind = SketchCurve::Arc; c.a0 = a0; c.a1 = a1;
+            }
+            out.push_back(c);
+        } else {
+            const int n = 24;
+            for (int i = 0; i < n; ++i) line(local(t0 + (t1 - t0) * i / n), local(t0 + (t1 - t0) * (i + 1) / n));
+        }
+    }
+    return out;
+}
+
+std::vector<SketchCurve> section(const NamedShape& body, const gp_Ax3& plane) {
+    try {
+        BRepAlgoAPI_Section cut(body.shape, gp_Pln(plane));
+        if (!cut.IsDone()) return {};
+        return curvesOnPlane(cut.Shape(), plane);
+    } catch (const Standard_Failure&) {
+        return {};
+    }
+}
+
+NamedShape meshToSolid(int id, const Mesh& mesh) {
+    try {
+        BRepBuilderAPI_Sewing sew(1e-4);
+        for (const auto& t : mesh.triangles) {
+            gp_Pnt p[3];
+            for (int k = 0; k < 3; ++k) p[k] = gp_Pnt(mesh.vertices[t[k]][0], mesh.vertices[t[k]][1], mesh.vertices[t[k]][2]);
+            if (p[0].Distance(p[1]) < 1e-9 || p[1].Distance(p[2]) < 1e-9 || p[0].Distance(p[2]) < 1e-9) continue;
+            BRepBuilderAPI_MakePolygon poly(p[0], p[1], p[2], true);
+            BRepBuilderAPI_MakeFace face(poly.Wire(), true);
+            if (face.IsDone()) sew.Add(face.Face());
+        }
+        sew.Perform();
+        TopoDS_Shape sewn = sew.SewedShape();
+        TopoDS_Shell shell;
+        for (TopExp_Explorer s(sewn, TopAbs_SHELL); s.More(); s.Next()) { shell = TopoDS::Shell(s.Current()); break; }
+        if (shell.IsNull()) throw std::runtime_error("The mesh doesn't close up into a solid");
+        BRepBuilderAPI_MakeSolid solid(shell);
+        if (!solid.IsDone()) throw std::runtime_error("The mesh doesn't close up into a solid");
+        // Merge flat neighbours into single faces.
+        ShapeUpgrade_UnifySameDomain unify(solid.Solid(), true, true, true);
+        unify.Build();
+        TopoDS_Shape result = unify.Shape();
+        BRepClass3d_SolidClassifier inside(result);
+        inside.PerformInfinitePoint(1e-6);
+        if (inside.State() == TopAbs_IN) result.Reverse();  // It faced inwards.
+        if (!BRepCheck_Analyzer(result).IsValid()) throw std::runtime_error("The mesh doesn't close up into a solid");
+        NamedShape out;
+        out.shape = result;
+        int k = 0;
+        for (TopExp_Explorer f(result, TopAbs_FACE); f.More(); f.Next())
+            if (!out.names.IsBound(f.Current())) out.names.Bind(f.Current(), prefix(id) + ".i" + std::to_string(k++));
+        return out;
+    } catch (const Standard_Failure&) {
+        throw std::runtime_error("The mesh couldn't be made into a solid");
     }
 }
 

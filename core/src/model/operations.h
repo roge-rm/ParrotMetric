@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "mesh/mesh.h"
 #include "model/named_shape.h"
 #include "sketch/regions.h"
 
@@ -78,6 +79,21 @@ enum class HoleKind { Simple, Counterbore, Countersink };
  */
 NamedShape holeTool(int id, const gp_Ax3& plane, const std::vector<std::pair<double, double>>& at, double diameter, double depth,
                     HoleKind kind, double topDiameter, double topDepth);
+
+/**
+ * Edges as sketch curves on a plane: lines, circles and arcs as they are,
+ * anything else as short lines. The edges should lie in the plane.
+ */
+std::vector<SketchCurve> curvesOnPlane(const TopoDS_Shape& edges, const gp_Ax3& plane);
+
+/** Where a solid crosses a plane, as sketch curves on it. */
+std::vector<SketchCurve> section(const NamedShape& body, const gp_Ax3& plane);
+
+/**
+ * A mesh made into a solid: each triangle a face, then flat neighbours
+ * merged. Faces are named F<id>.i<k>. Throws if it doesn't close up.
+ */
+NamedShape meshToSolid(int id, const Mesh& mesh);
 
 /** The plane of a named flat face, facing out, with x as given if it lies in the plane. Throws if the face isn't flat. */
 gp_Ax3 facePlane(const NamedShape& body, const std::string& face);

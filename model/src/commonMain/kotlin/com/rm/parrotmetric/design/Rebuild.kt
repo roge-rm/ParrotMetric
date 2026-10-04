@@ -166,7 +166,14 @@ class Rebuilder(private val kernel: Kernel) {
         is SplitFeature -> {
             val body = bodies.firstOrNull { it.label == f.body } ?: throw KernelException("${f.body} isn't there any more")
             val plane = resolvePlane(f.plane, bodies, f.name, planes)
-            val pieces = kernel.split(f.id, body.handle, plane.origin, plane.normal)
+            var pieces = kernel.split(f.id, body.handle, plane.origin, plane.normal)
+            if (f.keep != 0) {
+                // Only the pieces on the side asked for.
+                val wanted = pieces.filter { h -> (kernel.centre(h) - plane.origin).dot(plane.normal) > 0 == (f.keep == 1) }
+                pieces.filter { it !in wanted }.forEach { kernel.release(it) }
+                if (wanted.isEmpty()) throw KernelException("Nothing is left on that side")
+                pieces = wanted
+            }
             val out = mutableListOf<BodyState>()
             var count = made
             for (b in bodies) {
@@ -174,6 +181,10 @@ class Rebuilder(private val kernel: Kernel) {
                 pieces.forEachIndexed { i, h -> out += if (i == 0) BodyState(b.label, h) else BodyState("Body ${++count}", h) }
             }
             Step(f.key(), out, planes, null, count)
+        }
+        is ConvertFeature -> {
+            val body = bodies.firstOrNull { it.label == f.body } ?: throw KernelException("${f.body} isn't there any more")
+            replace(f, bodies, planes, made, body) { kernel.convertToSolid(f.id, body.handle) }
         }
         is MoveFeature -> {
             val m = Transforms.then(Transforms.rotate(Transforms.unit(f.axis), f.angle), Transforms.translate(com.rm.parrotmetric.sketch.Vec3(f.dx, f.dy, f.dz)))

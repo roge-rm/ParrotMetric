@@ -82,5 +82,6 @@ object Icons {
     val shown = stroke("shown", "M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z", circle(12f, 12f, 3f))
     val hidden = stroke("hidden", "M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z", "M4 4l16 16")
     val parameters = stroke("parameters", "M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0", circle(16f, 6f, 2f), circle(10f, 12f, 2f), circle(18f, 18f, 2f))
+    val convert = stroke("convert", "M4 8l4-4 4 4-4 4z", "M12 16l4-4 4 4-4 4z", "M10 14l-2 2 2 2")
     val export = stroke("export", "M12 15V3M8 7l4-4 4 4", "M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6")
 }

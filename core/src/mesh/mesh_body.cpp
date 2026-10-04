@@ -81,6 +81,25 @@ std::pair<MeshBody, MeshBody> MeshBody::split(const double origin[3], const doub
 
 bool MeshBody::empty() const { return m_->IsEmpty(); }
 
+std::vector<std::vector<std::array<double, 2>>> MeshBody::slice(const double o[3], const double x[3], const double y[3]) const {
+    // Into the plane's own coordinates (the inverse of its frame, a rotation), so the plane is z = 0.
+    double n[3] = {x[1] * y[2] - x[2] * y[1], x[2] * y[0] - x[0] * y[2], x[0] * y[1] - x[1] * y[0]};
+    auto dot = [](const double a[3], const double b[3]) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; };
+    manifold::mat3x4 t({x[0], y[0], n[0]}, {x[1], y[1], n[1]}, {x[2], y[2], n[2]}, {-dot(x, o), -dot(y, o), -dot(n, o)});
+    std::vector<std::vector<std::array<double, 2>>> out;
+    for (const auto& poly : m_->Transform(t).Slice(0)) {
+        std::vector<std::array<double, 2>> loop;
+        for (const auto& p : poly) loop.push_back({p.x, p.y});
+        out.push_back(std::move(loop));
+    }
+    return out;
+}
+
+std::array<double, 3> MeshBody::centre() const {
+    auto box = m_->BoundingBox();
+    return {(box.min.x + box.max.x) / 2, (box.min.y + box.max.y) / 2, (box.min.z + box.max.z) / 2};
+}
+
 double MeshBody::volume() const { return m_->Volume(); }
 size_t MeshBody::triangleCount() const { return m_->NumTri(); }
 

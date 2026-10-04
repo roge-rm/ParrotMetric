@@ -33,6 +33,7 @@
 #include "io/exchange.h"
 #include "io/mesh_formats.h"
 #include "mesh/mesh_body.h"
+#include "mesh/repair.h"
 #include "mesh/stl.h"
 #include "model/operations.h"
 #include "model/store.h"
@@ -53,6 +54,7 @@ struct Shown {
     int plane = -1;                                 // Construction planes: which of those passed to show.
     std::vector<std::string> faceNames, edgeNames;  // Bodies: names by face and edge number.
     int sketchIndex = 0;                            // Sketches: which of the sketches passed to show.
+    std::shared_ptr<pm::DisplayMesh> mesh;          // Mesh bodies: what was drawn, for finding a picked flat area.
 };
 std::vector<Shown> shown;
 std::vector<pm::Body> shownBodies;  // The bodies of the last show(), in order, for measuring.
@@ -153,6 +155,19 @@ const pm::NamedShape& solidOf(jlong h) {
     const pm::Body& b = store.get(h);
     if (!b.solid) throw std::runtime_error("That needs a solid body, not a mesh");
     return *b.solid;
+}
+
+/** A mesh file's triangles: format 0 STL, 3 OBJ, 4 3MF (all its objects together). */
+pm::Mesh readMesh(const std::vector<uint8_t>& bytes, int format) {
+    if (format == 0) return pm::readStl(bytes);
+    if (format == 3) return pm::readObj(std::string(bytes.begin(), bytes.end()));
+    pm::Mesh all;
+    for (const auto& o : pm::read3mf(bytes)) {
+        uint32_t base = uint32_t(all.vertices.size());
+        all.vertices.insert(all.vertices.end(), o.mesh.vertices.begin(), o.mesh.vertices.end());
+        for (auto t : o.mesh.triangles) all.triangles.push_back({t[0] + base, t[1] + base, t[2] + base});
+    }
+    return all;
 }
 
 // Display.
@@ -406,18 +421,9 @@ JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_importBody(JNIEnv* env, jo
     try {
         auto bytes = bytesOf(env, data);
         pm::Body b;
-        if (format == 0) {
-            b.mesh = pm::MeshBody::fromMesh(pm::readStl(bytes));
-        } else if (format == 3) {
-            b.mesh = pm::MeshBody::fromMesh(pm::readObj(std::string(bytes.begin(), bytes.end())));
-        } else if (format == 4) {
-            pm::Mesh all;
-            for (const auto& o : pm::read3mf(bytes)) {
-                uint32_t base = uint32_t(all.vertices.size());
-                all.vertices.insert(all.vertices.end(), o.mesh.vertices.begin(), o.mesh.vertices.end());
-                for (auto t : o.mesh.triangles) all.triangles.push_back({t[0] + base, t[1] + base, t[2] + base});
-            }
-            b.mesh = pm::MeshBody::fromMesh(all);
+        if (format == 0 || format == 3 || format == 4) {
+            pm::RepairReport report;
+            b.mesh = pm::MeshBody::fromMesh(pm::repair(readMesh(bytes, format), report));
         } else {
             pm::Solid s = pm::readSolid(bytes, format == 1 ? pm::SolidFormat::Step : pm::SolidFormat::Iges);
             pm::NamedShape named;
@@ -556,6 +562,134 @@ JNIEXPORT jobjectArray JNICALL Java_com_rm_parrotmetric_Core_faceNames(JNIEnv* e
     }
 }
 
+/** What repair would change in a mesh file, as a line to show; empty when nothing. Throws if it can't be read. */
+JNIEXPORT jstring JNICALL Java_com_rm_parrotmetric_Core_repairReport(JNIEnv* env, jobject, jbyteArray data, jint format) {
+    try {
+        pm::RepairReport report;
+        pm::repair(readMesh(bytesOf(env, data), format), report);
+        std::string s = report.summary();
+        if (report.openEdges > 0) s += (s.empty() ? "" : "; ") + std::string("it still has gaps and may not print as one piece");
+        return env->NewStringUTF(s.c_str());
+    } catch (const std::exception& e) {
+        fail(env, e.what());
+        return nullptr;
+    }
+}
+
+JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_convertToSolid(JNIEnv* env, jobject, jint id, jlong body) {
+    try {
+        std::unique_lock<std::mutex> g(lock);
+        const pm::Body b = store.get(body);
+        g.unlock();
+        if (b.solid) {
+            // Already a solid: the same body, held once more.
+            g.lock();
+            store.retain(body);
+            return body;
+        }
+        pm::Body out;
+        out.solid = pm::meshToSolid(id, b.mesh->toMesh());
+        g.lock();
+        return store.add(std::move(out));
+    } catch (const std::exception& e) {
+        fail(env, e.what());
+        return 0;
+    }
+}
+
+/** The middle of a body: a solid's centre of mass, a mesh's bounding box centre. */
+JNIEXPORT jdoubleArray JNICALL Java_com_rm_parrotmetric_Core_bodyCentre(JNIEnv* env, jobject, jlong body) {
+    try {
+        std::unique_lock<std::mutex> g(lock);
+        const pm::Body b = store.get(body);
+        g.unlock();
+        double c[3];
+        if (b.mesh) {
+            auto m = b.mesh->centre();
+            c[0] = m[0]; c[1] = m[1]; c[2] = m[2];
+        } else {
+            GProp_GProps p;
+            BRepGProp::VolumeProperties(b.solid->shape, p);
+            c[0] = p.CentreOfMass().X(); c[1] = p.CentreOfMass().Y(); c[2] = p.CentreOfMass().Z();
+        }
+        jdoubleArray out = env->NewDoubleArray(3);
+        env->SetDoubleArrayRegion(out, 0, 3, c);
+        return out;
+    } catch (const std::exception& e) {
+        fail(env, e.what());
+        return nullptr;
+    }
+}
+
+/** Where bodies cross a plane (nine numbers), as sketch curves packed as for faceOutline. */
+JNIEXPORT jdoubleArray JNICALL Java_com_rm_parrotmetric_Core_section(JNIEnv* env, jobject, jlongArray handles, jdoubleArray plane) {
+    try {
+        auto p = doubles(env, plane);
+        std::vector<pm::Body> bodies;
+        {
+            std::lock_guard<std::mutex> g(lock);
+            for (jlong h : longs(env, handles)) bodies.push_back(store.get(h));
+        }
+        gp_Ax3 ax = planeOf(p.data());
+        std::vector<pm::SketchCurve> curves;
+        for (const auto& b : bodies) {
+            if (b.solid) {
+                auto c = pm::section(*b.solid, ax);
+                curves.insert(curves.end(), c.begin(), c.end());
+            } else {
+                for (const auto& loop : b.mesh->slice(p.data(), p.data() + 3, p.data() + 6))
+                    for (size_t i = 0; i < loop.size(); ++i) {
+                        const auto& a = loop[i];
+                        const auto& c = loop[(i + 1) % loop.size()];
+                        pm::SketchCurve l;
+                        l.kind = pm::SketchCurve::Line; l.x1 = a[0]; l.y1 = a[1]; l.x2 = c[0]; l.y2 = c[1];
+                        curves.push_back(l);
+                    }
+            }
+        }
+        std::vector<double> out = {double(curves.size())};
+        for (const auto& c : curves) out.insert(out.end(), {double(c.kind), c.x1, c.y1, c.x2, c.y2, c.r, c.a0, c.a1, 0, 0, 0, 0});
+        jdoubleArray result = env->NewDoubleArray(jsize(out.size()));
+        env->SetDoubleArrayRegion(result, 0, jsize(out.size()), out.data());
+        return result;
+    } catch (const std::exception& e) {
+        fail(env, e.what());
+        return nullptr;
+    }
+}
+
+/** The flat part of a mesh that's selected: its middle and outward normal, six numbers; null if none is. */
+JNIEXPORT jdoubleArray JNICALL Java_com_rm_parrotmetric_Core_selectedMeshPlane(JNIEnv* env, jobject) {
+    std::lock_guard<std::mutex> g(lock);
+    for (const auto& p : selection) {
+        if (p.kind != pm::Pick::Face || p.body >= shown.size() || !shown[p.body].mesh) continue;
+        const pm::DisplayMesh& d = *shown[p.body].mesh;
+        double c[3] = {0, 0, 0}, n[3] = {0, 0, 0}, area = 0;
+        for (size_t t = 0; t + 2 < d.indices.size(); t += 3) {
+            if (d.faceOfVertex[d.indices[t]] != p.index) continue;
+            const float* a = &d.positions[d.indices[t] * 3];
+            const float* b = &d.positions[d.indices[t + 1] * 3];
+            const float* e = &d.positions[d.indices[t + 2] * 3];
+            double u[3] = {double(b[0]) - a[0], double(b[1]) - a[1], double(b[2]) - a[2]};
+            double v[3] = {double(e[0]) - a[0], double(e[1]) - a[1], double(e[2]) - a[2]};
+            double cr[3] = {u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]};
+            double ar = std::sqrt(cr[0] * cr[0] + cr[1] * cr[1] + cr[2] * cr[2]) / 2;
+            for (int k = 0; k < 3; ++k) {
+                c[k] += ar * (a[k] + b[k] + e[k]) / 3;
+                n[k] += cr[k];
+            }
+            area += ar;
+        }
+        if (area <= 0) continue;
+        double len = std::sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+        double out[6] = {c[0] / area, c[1] / area, c[2] / area, n[0] / len, n[1] / len, n[2] / len};
+        jdoubleArray a = env->NewDoubleArray(6);
+        env->SetDoubleArrayRegion(a, 0, 6, out);
+        return a;
+    }
+    return nullptr;
+}
+
 JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_retain(JNIEnv*, jobject, jlong h) {
     std::lock_guard<std::mutex> g(lock);
     store.retain(h);
@@ -651,6 +785,7 @@ JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_show(JNIEnv* env, jobject, 
     for (const auto& b : bodies) {
         Shown s;
         meshes.push_back(displayOf(b, s, triangles));
+        if (b.mesh) s.mesh = std::make_shared<pm::DisplayMesh>(meshes.back());
         nextShown.push_back(std::move(s));
     }
     size_t start = 0;
@@ -736,13 +871,15 @@ JNIEXPORT jobjectArray JNICALL Java_com_rm_parrotmetric_Core_selectedEdges(JNIEn
     return stringArray(env, out);
 }
 
-/** The selected faces as body number (in the order shown) and name, "3\tF2.end". */
+/** The selected faces as body number (in the order shown) and name, "3\tF2.end"; a mesh's faces have no name. */
 JNIEXPORT jobjectArray JNICALL Java_com_rm_parrotmetric_Core_selectedFaces(JNIEnv* env, jobject) {
     std::lock_guard<std::mutex> g(lock);
     std::vector<std::string> out;
-    for (const auto& p : selection)
-        if (p.kind == pm::Pick::Face && !shown[p.body].sketch && p.index < shown[p.body].faceNames.size())
-            out.push_back(std::to_string(p.body) + "\t" + shown[p.body].faceNames[p.index]);
+    for (const auto& p : selection) {
+        if (p.kind != pm::Pick::Face || shown[p.body].sketch || shown[p.body].plane != -1) continue;
+        if (shown[p.body].mesh) out.push_back(std::to_string(p.body) + "\t");
+        else if (p.index < shown[p.body].faceNames.size()) out.push_back(std::to_string(p.body) + "\t" + shown[p.body].faceNames[p.index]);
+    }
     return stringArray(env, out);
 }
 

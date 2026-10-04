@@ -83,6 +83,8 @@ object CoreKernel : Kernel {
         call { Core.split(id, body, doubleArrayOf(origin.x, origin.y, origin.z, normal.x, normal.y, normal.z)).toList() }
     override fun holeTool(id: Int, plane: SketchPlane, at: List<Pair<Double, Double>>, diameter: Double, depth: Double, kind: Int, topDiameter: Double, topDepth: Double) =
         call { Core.holeTool(id, plane.numbers(), at.flatMap { listOf(it.first, it.second) }.toDoubleArray(), diameter, depth, kind, topDiameter, topDepth) }
+    override fun convertToSolid(id: Int, body: Long) = call { Core.convertToSolid(id, body) }
+    override fun centre(body: Long) = call { Core.bodyCentre(body).let { Vec3(it[0], it[1], it[2]) } }
     override fun retain(body: Long) = Core.retain(body)
     override fun release(body: Long) = Core.release(body)
 }
@@ -109,8 +111,13 @@ class CoreViewport(private val gl: (() -> Unit) -> Unit) : Viewport {
         gl {}
     }
 
-    override fun faceOutline(body: Long, face: String, plane: SketchPlane): List<ProfileCurve> {
-        val d = Core.faceOutline(body, face, plane.numbers())
+    override fun selectedMeshPlane() = Core.selectedMeshPlane()?.let { Vec3(it[0], it[1], it[2]) to Vec3(it[3], it[4], it[5]) }
+
+    override fun section(bodies: List<Long>, plane: SketchPlane): List<ProfileCurve> = unpack(Core.section(bodies.toLongArray(), plane.numbers()))
+
+    override fun faceOutline(body: Long, face: String, plane: SketchPlane): List<ProfileCurve> = unpack(Core.faceOutline(body, face, plane.numbers()))
+
+    private fun unpack(d: DoubleArray): List<ProfileCurve> {
         return List(d[0].toInt()) { i ->
             val o = 1 + i * 12
             ProfileCurve(

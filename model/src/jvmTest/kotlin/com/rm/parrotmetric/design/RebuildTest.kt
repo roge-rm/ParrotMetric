@@ -78,6 +78,8 @@ private class FakeKernel : Kernel {
         return listOf(make(Box(b.from, origin.x, b.faces)), make(Box(origin.x, b.to, b.faces)))
     }
 
+    override fun convertToSolid(id: Int, body: Long) = make(bodies.getValue(body))
+    override fun centre(body: Long) = bodies.getValue(body).let { Vec3((it.from + it.to) / 2, 0.0, 0.0) }
     override fun holeTool(id: Int, plane: SketchPlane, at: List<Pair<Double, Double>>, diameter: Double, depth: Double, kind: Int, topDiameter: Double, topDepth: Double) =
         make(Box(at.minOf { it.first }, at.maxOf { it.first } + diameter, emptyList()))
     override fun retain(body: Long) { counts[body] = counts.getValue(body) + 1 }
@@ -255,5 +257,22 @@ class RebuildTest {
         // The top plane turned a quarter round its x: its normal now lies along -y.
         val n = built.sketchPlanes.getValue(tilted.id).normal
         assertTrue(kotlin.math.abs(n.y + 1) < 1e-9 && kotlin.math.abs(n.z) < 1e-9, n.toString())
+    }
+
+    @Test
+    fun aPlaneCutKeepsOneSide() {
+        val k = FakeKernel()
+        val d = Design()
+        extrude(d, sketchAt(d, 0.0, 40.0), Operation.NewBody)
+        val plane = PlaneRef.Fixed(SketchPlane("x=30", Vec3(30.0, 0.0, 0.0), Vec3(0.0, 1.0, 0.0), Vec3(0.0, 0.0, 1.0)))
+        d.add(SplitFeature(d.newId(), "Cut", "Body 1", plane, keep = 1))
+        val r = Rebuilder(k)
+        val built = r.rebuild(d.active)
+        assertTrue(built.errors.isEmpty(), built.errors.toString())
+        // The plane's normal is y × z = +x, so the piece kept is past x = 30.
+        assertEquals(1, built.bodies.size)
+        assertEquals(30.0, k.bodies.getValue(built.bodies[0].handle).from)
+        r.clear()
+        assertTrue(k.bodies.isEmpty())
     }
 }

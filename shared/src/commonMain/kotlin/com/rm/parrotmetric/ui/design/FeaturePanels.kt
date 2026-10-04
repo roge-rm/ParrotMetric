@@ -76,6 +76,7 @@ fun FeaturePanel(editor: DesignEditor) {
                 is DesignEditor.CombineDraft -> CombineSettings(editor, d)
                 is DesignEditor.SplitDraft -> SplitSettings(editor, d)
                 is DesignEditor.MoveDraft -> MoveSettings(editor, d)
+                is DesignEditor.ConvertDraft -> Header("To solid", Icons.convert, Palette.modify, d.bodies.firstOrNull())
                 is DesignEditor.PlaneDraft -> PlaneSettings(editor, d)
                 is DesignEditor.AxisDraft -> AxisSettings(editor, d)
                 else -> {}
@@ -367,8 +368,9 @@ internal fun CombineSettings(editor: DesignEditor, d: DesignEditor.CombineDraft)
 
 @Composable
 internal fun SplitSettings(editor: DesignEditor, d: DesignEditor.SplitDraft) {
-    Header("Split", Icons.cut, Palette.modify, d.bodies.firstOrNull())
+    Header(if (d.keep == 0) "Split" else "Plane cut", Icons.cut, Palette.modify, d.bodies.firstOrNull())
     PlaneRow(d, d.plane) { d.plane = it; editor.draftChanged() }
+    Segmented(listOf("Keep both", "Keep in front", "Keep behind"), d.keep) { d.keep = it; editor.draftChanged() }
 }
 
 @Composable

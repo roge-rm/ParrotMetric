@@ -1,7 +1,9 @@
 #pragma once
 
 #include <string>
+#include <array>
 #include <utility>
+#include <vector>
 
 #include "mesh/mesh.h"
 
@@ -35,6 +37,13 @@ public:
     /** The parts on each side of a plane: first the side the normal points to. Either may be empty. */
     std::pair<MeshBody, MeshBody> split(const double origin[3], const double normal[3]) const;
     bool empty() const;
+    /**
+     * Where the mesh crosses a plane, as closed loops in the plane's own x
+     * and y. The plane is given by its origin, x direction and y direction.
+     */
+    std::vector<std::vector<std::array<double, 2>>> slice(const double origin[3], const double x[3], const double y[3]) const;
+    /** The middle of its bounding box. */
+    std::array<double, 3> centre() const;
 
     Mesh toMesh() const;
     double volume() const;

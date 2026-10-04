@@ -195,12 +195,12 @@ private fun TopBar(logo: @Composable () -> Unit, state: ModelState, design: Desi
         }
         Column(Modifier.weight(1f).padding(start = 2.dp)) {
             Text(state.title, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = Palette.text, maxLines = 1)
+            val triangles = design.triangles
             Text(
                 when {
                     design.busy -> "Working…"
                     bodies == 0 -> "Nothing yet"
-                    bodies == 1 -> "1 body"
-                    else -> "$bodies bodies"
+                    else -> (if (bodies == 1) "1 body" else "$bodies bodies") + if (triangles > 0) ", $triangles triangles" else ""
                 },
                 fontSize = 12.sp,
                 color = Palette.muted,
@@ -360,6 +360,8 @@ private fun ToolSheet(group: ToolGroup, state: ModelState, design: DesignEditor,
             Tool("Open", Icons.open) { actions.openFile() },
         )
         ToolGroup.Modify -> if (meshTools) listOf(
+            Tool("Plane cut", Icons.cut) { design.startPlaneCut() },
+            Tool("To solid", Icons.convert) { design.startConvert() },
             Tool("Split", Icons.cut) { design.startSplit() },
             Tool("Combine", Icons.combine) { design.startCombine() },
             Tool("Mirror", Icons.mirror) { design.startMirror() },

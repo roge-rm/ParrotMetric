@@ -42,6 +42,14 @@ object Core {
     /** plane: origin then normal. */
     external fun split(id: Int, body: Long, plane: DoubleArray): LongArray
     external fun holeTool(id: Int, plane: DoubleArray, points: DoubleArray, diameter: Double, depth: Double, kind: Int, topDiameter: Double, topDepth: Double): Long
+    /** What repairing a mesh file would change, as a line to show, or empty. */
+    external fun repairReport(data: ByteArray, format: Int): String
+    external fun convertToSolid(id: Int, body: Long): Long
+    external fun bodyCentre(body: Long): DoubleArray
+    /** Where bodies cross a plane, as sketch curves; see jni.cpp. */
+    external fun section(bodies: LongArray, plane: DoubleArray): DoubleArray
+    /** Middle and normal of the selected flat part of a mesh, or null. */
+    external fun selectedMeshPlane(): DoubleArray?
     external fun retain(body: Long)
     external fun release(body: Long)
     external fun isMesh(body: Long): Boolean

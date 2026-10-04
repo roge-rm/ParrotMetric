@@ -57,6 +57,10 @@ interface Viewport {
     )
     /** Selected construction planes, by their place in the list shown. */
     fun selectedPlanes(): List<Int>
+    /** The selected flat part of a mesh: its middle and outward normal, or null. */
+    fun selectedMeshPlane(): Pair<Vec3, Vec3>?
+    /** Where these bodies cross a plane, as curves on it. */
+    fun section(bodies: List<Long>, plane: SketchPlane): List<ProfileCurve>
     /** Lines describing what's selected, for Measure. */
     fun measure(): List<String>
     /** Hides what's behind a plane through origin facing normal, or shows everything again. */
@@ -101,6 +105,9 @@ class DesignEditor(
     var built by mutableStateOf<Built?>(null)
         private set
     var busy by mutableStateOf(false)
+        private set
+    /** Triangles in the mesh bodies shown, for the top bar. */
+    var triangles by mutableIntStateOf(0)
         private set
     var message by mutableStateOf<String?>(null)
     var panel by mutableStateOf<FeatureDraft?>(null)
@@ -316,8 +323,19 @@ class DesignEditor(
             val p = built?.sketchPlanes?.get(f.id) ?: return null
             return PlaneRef.Construction(f.id) to p.copy(name = f.name)
         }
-        val ref = faceUnderSelection(yaw) as? PlaneRef.OnFace ?: return null
-        val (bodyIndex, _) = viewport.selectedFaces().first()
+        val ref = faceUnderSelection(yaw) as? PlaneRef.OnFace ?: run {
+            // A flat part of a mesh: a fixed plane where it is now, x squared up to the view.
+            val (o, n) = viewport.selectedMeshPlane() ?: return null
+            val quarter = PI / 2
+            val square = kotlin.math.round(yaw / quarter) * quarter
+            val hint = Vec3(-sin(square), cos(square), 0.0)
+            var x = hint - n * hint.dot(n)
+            if (x.dot(x) < 1e-12) x = if (kotlin.math.abs(n.z) < 0.9) Vec3(0.0, 0.0, 1.0).cross(n) else Vec3(1.0, 0.0, 0.0).cross(n)
+            x = x * (1 / kotlin.math.sqrt(x.dot(x)))
+            val plane = SketchPlane("On a mesh", o, x, n.cross(x))
+            return PlaneRef.Fixed(plane) to plane
+        }
+        val (bodyIndex, _) = viewport.selectedFaces().first { it.second.isNotEmpty() }
         val body = shownBodies.getOrNull(bodyIndex) ?: return null
         val d = try {
             kernel.facePlane(body.handle, ref.face)
@@ -330,6 +348,15 @@ class DesignEditor(
         if (x.dot(x) < 1e-12) x = if (kotlin.math.abs(n.z) < 0.9) Vec3(0.0, 0.0, 1.0).cross(n) else Vec3(1.0, 0.0, 0.0).cross(n)
         x = x * (1 / kotlin.math.sqrt(x.dot(x)))
         return ref to SketchPlane("On a face", Vec3(d[0], d[1], d[2]), x, n.cross(x))
+    }
+
+    /** For projecting into a sketch on a plane: where the shown bodies cross it. */
+    fun sectionThrough(plane: SketchPlane): List<ProfileCurve>? = try {
+        // A hair inside, so a sketch on a body's flat top still finds the body's outline.
+        val inside = plane.copy(origin = plane.origin - plane.normal * 0.01)
+        viewport.section(shownBodies.map { it.handle }, inside).ifEmpty { null }
+    } catch (e: RuntimeException) {
+        null
     }
 
     /** For projecting into a sketch on a face: that face's edges as curves on the sketch's plane. */
@@ -348,7 +375,7 @@ class DesignEditor(
      * squared up to the nearest side, or null if one flat face isn't selected.
      */
     fun faceUnderSelection(yaw: Float): PlaneRef? {
-        val faces = viewport.selectedFaces()
+        val faces = viewport.selectedFaces().filter { it.second.isNotEmpty() }
         if (faces.size != 1) return null
         val quarter = PI / 2
         val square = kotlin.math.round(yaw / quarter) * quarter
@@ -397,6 +424,7 @@ class DesignEditor(
                 }
                 built = result.first
                 shownSketches = result.second
+                triangles = viewport.triangles()
                 onShown()
                 // Show what the panel has picked on the fresh display.
                 result.third?.let { d -> if (d === panel) highlight(d) }
@@ -469,7 +497,7 @@ class DesignEditor(
     fun startDraft() = openFaces(FaceDraft(null, tilt = true))
 
     private fun openFaces(d: FaceDraft) {
-        d.faces = viewport.selectedFaces().map { it.second }
+        d.faces = viewport.selectedFaces().map { it.second }.filter { it.isNotEmpty() }
         panel = d
         rebuild()
     }
@@ -503,6 +531,8 @@ class DesignEditor(
     fun startCombine() = openBodies(CombineDraft(null))
     fun startSplit() = openBodies(SplitDraft(null))
     fun startMove() = openBodies(MoveDraft(null))
+    fun startPlaneCut() = openBodies(SplitDraft(null).also { it.keep = 1 })
+    fun startConvert() = openBodies(ConvertDraft(null))
 
     private fun openBodies(d: BodyDraft) {
         d.planes = planeChoices()
@@ -522,7 +552,7 @@ class DesignEditor(
             "Front" to PlaneRef.Fixed(SketchPlane.Front),
             "Right" to PlaneRef.Fixed(SketchPlane.Right),
         )
-        viewport.selectedFaces().firstOrNull()?.let { out += "The face" to PlaneRef.OnFace(it.second, Vec3(1.0, 0.0, 0.0)) }
+        viewport.selectedFaces().firstOrNull { it.second.isNotEmpty() }?.let { out += "The face" to PlaneRef.OnFace(it.second, Vec3(1.0, 0.0, 0.0)) }
         for (p in design.active.filterIsInstance<PlaneFeature>()) out += p.name to PlaneRef.Construction(p.id)
         return out
     }
@@ -549,6 +579,7 @@ class DesignEditor(
             is CombineFeature -> CombineDraft(f)
             is SplitFeature -> SplitDraft(f)
             is MoveFeature -> MoveDraft(f)
+            is com.rm.parrotmetric.design.ConvertFeature -> ConvertDraft(f)
             is PlaneFeature -> PlaneDraft(f, f.kind).also { it.planes = planeChoices().filter { c -> c.second != PlaneRef.Construction(f.id) } }
             is AxisFeature -> AxisDraft(f)
             else -> return f
@@ -583,7 +614,7 @@ class DesignEditor(
             }
             is EdgeDraft -> d.edges = viewport.selectedEdges()
             is FaceDraft -> {
-                val faces = viewport.selectedFaces().map { it.second }
+                val faces = viewport.selectedFaces().map { it.second }.filter { it.isNotEmpty() }
                 if (d.tilt && d.pickingPivot) {
                     faces.lastOrNull()?.let { d.neutral = it }
                     d.pickingPivot = false
@@ -812,11 +843,19 @@ class DesignEditor(
     }
 
     inner class SplitDraft(editing: SplitFeature?) : BodyDraft(editing) {
+        var keep by mutableStateOf(editing?.keep ?: 0)
         private val name = editing?.name ?: nextName("Split", design.features.count { it is SplitFeature })
         var plane by mutableStateOf<PlaneRef>(editing?.plane ?: PlaneRef.Fixed(SketchPlane.Right))
         init { if (editing != null) bodies = listOf(editing.body) }
-        override fun feature(): Feature? = bodies.firstOrNull()?.let { SplitFeature(id, name, it, plane) }
+        override fun feature(): Feature? = bodies.firstOrNull()?.let { SplitFeature(id, name, it, plane, keep) }
         override fun missing() = "Tap a face of the body to split"
+    }
+
+    inner class ConvertDraft(editing: com.rm.parrotmetric.design.ConvertFeature?) : BodyDraft(editing) {
+        private val name = editing?.name ?: nextName("To solid", design.features.count { it is com.rm.parrotmetric.design.ConvertFeature })
+        init { if (editing != null) bodies = listOf(editing.body) }
+        override fun feature(): Feature? = bodies.firstOrNull()?.let { com.rm.parrotmetric.design.ConvertFeature(id, name, it) }
+        override fun missing() = "Tap the mesh to make solid"
     }
 
     inner class MoveDraft(editing: MoveFeature?) : BodyDraft(editing) {

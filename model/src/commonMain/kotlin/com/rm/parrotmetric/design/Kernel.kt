@@ -32,6 +32,9 @@ interface Kernel {
     fun split(id: Int, body: Long, origin: Vec3, normal: Vec3): List<Long>
     /** The shape holes at these plane points take out; kind is HoleKind's ordinal. */
     fun holeTool(id: Int, plane: SketchPlane, at: List<Pair<Double, Double>>, diameter: Double, depth: Double, kind: Int, topDiameter: Double, topDepth: Double): Long
+    fun convertToSolid(id: Int, body: Long): Long
+    /** The middle of a body. */
+    fun centre(body: Long): Vec3
     fun retain(body: Long)
     fun release(body: Long)
 }

@@ -77,7 +77,13 @@ class MainActivity : ComponentActivity() {
                 return@launch
             }
             if (design.design.features.isEmpty()) state = state.copy(title = name.substringBeforeLast('.'))
+            // Meshes are repaired as they come in; say what was done.
+            val isMesh = format == Core.Format.Stl || format == Core.Format.Obj || format == Core.Format.ThreeMf
+            val report = if (isMesh) withContext(Dispatchers.Default) {
+                try { Core.repairReport(bytes, format.ordinal) } catch (e: RuntimeException) { e.message ?: "" }
+            } else ""
             design.importFile(name, bytes, format.ordinal)
+            if (report.isNotEmpty()) design.message = report
         }
     }
 
@@ -229,8 +235,9 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun outlineFor(ref: PlaneRef, plane: SketchPlane): (() -> List<com.rm.parrotmetric.sketch.ProfileCurve>?)? =
-        if (ref is PlaneRef.OnFace) ({ design.outlineOf(ref, plane) }) else null
+    /** For Project: a face's edges for a sketch on a face, else where the bodies cross the sketch's plane. */
+    private fun outlineFor(ref: PlaneRef, plane: SketchPlane): (() -> List<com.rm.parrotmetric.sketch.ProfileCurve>?) =
+        if (ref is PlaneRef.OnFace) ({ design.outlineOf(ref, plane) }) else ({ design.sectionThrough(plane) })
 
     /** The plane a new sketch on the selected face gets: as the rebuild will place it. */
     private fun planeOnSelectedFace(ref: PlaneRef.OnFace, name: String): SketchPlane? {

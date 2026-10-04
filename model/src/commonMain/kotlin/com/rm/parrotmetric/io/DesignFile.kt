@@ -5,6 +5,7 @@ import com.rm.parrotmetric.design.AxisFeature
 import com.rm.parrotmetric.design.AxisRef
 import com.rm.parrotmetric.design.PlaneFeature
 import com.rm.parrotmetric.design.CombineFeature
+import com.rm.parrotmetric.design.ConvertFeature
 import com.rm.parrotmetric.design.DraftFeature
 import com.rm.parrotmetric.design.HoleFeature
 import com.rm.parrotmetric.design.HoleKind
@@ -118,7 +119,8 @@ object DesignFile {
             is CombineFeature -> mapOf(
                 "type" to "combine", "target" to f.target, "tools" to f.tools, "operation" to f.operation.name, "keepTools" to f.keepTools,
             )
-            is SplitFeature -> mapOf("type" to "split", "body" to f.body, "plane" to plane(f.plane))
+            is SplitFeature -> mapOf("type" to "split", "body" to f.body, "plane" to plane(f.plane), "keep" to f.keep)
+            is ConvertFeature -> mapOf("type" to "convert", "body" to f.body)
             is PlaneFeature -> mapOf(
                 "type" to "plane", "kind" to f.kind.name, "base" to plane(f.base), "offset" to f.offset, "angle" to f.angle,
                 "turnRoundY" to f.turnRoundY, "other" to f.other?.let { plane(it) },
@@ -167,7 +169,8 @@ object DesignFile {
                 (o["axisFeature"] as? Json.Num)?.value?.toInt(),
             )
             "combine" -> CombineFeature(id, name, o.str("target"), strings(o.arr("tools")), Operation.valueOf(o.str("operation")), o.bool("keepTools"))
-            "split" -> SplitFeature(id, name, o.str("body"), plane(o.obj("plane")))
+            "split" -> SplitFeature(id, name, o.str("body"), plane(o.obj("plane")), (o["keep"] as? Json.Num)?.value?.toInt() ?: 0)
+            "convert" -> ConvertFeature(id, name, o.str("body"))
             "plane" -> PlaneFeature(
                 id, name, PlaneFeature.Kind.valueOf(o.str("kind")), plane(o.obj("base")), o.num("offset"), o.num("angle"),
                 o.bool("turnRoundY"), (o["other"] as? Json.Obj)?.let { plane(it) },

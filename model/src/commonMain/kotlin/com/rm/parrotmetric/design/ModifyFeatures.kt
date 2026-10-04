@@ -77,8 +77,16 @@ data class CombineFeature(
     override fun key() = this
 }
 
-/** Cuts a body in two along a plane. */
-data class SplitFeature(override val id: Int, override val name: String, val body: String, val plane: PlaneRef) : Feature() {
+/**
+ * Cuts a body along a plane. [keep] 0 keeps both pieces as bodies; 1 keeps
+ * the side the plane faces, 2 the side behind it.
+ */
+data class SplitFeature(override val id: Int, override val name: String, val body: String, val plane: PlaneRef, val keep: Int = 0) : Feature() {
+    override fun key() = this
+}
+
+/** Makes a mesh body a solid, so it can be filleted, shelled and so on. */
+data class ConvertFeature(override val id: Int, override val name: String, val body: String) : Feature() {
     override fun key() = this
 }
 
