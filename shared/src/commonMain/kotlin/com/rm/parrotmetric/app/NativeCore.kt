@@ -10,15 +10,19 @@ interface NativeCore {
     fun setScratchDirectory(path: String)
 
     // Kernel. Bodies are handles; each made comes retained once.
-    fun extrude(id: Int, plane: DoubleArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, pickCounts: IntArray, pickIds: IntArray, pickPoints: DoubleArray, forward: Double, back: Double): Long
+    fun extrude(id: Int, plane: DoubleArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, pickCounts: IntArray, pickIds: IntArray, pickPoints: DoubleArray, forward: Double, back: Double, taper: Double): Long
     fun revolve(id: Int, plane: DoubleArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, pickCounts: IntArray, pickIds: IntArray, pickPoints: DoubleArray, ax: Double, ay: Double, dx: Double, dy: Double, angle: Double): Long
     /** how: 0 join, 1 cut, 2 intersect. */
     fun combine(id: Int, target: Long, tool: Long, how: Int): Long
     fun fillet(id: Int, body: Long, edges: Array<String>, radius: Double): Long
-    fun chamfer(id: Int, body: Long, edges: Array<String>, distance: Double): Long
+    fun chamfer(id: Int, body: Long, edges: Array<String>, distance: Double, kind: Int, second: Double, flip: Boolean): Long
     fun overlaps(a: Long, b: Long): Boolean
     fun facePlane(body: Long, name: String): DoubleArray
     fun faceNames(body: Long): Array<String>
+    /** Where a named face (or edge) is and how big, to find it again by shape; null if the body hasn't got it. */
+    fun signature(body: Long, name: String, edge: Boolean): DoubleArray?
+    /** The face or edge most like a signature, or null if none is close enough. */
+    fun relocate(body: Long, signature: DoubleArray): String?
     fun importBody(id: Int, data: ByteArray, format: Int): Long
     fun shell(id: Int, body: Long, open: Array<String>, thickness: Double): Long
     fun draft(id: Int, body: Long, faces: Array<String>, neutral: String, angle: Double): Long
@@ -41,8 +45,8 @@ interface NativeCore {
     fun exportBodies(bodies: LongArray, names: Array<String>, format: Int, quality: Int): ByteArray?
 
     // What's shown and selected.
-    /** Bodies, then sketches (a plane each and their curves), then construction planes (nine numbers each) and axes (six each). */
-    fun show(bodies: LongArray, planes: DoubleArray, curveCounts: IntArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, constructionPlanes: DoubleArray, axes: DoubleArray, refit: Boolean)
+    /** Bodies, then sketches (a plane each and their curves), then construction planes (nine numbers each), axes (six each) and points (three each). */
+    fun show(bodies: LongArray, planes: DoubleArray, curveCounts: IntArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, constructionPlanes: DoubleArray, axes: DoubleArray, points: DoubleArray, refit: Boolean)
     fun selectedPlanes(): IntArray
     /** Lines describing what's selected: lengths, areas, gaps, angles, the body's volume and size. */
     fun measure(): Array<String>

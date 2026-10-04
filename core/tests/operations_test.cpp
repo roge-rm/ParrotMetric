@@ -157,3 +157,61 @@ TEST_CASE("holes go down from the top face") {
     NamedShape withBore = combine(3, box, bored, Combine::Cut);
     CHECK(volume(withBore) == Catch::Approx(8000 - M_PI * 16 * 2 - M_PI * 4 * 4).epsilon(1e-3));
 }
+
+TEST_CASE("an edge whose name went away is found again by its shape") {
+    NamedShape before = extrude(1, top, rectangle(40, 20), {{{1, 2, 3, 4}, 5, 5}}, 10, 0);
+    auto edge = signatureOf(before, "F1.end|F1.s1", true);
+    REQUIRE(edge.size() == 10);
+    auto face = signatureOf(before, "F1.s2", false);
+    REQUIRE(face.size() == 10);
+    CHECK(signatureOf(before, "F1.s9", false).empty());
+
+    // The same box, a little longer, with its first line redrawn as line 9.
+    auto curves = rectangle(42, 20);
+    curves[0].id = 9;
+    NamedShape after = extrude(1, top, curves, {{{9, 2, 3, 4}, 5, 5}}, 10, 0);
+    CHECK(after.findEdges("F1.end|F1.s1").empty());
+    CHECK(relocate(after, edge) == "F1.end|F1.s9");
+    CHECK(relocate(after, face) == "F1.s2");
+
+    // Nothing near enough: a much smaller box far away.
+    NamedShape other = extrude(1, top, rectangle(2, 2), {{{1, 2, 3, 4}, 1, 1}}, 1, 0);
+    auto far = signatureOf(after, "F1.s3", false);
+    for (auto& v : {2, 3, 4}) far[size_t(v)] += 500;
+    CHECK(relocate(other, far).empty());
+}
+
+TEST_CASE("a tapered extrude narrows going forward") {
+    NamedShape box = extrude(1, top, rectangle(20, 20), {{{1, 2, 3, 4}, 5, 5}}, 10, 0, 10 * M_PI / 180);
+    // Each side leans in by 10 tan 10° at the top: a frustum of a square pyramid.
+    double t = 10 * std::tan(10 * M_PI / 180);
+    double a = 20 * 20, b = (20 - 2 * t) * (20 - 2 * t);
+    CHECK(volume(box) == Catch::Approx(10.0 / 3 * (a + b + std::sqrt(a * b))).epsilon(1e-3));
+    CHECK(has(box.faceNames(), "F1.s1"));
+}
+
+TEST_CASE("a chamfer can take two distances, or a distance and an angle") {
+    NamedShape box = extrude(1, top, rectangle(40, 20), {{{1, 2, 3, 4}, 5, 5}}, 10, 0);
+    NamedShape two = chamfer(2, box, {"F1.end|F1.s1"}, 1, ChamferKind::TwoDistances, 2);
+    CHECK(volume(two) == Catch::Approx(8000 - 0.5 * 1 * 2 * 40));
+    NamedShape angled = chamfer(2, box, {"F1.end|F1.s1"}, 2, ChamferKind::DistanceAngle, M_PI / 4);
+    CHECK(volume(angled) == Catch::Approx(8000 - 0.5 * 2 * 2 * 40));
+    CHECK_THROWS(chamfer(2, box, {"F1.end|F1.s1"}, 2, ChamferKind::DistanceAngle, M_PI / 2));
+}
+
+TEST_CASE("a solid can be scaled unevenly") {
+    NamedShape box = extrude(1, top, rectangle(10, 10), {{{1, 2, 3, 4}, 5, 5}}, 10, 0);
+    const double m[12] = {2, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0.5, 0};
+    NamedShape out = transformed(2, box, m, "s");
+    CHECK(volume(out) == Catch::Approx(1000));
+    CHECK(has(out.faceNames(), "F2.s(F1.end)"));
+}
+
+TEST_CASE("a solid scaled unevenly about its middle") {
+    std::vector<SketchCurve> curves = {line(1, 14, -4.5, 26, -4.5), line(2, 26, -4.5, 26, 4.5), line(3, 26, 4.5, 14, 4.5), line(4, 14, 4.5, 14, -4.5)};
+    NamedShape box = extrude(1, top, curves, {{{1, 2, 3, 4}, 20, 0}}, 10, 0);
+    // Three times as tall about its middle, (20, 0, 5).
+    const double m[12] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 3, -10};
+    NamedShape out = transformed(2, box, m, "t");
+    CHECK(volume(out) == Catch::Approx(12 * 9 * 30));
+}

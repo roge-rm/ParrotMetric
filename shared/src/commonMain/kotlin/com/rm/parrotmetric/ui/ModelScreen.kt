@@ -277,12 +277,18 @@ private fun HistoryBar(design: DesignEditor, actions: ModelActions) {
             }
             Box {
                 Row(
-                    Modifier.alpha(if (entry.active) 1f else 0.4f)
+                    Modifier.alpha(if (entry.active && !entry.off) 1f else 0.4f)
                         .clip(RoundedCornerShape(18.dp))
                         .background(Palette.surface)
-                        .then(if (entry.error != null) Modifier.border(1.5.dp, Palette.orange, RoundedCornerShape(18.dp)) else Modifier)
+                        .then(
+                            when {
+                                entry.error != null -> Modifier.border(1.5.dp, Palette.orange, RoundedCornerShape(18.dp))
+                                entry.warning != null -> Modifier.border(1.5.dp, Palette.construct, RoundedCornerShape(18.dp))
+                                else -> Modifier
+                            },
+                        )
                         .combinedClickable(
-                            onClick = { if (entry.error != null) design.message = entry.error; actions.openHistory(entry.id) },
+                            onClick = { (entry.error ?: entry.warning)?.let { design.message = it }; actions.openHistory(entry.id) },
                             onLongClick = { menu = true },
                         )
                         .height(36.dp).padding(start = 9.dp, end = 12.dp),
@@ -290,11 +296,15 @@ private fun HistoryBar(design: DesignEditor, actions: ModelActions) {
                 ) {
                     Icon(group.icon, null, Modifier.size(15.dp), tint = if (entry.error != null) Palette.orange else group.colour)
                     Spacer(Modifier.width(6.dp))
-                    Text(entry.name, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Palette.text, maxLines = 1)
+                    Text(
+                        entry.name, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Palette.text, maxLines = 1,
+                        textDecoration = if (entry.off) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
+                    )
                 }
                 DropdownMenu(menu, onDismissRequest = { menu = false }, containerColor = Palette.raised) {
                     DropdownMenuItem({ Text("Edit") }, onClick = { menu = false; actions.openHistory(entry.id) })
                     DropdownMenuItem({ Text(if (entry.active) "Roll back to here" else "Roll forward to here") }, onClick = { menu = false; design.rollTo(index) })
+                    DropdownMenuItem({ Text(if (entry.off) "Turn on" else "Turn off") }, onClick = { menu = false; design.setOff(entry.id, !entry.off) })
                     DropdownMenuItem({ Text("Delete") }, onClick = { menu = false; design.delete(entry.id) })
                 }
             }
@@ -387,6 +397,7 @@ private fun ToolSheet(group: ToolGroup, state: ModelState, design: DesignEditor,
             Tool("Angled plane", Icons.plane) { design.startPlane(com.rm.parrotmetric.design.PlaneFeature.Kind.Angle) },
             Tool("Midplane", Icons.plane) { design.startPlane(com.rm.parrotmetric.design.PlaneFeature.Kind.Midway) },
             Tool("Axis", Icons.axis) { design.startAxis() },
+            Tool("Point", Icons.pointTool) { design.startPoint() },
         )
         ToolGroup.Inspect -> listOf(
             Tool("Measure", Icons.measure) { design.startMeasuring(); onSheet("measure") },

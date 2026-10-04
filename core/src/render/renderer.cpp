@@ -448,6 +448,24 @@ void Renderer::drawScene(bool ids, const float* vp, const float* normal) {
         glUniformMatrix3fv(glGetUniformLocation(faceProgram, "view"), 1, GL_FALSE, normal);
         glUniform1i(glGetUniformLocation(faceProgram, "selected"), 0);
     }
+    // For picking, what's drawn behind (construction planes) goes first and
+    // leaves no depth, so bodies and sketch areas anywhere in front of or
+    // behind it win, and it's picked only where there's nothing else.
+    if (ids) {
+        glPolygonOffset(0.0f, 0.0f);
+        glDepthMask(GL_FALSE);
+        for (uint32_t i = 0; i < gpu_.size(); ++i) {
+            const Gpu& g = gpu_[i];
+            if (!g.behind || g.faceColour[3] >= 1.0f || g.faceIndices == 0) continue;
+            glUniform1ui(glGetUniformLocation(faceProgram, "base"), i << 20);
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, g.faceSelected);
+            glBindVertexArray(g.faceVao);
+            glDrawElements(GL_TRIANGLES, g.faceIndices, GL_UNSIGNED_INT, nullptr);
+        }
+        glDepthMask(GL_TRUE);
+        glPolygonOffset(1.5f, 2.0f);
+    }
     // Solid faces first, then see-through ones over them without hiding what's behind.
     // See-through faces (sketch areas) aren't pushed back, so on a face they're
     // sketched on they come out on top, for tapping too.
@@ -462,6 +480,7 @@ void Renderer::drawScene(bool ids, const float* vp, const float* normal) {
         for (uint32_t i = 0; i < gpu_.size(); ++i) {
             const Gpu& g = gpu_[i];
             if ((g.faceColour[3] < 1.0f) != seeThrough || g.faceIndices == 0) continue;
+            if (ids && g.behind && seeThrough) continue;
             if (seeThrough) glPolygonOffset(g.behind ? 2.0f : 0.0f, g.behind ? 4.0f : 0.0f);
             if (ids) glUniform1ui(glGetUniformLocation(faceProgram, "base"), i << 20);
             else glUniform4fv(glGetUniformLocation(faceProgram, "faceColour"), 1, g.faceColour);

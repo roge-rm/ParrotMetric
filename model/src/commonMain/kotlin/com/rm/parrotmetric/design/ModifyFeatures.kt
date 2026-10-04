@@ -90,7 +90,10 @@ data class ConvertFeature(override val id: Int, override val name: String, val b
     override fun key() = this
 }
 
-/** Moves bodies by (dx, dy, dz) mm, after turning them [angle] radians round an origin axis. */
+/**
+ * Moves bodies by (dx, dy, dz) mm, after turning them [angle] radians round an
+ * origin axis. First each is scaled about its own middle by (sx, sy, sz).
+ */
 data class MoveFeature(
     override val id: Int,
     override val name: String,
@@ -101,6 +104,10 @@ data class MoveFeature(
     val axis: Axis3,
     val angle: Double,
     val copy: Boolean,
+    val sx: Double = 1.0,
+    val sy: Double = 1.0,
+    val sz: Double = 1.0,
 ) : Feature() {
+    val scaled get() = sx != 1.0 || sy != 1.0 || sz != 1.0
     override fun key() = this
 }

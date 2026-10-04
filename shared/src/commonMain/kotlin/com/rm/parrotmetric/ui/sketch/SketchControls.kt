@@ -191,6 +191,14 @@ private fun ToolGrid(editor: SketchEditor) {
                     }
                 }
             }
+            if (editor.tool == SketchTool.Rectangle) ChoiceRow(listOf("Corner to corner", "From the centre"), if (editor.rectangleFromCentre) 1 else 0) {
+                editor.endDrawing()
+                editor.rectangleFromCentre = it == 1
+            }
+            if (editor.tool == SketchTool.Arc) ChoiceRow(listOf("Centre, then ends", "Through three points"), if (editor.arcThroughPoints) 1 else 0) {
+                editor.endDrawing()
+                editor.arcThroughPoints = it == 1
+            }
             Row {
                 ToolRow(editor, main)
                 Surface(
@@ -207,6 +215,21 @@ private fun ToolGrid(editor: SketchEditor) {
                     }
                 }
             }
+        }
+    }
+}
+
+/** A tool's way of drawing, as small choices above the tools. */
+@Composable
+private fun ChoiceRow(options: List<String>, chosen: Int, onPick: (Int) -> Unit) {
+    Row(Modifier.padding(horizontal = 8.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        options.forEachIndexed { i, label ->
+            Surface(
+                onClick = { onPick(i) },
+                shape = RoundedCornerShape(12.dp),
+                color = if (i == chosen) Palette.line else Color.Transparent,
+                contentColor = Palette.text,
+            ) { Text(label, Modifier.padding(horizontal = 10.dp, vertical = 6.dp), fontSize = 13.sp) }
         }
     }
 }

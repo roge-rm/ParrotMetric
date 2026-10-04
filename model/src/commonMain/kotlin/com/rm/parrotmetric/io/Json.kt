@@ -6,6 +6,7 @@ sealed class Json {
         operator fun get(key: String) = fields[key]
         fun str(key: String) = (fields[key] as? Str)?.value ?: throw IllegalArgumentException("Missing $key")
         fun num(key: String) = (fields[key] as? Num)?.value ?: throw IllegalArgumentException("Missing $key")
+        fun numOr(key: String, default: Double) = (fields[key] as? Num)?.value ?: default
         fun int(key: String) = num(key).toInt()
         fun bool(key: String) = (fields[key] as? Bool)?.value ?: false
         fun arr(key: String) = (fields[key] as? Arr)?.items ?: emptyList()

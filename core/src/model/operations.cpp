@@ -16,7 +16,11 @@
 #include <TopoDS_Shell.hxx>
 #include <gp_Circ.hxx>
 #include <BRepBuilderAPI_MakeFace.hxx>
+#include <BRepBuilderAPI_GTransform.hxx>
+#include <BRepBuilderAPI_NurbsConvert.hxx>
+#include <ShapeFix_Shape.hxx>
 #include <BRepBuilderAPI_Transform.hxx>
+#include <gp_GTrsf.hxx>
 #include <BRepOffsetAPI_DraftAngle.hxx>
 #include <BRepOffsetAPI_MakeThickSolid.hxx>
 #include <BRepPrimAPI_MakeCone.hxx>
@@ -44,6 +48,7 @@
 
 #include <BRepTopAdaptor_FClass2d.hxx>
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <memory>
 #include <limits>
@@ -134,8 +139,57 @@ double volume(const TopoDS_Shape& s) {
 
 }  // namespace
 
+namespace {
+
+/**
+ * Names through an operation that changes faces in place, as a draft does:
+ * OCCT reports those through ModifiedShape, so faces carryNames had to give
+ * new names get their old ones back.
+ */
+NamedShape keepNames(int id, const NamedShape& body, BRepBuilderAPI_ModifyShape& op) {
+    NamedShape out = carryNames({&body}, op, op.Shape(), prefix(id));
+    TopTools_IndexedMapOfShape present;
+    TopExp::MapShapes(out.shape, TopAbs_FACE, present);
+    std::string made = prefix(id) + ".n";
+    for (TopExp_Explorer f(body.shape, TopAbs_FACE); f.More(); f.Next()) {
+        std::string name = body.faceName(f.Current());
+        if (name.empty()) continue;
+        TopoDS_Shape now;
+        try {
+            now = op.ModifiedShape(f.Current());
+        } catch (const Standard_Failure&) {
+            continue;
+        }
+        if (!present.Contains(now)) continue;
+        std::string* bound = out.names.ChangeSeek(now);
+        if (!bound) out.names.Bind(now, name);
+        else if (bound->rfind(made, 0) == 0) *bound = name;
+    }
+    return out;
+}
+
+/** Leans the sides of extrude `id` in by angle going along the plane's normal, pivoting at the plane. */
+NamedShape taperSides(int id, const NamedShape& body, const gp_Ax3& plane, double angle) {
+    if (std::abs(angle) >= M_PI / 2) throw std::runtime_error("The taper has to be less than 90°");
+    BRepOffsetAPI_DraftAngle op(body.shape);
+    gp_Pln pivot(plane.Location(), plane.Direction());
+    std::string side = prefix(id) + ".s";
+    for (TopExp_Explorer f(body.shape, TopAbs_FACE); f.More(); f.Next()) {
+        // Sides only: F<id>.s<curve>, not F<id>.start.
+        std::string name = body.faceName(f.Current());
+        if (name.rfind(side, 0) != 0 || name.size() <= side.size() || !std::isdigit(static_cast<unsigned char>(name[side.size()]))) continue;
+        op.Add(TopoDS::Face(f.Current()), plane.Direction(), angle, pivot);
+        if (!op.AddDone()) throw std::runtime_error("A side can't be tapered");
+    }
+    op.Build();
+    if (!op.IsDone() || !BRepCheck_Analyzer(op.Shape()).IsValid()) throw std::runtime_error("The taper is too steep for this shape");
+    return keepNames(id, body, op);
+}
+
+}  // namespace
+
 NamedShape extrude(int id, const gp_Ax3& plane, const std::vector<SketchCurve>& curves, const std::vector<RegionPick>& picks,
-                   double forward, double back) {
+                   double forward, double back, double taper) {
     if (std::abs(forward + back) < 1e-6) throw std::runtime_error("The extrude has no length");
     try {
         auto regions = buildRegionFaces(curves);
@@ -153,6 +207,7 @@ NamedShape extrude(int id, const gp_Ax3& plane, const std::vector<SketchCurve>& 
         }
         NamedShape out = fuseAll(id, std::move(pieces));
         check(out.shape, "The extrude couldn't be made");
+        if (std::abs(taper) > 1e-9) out = taperSides(id, out, plane, taper);
         return out;
     } catch (const Standard_Failure&) {
         throw std::runtime_error("The extrude couldn't be made");
@@ -222,14 +277,27 @@ NamedShape fillet(int id, const NamedShape& body, const std::vector<std::string>
     }
 }
 
-NamedShape chamfer(int id, const NamedShape& body, const std::vector<std::string>& edges, double distance) {
+NamedShape chamfer(int id, const NamedShape& body, const std::vector<std::string>& edges, double distance, ChamferKind kind,
+                   double second, bool flip) {
     if (distance <= 0) throw std::runtime_error("The distance has to be more than 0");
+    if (kind == ChamferKind::TwoDistances && second <= 0) throw std::runtime_error("The second distance has to be more than 0");
+    if (kind == ChamferKind::DistanceAngle && (second <= 0 || second >= M_PI / 2)) throw std::runtime_error("The angle has to be between 0° and 90°");
     try {
         BRepFilletAPI_MakeChamfer op(body.shape);
+        TopTools_IndexedDataMapOfShapeListOfShape edgeFaces;
+        TopExp::MapShapesAndAncestors(body.shape, TopAbs_EDGE, TopAbs_FACE, edgeFaces);
         std::vector<std::pair<TopoDS_Edge, std::string>> added;
         for (const auto& name : edges) {
             for (const auto& e : body.findEdges(name)) {
-                op.Add(distance, e);
+                if (kind == ChamferKind::Equal) {
+                    op.Add(distance, e);
+                } else {
+                    // The face that gets `distance`: the edge's first, or its other one if flipped.
+                    const TopTools_ListOfShape& faces = edgeFaces.FindFromKey(e);
+                    TopoDS_Face face = TopoDS::Face(flip && faces.Extent() > 1 ? faces.Last() : faces.First());
+                    if (kind == ChamferKind::TwoDistances) op.Add(distance, second, e, face);
+                    else op.AddDA(distance, second, e, face);
+                }
                 added.push_back({e, name});
             }
         }
@@ -282,16 +350,79 @@ NamedShape draft(int id, const NamedShape& body, const std::vector<std::string>&
         if (!added) throw std::runtime_error("The faces to tilt aren't there any more");
         op.Build();
         if (!op.IsDone() || !BRepCheck_Analyzer(op.Shape()).IsValid()) throw std::runtime_error("The faces can't be tilted that far");
-        return carryNames({&body}, op, op.Shape(), prefix(id));
+        return keepNames(id, body, op);
     } catch (const Standard_Failure&) {
         throw std::runtime_error("The faces can't be tilted that far");
     }
 }
 
+namespace {
+
+/** True if the 3x3 part only turns, mirrors and scales evenly, as gp_Trsf can. */
+bool similarity(const double m[12]) {
+    double c[3][3];
+    for (int r = 0; r < 3; ++r)
+        for (int k = 0; k < 3; ++k) c[r][k] = m[r * 4 + k];
+    double s = c[0][0] * c[0][0] + c[1][0] * c[1][0] + c[2][0] * c[2][0];
+    for (int a = 0; a < 3; ++a)
+        for (int b = 0; b < 3; ++b) {
+            double dot = c[0][a] * c[0][b] + c[1][a] * c[1][b] + c[2][a] * c[2][b];
+            if (std::abs(dot - (a == b ? s : 0)) > 1e-9 * std::max(1.0, s)) return false;
+        }
+    return true;
+}
+
+template <class Op>
+NamedShape named(int id, const NamedShape& body, Op& op, const std::string& tag) {
+    NamedShape out;
+    out.shape = op.Shape();
+    for (TopExp_Explorer f(body.shape, TopAbs_FACE); f.More(); f.Next()) {
+        const auto& moved = op.Modified(f.Current());
+        std::string name = prefix(id) + "." + tag + "(" + body.faceName(f.Current()) + ")";
+        for (const auto& m2 : moved) out.names.Bind(m2, name);
+        if (moved.IsEmpty()) out.names.Bind(op.ModifiedShape(f.Current()), name);
+    }
+    return out;
+}
+
+}  // namespace
+
 NamedShape transformed(int id, const NamedShape& body, const double m[12], const std::string& tag) {
-    gp_Trsf t;
-    t.SetValues(m[0], m[1], m[2], m[3], m[4], m[5], m[6], m[7], m[8], m[9], m[10], m[11]);
     try {
+        if (!similarity(m)) {
+            // Scaled unevenly: OCCT's general transform, which turns surfaces into splines.
+            gp_GTrsf g;
+            g.SetVectorialPart(gp_Mat(m[0], m[1], m[2], m[4], m[5], m[6], m[8], m[9], m[10]));
+            g.SetTranslationPart(gp_XYZ(m[3], m[7], m[11]));
+            BRepBuilderAPI_GTransform op(body.shape, g, true);
+            NamedShape out = named(id, body, op, tag);
+            if (out.shape.IsNull() || !BRepCheck_Analyzer(out.shape).IsValid()) {
+                // Some shapes come out invalid: turned into splines first they scale cleanly.
+                BRepBuilderAPI_NurbsConvert nurbs(body.shape, true);
+                NamedShape spline;
+                spline.shape = nurbs.Shape();
+                for (TopExp_Explorer f(body.shape, TopAbs_FACE); f.More(); f.Next())
+                    spline.names.Bind(nurbs.ModifiedShape(f.Current()), body.faceName(f.Current()));
+                BRepBuilderAPI_GTransform again(spline.shape, g, true);
+                out = named(id, spline, again, tag);
+            }
+            if (!out.shape.IsNull() && !BRepCheck_Analyzer(out.shape).IsValid()) {
+                // Last, OCCT's own repair. Its faces get new names.
+                ShapeFix_Shape fix(out.shape);
+                fix.Perform();
+                if (BRepCheck_Analyzer(fix.Shape()).IsValid()) {
+                    out = NamedShape();
+                    out.shape = fix.Shape();
+                    int k = 0;
+                    for (TopExp_Explorer f(out.shape, TopAbs_FACE); f.More(); f.Next())
+                        if (!out.names.IsBound(f.Current())) out.names.Bind(f.Current(), prefix(id) + ".n" + std::to_string(k++));
+                }
+            }
+            check(out.shape, "The body couldn't be scaled that way");
+            return out;
+        }
+        gp_Trsf t;
+        t.SetValues(m[0], m[1], m[2], m[3], m[4], m[5], m[6], m[7], m[8], m[9], m[10], m[11]);
         BRepBuilderAPI_Transform op(body.shape, t, true);
         NamedShape out;
         out.shape = op.Shape();

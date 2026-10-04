@@ -25,6 +25,12 @@ class Design {
 
     /** Fields typed as expressions, by feature id and then field name (see [Parametrics.withValue]). */
     val expressions = mutableMapOf<Int, Map<String, String>>()
+
+    /** Features turned off: kept in the history but not built. */
+    val suppressed = mutableSetOf<Int>()
+
+    /** Where the faces and edges features use last were, to find them again (see Built.hints). */
+    val hints = mutableMapOf<String, DoubleArray>()
     fun nameOf(label: String) = info(label).name ?: label
     val features: List<Feature> get() = list
 
@@ -40,7 +46,12 @@ class Design {
     fun load(
         features: List<Feature>, marker: Int, bodyInfo: Map<String, BodyInfo> = emptyMap(),
         parameters: List<Parameter> = emptyList(), expressions: Map<Int, Map<String, String>> = emptyMap(),
+        suppressed: Set<Int> = emptySet(), hints: Map<String, DoubleArray> = emptyMap(),
     ) {
+        this.suppressed.clear()
+        this.suppressed += suppressed
+        this.hints.clear()
+        this.hints.putAll(hints)
         bodies.clear()
         bodies.putAll(bodyInfo)
         this.parameters.clear()
@@ -53,8 +64,11 @@ class Design {
         nextId = (features.maxOfOrNull { it.id } ?: 0) + 1
     }
 
-    /** The features before the marker: what's built. */
+    /** The features before the marker: what's built, unless turned off. */
     val active: List<Feature> get() = list.subList(0, marker)
+
+    /** The active features that are on. */
+    val built: List<Feature> get() = active.filter { it.id !in suppressed }
 
     fun add(f: Feature) {
         list.add(marker, f)
@@ -91,6 +105,7 @@ class Design {
         internal val parameters: List<Parameter>,
         internal val expressions: Map<Int, Map<String, String>>,
         internal val dimensionExpressions: Map<com.rm.parrotmetric.sketch.Constraint.Dimension, String?>,
+        internal val suppressed: Set<Int>,
     )
 
     fun snapshot() = Snapshot(
@@ -101,6 +116,7 @@ class Design {
         expressions.toMap(),
         list.filterIsInstance<SketchFeature>().flatMap { f -> f.sketch.constraints.filterIsInstance<com.rm.parrotmetric.sketch.Constraint.Dimension>() }
             .associateWith { it.expression },
+        suppressed.toSet(),
     )
 
     fun restore(s: Snapshot) {
@@ -116,5 +132,7 @@ class Design {
         expressions.clear()
         expressions.putAll(s.expressions)
         for ((d, e) in s.dimensionExpressions) d.expression = e
+        suppressed.clear()
+        suppressed += s.suppressed
     }
 }

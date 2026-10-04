@@ -59,11 +59,16 @@ object Parametrics {
                 "forward" -> f.copy(forward = v)
                 "back" -> f.copy(back = v)
                 "both" -> f.copy(forward = v / 2, back = v / 2)
+                "taper" -> f.copy(taper = rad)
                 else -> f
             }
             is RevolveFeature -> if (field == "angle") f.copy(angle = rad) else f
             is FilletFeature -> if (field == "size") f.copy(radius = v) else f
-            is ChamferFeature -> if (field == "size") f.copy(distance = v) else f
+            is ChamferFeature -> when (field) {
+                "size" -> f.copy(distance = v)
+                "second" -> f.copy(second = if (f.kind == ChamferKind.DistanceAngle) rad else v)
+                else -> f
+            }
             is ShellFeature -> if (field == "size") f.copy(thickness = v) else f
             is DraftFeature -> if (field == "size") f.copy(angle = rad) else f
             is HoleFeature -> when (field) {
@@ -86,11 +91,21 @@ object Parametrics {
                 "dy" -> f.copy(dy = v)
                 "dz" -> f.copy(dz = v)
                 "angle" -> f.copy(angle = rad)
+                "sx" -> f.copy(sx = v)
+                "sy" -> f.copy(sy = v)
+                "sz" -> f.copy(sz = v)
+                "scale" -> f.copy(sx = v, sy = v, sz = v)
                 else -> f
             }
             is PlaneFeature -> when (field) {
                 "offset" -> f.copy(offset = v)
                 "angle" -> f.copy(angle = rad)
+                else -> f
+            }
+            is PointFeature -> when (field) {
+                "x" -> f.copy(x = v)
+                "y" -> f.copy(y = v)
+                "z" -> f.copy(z = v)
                 else -> f
             }
             is AxisFeature -> when (field) {

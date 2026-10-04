@@ -277,6 +277,23 @@ pm::DisplayMesh displayAxis(const double* a, double half) {
     return d;
 }
 
+/** A construction point: three short crossing lines. */
+pm::DisplayMesh displayPoint(const double* p, double half) {
+    pm::DisplayMesh d;
+    for (int k = 0; k < 3; ++k) {
+        pm::DisplayMesh::Edge e;
+        for (int s = -1; s <= 1; s += 2) {
+            float q[3] = {float(p[0]), float(p[1]), float(p[2])};
+            q[k] += float(s * half);
+            e.points.insert(e.points.end(), q, q + 3);
+        }
+        d.edges.push_back(std::move(e));
+    }
+    const float edge[4] = {0.66f, 0.93f, 0.89f, 1.0f};
+    std::copy(edge, edge + 4, d.edgeColour);
+    return d;
+}
+
 }  // namespace
 
 extern "C" {
@@ -291,7 +308,7 @@ JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_setScratchDirectory(JNIEnv*
 
 JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_extrude(JNIEnv* env, jobject, jint id, jdoubleArray plane, jintArray kinds,
                                                              jintArray ids, jdoubleArray nums, jintArray pickCounts, jintArray pickIds,
-                                                             jdoubleArray pickPoints, jdouble forward, jdouble back) {
+                                                             jdoubleArray pickPoints, jdouble forward, jdouble back, jdouble taper) {
     try {
         auto p = doubles(env, plane);
         auto k = ints(env, kinds), i = ints(env, ids);
@@ -299,7 +316,7 @@ JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_extrude(JNIEnv* env, jobje
         auto curves = curvesOf(k.data(), i.data(), n.data(), k.size());
         auto picks = picksOf(ints(env, pickCounts), ints(env, pickIds), doubles(env, pickPoints));
         pm::Body b;
-        b.solid = pm::extrude(id, planeOf(p.data()), curves, picks, forward, back);
+        b.solid = pm::extrude(id, planeOf(p.data()), curves, picks, forward, back, taper);
         std::lock_guard<std::mutex> g(lock);
         return store.add(std::move(b));
     } catch (const std::exception& e) {
@@ -365,13 +382,15 @@ JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_fillet(JNIEnv* env, jobjec
     }
 }
 
-JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_chamfer(JNIEnv* env, jobject, jint id, jlong body, jobjectArray edges, jdouble d) {
+/** kind: 0 equal, 1 two distances, 2 distance and angle (second in radians); see pm::chamfer. */
+JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_chamfer(JNIEnv* env, jobject, jint id, jlong body, jobjectArray edges, jdouble d,
+                                                             jint kind, jdouble second, jboolean flip) {
     try {
         std::unique_lock<std::mutex> g(lock);
         pm::NamedShape s = solidOf(body);
         g.unlock();
         pm::Body out;
-        out.solid = pm::chamfer(id, s, strings(env, edges), d);
+        out.solid = pm::chamfer(id, s, strings(env, edges), d, pm::ChamferKind(kind), second, flip);
         g.lock();
         return store.add(std::move(out));
     } catch (const std::exception& e) {
@@ -409,6 +428,43 @@ JNIEXPORT jdoubleArray JNICALL Java_com_rm_parrotmetric_Core_facePlane(JNIEnv* e
         return out;
     } catch (const std::exception& e) {
         fail(env, e.what());
+        return nullptr;
+    }
+}
+
+/** Where a named face (or edge) of a solid is and how big, for finding it again; see signatureOf. Null if it hasn't got one. */
+JNIEXPORT jdoubleArray JNICALL Java_com_rm_parrotmetric_Core_signature(JNIEnv* env, jobject, jlong body, jstring name, jboolean edge) {
+    const char* c = env->GetStringUTFChars(name, nullptr);
+    std::string n(c);
+    env->ReleaseStringUTFChars(name, c);
+    try {
+        std::unique_lock<std::mutex> g(lock);
+        const pm::Body& b = store.get(body);
+        if (!b.solid) return nullptr;
+        pm::NamedShape s = *b.solid;
+        g.unlock();
+        auto v = pm::signatureOf(s, n, edge);
+        if (v.empty()) return nullptr;
+        jdoubleArray out = env->NewDoubleArray(jsize(v.size()));
+        env->SetDoubleArrayRegion(out, 0, jsize(v.size()), v.data());
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+/** The name of the face or edge of a solid most like a signature, or null if none is close. */
+JNIEXPORT jstring JNICALL Java_com_rm_parrotmetric_Core_relocate(JNIEnv* env, jobject, jlong body, jdoubleArray signature) {
+    auto sig = doubles(env, signature);
+    try {
+        std::unique_lock<std::mutex> g(lock);
+        const pm::Body& b = store.get(body);
+        if (!b.solid) return nullptr;
+        pm::NamedShape s = *b.solid;
+        g.unlock();
+        std::string n = pm::relocate(s, std::vector<double>(sig.begin(), sig.end()));
+        return n.empty() ? nullptr : env->NewStringUTF(n.c_str());
+    } catch (...) {
         return nullptr;
     }
 }
@@ -766,9 +822,10 @@ JNIEXPORT jbyteArray JNICALL Java_com_rm_parrotmetric_Core_exportBodies(JNIEnv* 
  */
 JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_show(JNIEnv* env, jobject, jlongArray handles, jdoubleArray planes,
                                                          jintArray curveCounts, jintArray kinds, jintArray ids, jdoubleArray nums,
-                                                         jdoubleArray constructionPlanes, jdoubleArray axes, jboolean refit) {
+                                                         jdoubleArray constructionPlanes, jdoubleArray axes, jdoubleArray points, jboolean refit) {
     auto cp = doubles(env, constructionPlanes);
     auto ax = doubles(env, axes);
+    auto pts = doubles(env, points);
     auto h = longs(env, handles);
     auto p = doubles(env, planes);
     auto counts = ints(env, curveCounts);
@@ -813,6 +870,12 @@ JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_show(JNIEnv* env, jobject, 
         meshes.push_back(displayAxis(ax.data() + i, half * 1.3));
         Shown sh;
         sh.plane = -2;  // Shown but not picked.
+        nextShown.push_back(std::move(sh));
+    }
+    for (size_t i = 0; i + 2 < pts.size(); i += 3) {
+        meshes.push_back(displayPoint(pts.data() + i, half * 0.06));
+        Shown sh;
+        sh.plane = -2;
         nextShown.push_back(std::move(sh));
     }
     std::lock_guard<std::mutex> g(lock);

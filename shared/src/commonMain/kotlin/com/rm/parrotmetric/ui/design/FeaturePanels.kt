@@ -79,6 +79,7 @@ fun FeaturePanel(editor: DesignEditor) {
                 is DesignEditor.ConvertDraft -> Header("To solid", Icons.convert, Palette.modify, d.bodies.firstOrNull())
                 is DesignEditor.PlaneDraft -> PlaneSettings(editor, d)
                 is DesignEditor.AxisDraft -> AxisSettings(editor, d)
+                is DesignEditor.PointDraft -> PointSettings(editor, d)
                 else -> {}
             }
             }
@@ -109,16 +110,32 @@ internal fun count(n: Int, one: String, many: String) = if (n == 1) "1 $one" els
 @Composable
 private fun ExtrudeSettings(editor: DesignEditor, d: DesignEditor.ExtrudeDraft) {
     Header("Extrude", Icons.extrude, Palette.create, if (d.regions.isEmpty()) null else count(d.regions.size, "area", "areas"))
-    Segmented(listOf("One side", "Both ways", "Two sides"), d.direction.ordinal) {
-        d.direction = DesignEditor.Direction.entries[it]
+    Segmented(listOf("Distance", "Up to a face or plane"), if (d.upToOn) 1 else 0) {
+        d.upToOn = it == 1
         editor.draftChanged()
     }
-    Field(editor, d, if (d.direction == DesignEditor.Direction.Symmetric) "both" else "forward", if (d.direction == DesignEditor.Direction.TwoSides) "Front" else "Distance", d.distance, "mm", allowNegative = true) {
-        d.distance = it
-        editor.draftChanged()
+    if (d.upToOn) {
+        // A face tapped in the view is added here as "The face".
+        Segmented(d.planes.map { it.first }, d.planes.indexOfFirst { it.second == d.upTo }) {
+            d.upTo = d.planes[it].second
+            editor.draftChanged()
+        }
+    } else {
+        Segmented(listOf("One side", "Both ways", "Two sides"), d.direction.ordinal) {
+            d.direction = DesignEditor.Direction.entries[it]
+            editor.draftChanged()
+        }
+        Field(editor, d, if (d.direction == DesignEditor.Direction.Symmetric) "both" else "forward", if (d.direction == DesignEditor.Direction.TwoSides) "Front" else "Distance", d.distance, "mm", allowNegative = true) {
+            d.distance = it
+            editor.draftChanged()
+        }
+        if (d.direction == DesignEditor.Direction.TwoSides) Field(editor, d, "back", "Back", d.other, "mm", allowNegative = true) {
+            d.other = it
+            editor.draftChanged()
+        }
     }
-    if (d.direction == DesignEditor.Direction.TwoSides) Field(editor, d, "back", "Back", d.other, "mm", allowNegative = true) {
-        d.other = it
+    Field(editor, d, "taper", "Taper", d.taperDegrees, "°", allowNegative = true) {
+        d.taperDegrees = it
         editor.draftChanged()
     }
     OperationRow(d.operation) {
@@ -157,9 +174,23 @@ private fun EdgeSettings(editor: DesignEditor, d: DesignEditor.EdgeDraft) {
         Palette.modify,
         if (d.edges.isEmpty()) null else count(d.edges.size, "edge", "edges"),
     )
+    if (d.chamfer) Segmented(listOf("Equal", "Two distances", "Distance and angle"), d.kind.ordinal) {
+        d.kind = com.rm.parrotmetric.design.ChamferKind.entries[it]
+        d.second = if (d.kind == com.rm.parrotmetric.design.ChamferKind.DistanceAngle) 45.0 else d.size
+        d.exprs.remove("second")
+        editor.draftChanged()
+    }
     Field(editor, d, "size", if (d.chamfer) "Distance" else "Radius", d.size, "mm", allowNegative = false) {
         d.size = it
         editor.draftChanged()
+    }
+    if (d.chamfer && d.kind != com.rm.parrotmetric.design.ChamferKind.Equal) {
+        val angle = d.kind == com.rm.parrotmetric.design.ChamferKind.DistanceAngle
+        Field(editor, d, "second", if (angle) "Angle" else "Other side", d.second, if (angle) "°" else "mm", allowNegative = false) {
+            d.second = it
+            editor.draftChanged()
+        }
+        Toggle("Swap sides", d.flip) { d.flip = it; editor.draftChanged() }
     }
 }
 
@@ -381,7 +412,28 @@ internal fun MoveSettings(editor: DesignEditor, d: DesignEditor.MoveDraft) {
     Field(editor, d, "dz", "Z", d.dz, "mm", allowNegative = true) { d.dz = it; editor.draftChanged() }
     AxisRow("Turn round", d.axis, false) { d.axis = it!!; editor.draftChanged() }
     Field(editor, d, "angle", "By", d.degrees, "°", allowNegative = true) { d.degrees = it; editor.draftChanged() }
+    Toggle("Same scale every way", d.evenly) {
+        d.evenly = it
+        if (!it) { d.sy = d.sx; d.sz = d.sx }
+        d.exprs.remove("scale"); d.exprs.remove("sx")
+        editor.draftChanged()
+    }
+    if (d.evenly) {
+        Field(editor, d, "scale", "Scale", d.sx, "×", allowNegative = false) { d.sx = it; editor.draftChanged() }
+    } else {
+        Field(editor, d, "sx", "Scale X", d.sx, "×", allowNegative = false) { d.sx = it; editor.draftChanged() }
+        Field(editor, d, "sy", "Y", d.sy, "×", allowNegative = false) { d.sy = it; editor.draftChanged() }
+        Field(editor, d, "sz", "Z", d.sz, "×", allowNegative = false) { d.sz = it; editor.draftChanged() }
+    }
     Toggle("Move a copy", d.copy) { d.copy = it; editor.draftChanged() }
+}
+
+@Composable
+internal fun PointSettings(editor: DesignEditor, d: DesignEditor.PointDraft) {
+    Header("Point", Icons.pointTool, Palette.construct, null)
+    Field(editor, d, "x", "X", d.x, "mm", allowNegative = true) { d.x = it; editor.draftChanged() }
+    Field(editor, d, "y", "Y", d.y, "mm", allowNegative = true) { d.y = it; editor.draftChanged() }
+    Field(editor, d, "z", "Z", d.z, "mm", allowNegative = true) { d.z = it; editor.draftChanged() }
 }
 
 @Composable

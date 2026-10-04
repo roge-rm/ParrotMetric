@@ -37,7 +37,11 @@ data class RegionRef(val curveIds: List<Int>, val u: Double, val v: Double)
 
 enum class Operation { NewBody, Join, Cut, Intersect }
 
-/** Sweeps sketch areas straight out of the sketch plane, [forward] in front and [back] behind (mm). */
+/**
+ * Sweeps sketch areas straight out of the sketch plane, [forward] in front and
+ * [back] behind (mm), or in front as far as [upTo] when that's set. A [taper]
+ * (radians) leans the sides in going forward, pivoting at the sketch plane.
+ */
 data class ExtrudeFeature(
     override val id: Int,
     override val name: String,
@@ -46,6 +50,8 @@ data class ExtrudeFeature(
     val forward: Double,
     val back: Double,
     val operation: Operation,
+    val taper: Double = 0.0,
+    val upTo: PlaneRef? = null,
 ) : Feature() {
     override fun key() = this
 }
@@ -75,8 +81,23 @@ data class FilletFeature(override val id: Int, override val name: String, val ed
     override fun key() = this
 }
 
-/** Bevels edges, found by name, by [distance] back along each face. */
-data class ChamferFeature(override val id: Int, override val name: String, val edges: List<String>, val distance: Double) : Feature() {
+/** How a chamfer is measured. */
+enum class ChamferKind { Equal, TwoDistances, DistanceAngle }
+
+/**
+ * Bevels edges, found by name: [distance] back along each face, or along one
+ * face with [second] along the other (mm) or at [second] radians to it. [flip]
+ * swaps which face gets [distance].
+ */
+data class ChamferFeature(
+    override val id: Int,
+    override val name: String,
+    val edges: List<String>,
+    val distance: Double,
+    val kind: ChamferKind = ChamferKind.Equal,
+    val second: Double = 0.0,
+    val flip: Boolean = false,
+) : Feature() {
     override fun key() = this
 }
 

@@ -203,7 +203,14 @@ private fun DrawScope.drawSketch(editor: SketchEditor, proj: PlaneProjection, de
         val pending = editor.pending
         when (editor.tool) {
             SketchTool.Line -> pending.lastOrNull()?.let { drawLine(rubber, screen(it, editor, proj), end, line, pathEffect = dash) }
-            SketchTool.Rectangle -> pending.firstOrNull()?.let {
+            SketchTool.Rectangle -> if (editor.rectangleFromCentre) pending.firstOrNull()?.let {
+                // Mirrored through the centre.
+                val cx = sketch.x(it); val cy = sketch.y(it)
+                val ou = 2 * cx - snap.u; val ov = 2 * cy - snap.v
+                val corners = listOf(snap.u to snap.v, ou to snap.v, ou to ov, snap.u to ov).map { (u, v) -> proj.toScreen(u, v) }
+                val path = Path().apply { moveTo(corners[0].x, corners[0].y); corners.drop(1).forEach { lineTo(it.x, it.y) }; close() }
+                drawPath(path, rubber, style = Stroke(line, pathEffect = dash))
+            } else pending.firstOrNull()?.let {
                 val a = screen(it, editor, proj)
                 val b = proj.toScreen(snap.u, sketch.y(it))
                 val d = proj.toScreen(sketch.x(it), snap.v)
@@ -229,7 +236,21 @@ private fun DrawScope.drawSketch(editor: SketchEditor, proj: PlaneProjection, de
                 drawLine(rubber, screen(pending[0], editor, proj), if (pending.size == 2) screen(pending[1], editor, proj) else end, line, pathEffect = dash)
                 if (pending.size == 2) drawLine(rubber, screen(pending[1], editor, proj), end, line, pathEffect = dash)
             }
-            SketchTool.Arc -> if (pending.size == 1) {
+            SketchTool.Arc -> if (editor.arcThroughPoints) {
+                if (pending.size == 1) drawLine(rubber, screen(pending[0], editor, proj), end, line, pathEffect = dash)
+                else if (pending.size == 2) {
+                    val ax = sketch.x(pending[0]); val ay = sketch.y(pending[0])
+                    val bx = sketch.x(pending[1]); val by = sketch.y(pending[1])
+                    circleThrough(ax, ay, bx, by, snap.u, snap.v)?.let { c ->
+                        val r = hypot(ax - c.first, ay - c.second)
+                        val (fromX, fromY, toX, toY) = if (anticlockwiseBetween(c, ax, ay, snap.u, snap.v, bx, by)) listOf(ax, ay, bx, by) else listOf(bx, by, ax, ay)
+                        val a0 = atan2(fromY - c.second, fromX - c.first)
+                        var a1 = atan2(toY - c.second, toX - c.first)
+                        while (a1 <= a0) a1 += 2 * PI
+                        drawPolyline(arcPoints(c.first, c.second, r, a0, a1).map { proj.toScreen(it.first, it.second) }, rubber, line, dash)
+                    } ?: drawLine(rubber, screen(pending[0], editor, proj), screen(pending[1], editor, proj), line, pathEffect = dash)
+                }
+            } else if (pending.size == 1) {
                 val c = screen(pending[0], editor, proj)
                 drawCircle(rubber.copy(alpha = 0.4f), (end - c).getDistance(), c, style = Stroke(line, pathEffect = dash))
             } else if (pending.size == 2) {

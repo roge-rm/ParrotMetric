@@ -179,6 +179,13 @@ fun registerDeb(arch: String, runtime: Configuration, core: TaskProvider<Exec>) 
             into("usr/share/icons/hicolor/256x256/apps")
             rename { "parrotmetric.png" }
         }
+        // The small icon, drawn for these sizes.
+        for (px in listOf(16, 24, 32, 48)) {
+            from(rootProject.file("branding/small/parrotmetric-small-$px.png")) {
+                into("usr/share/icons/hicolor/${px}x$px/apps")
+                rename { "parrotmetric.png" }
+            }
+        }
         from(rootProject.file("LICENSE")) { into("usr/share/doc/parrotmetric") }
         from(licences) { into("usr/share/doc/parrotmetric/licences") }
     }

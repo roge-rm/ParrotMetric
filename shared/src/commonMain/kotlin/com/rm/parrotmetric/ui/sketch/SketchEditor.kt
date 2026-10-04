@@ -80,6 +80,8 @@ class SketchEditor(
     val outline: (() -> List<ProfileCurve>?)? = null,
     /** The design's parameters, for dimensions typed with names. */
     private val names: () -> Map<String, Double> = { emptyMap() },
+    /** The design's construction points, which Project brings in as fixed points. */
+    private val points: () -> List<com.rm.parrotmetric.sketch.Vec3> = { emptyList() },
 ) {
     /** Goes up whenever anything changes, so the overlay redraws. */
     var version by mutableIntStateOf(0)
@@ -247,6 +249,12 @@ class SketchEditor(
     /** How many sides the Polygon tool draws. */
     var polygonSides by mutableIntStateOf(6)
 
+    /** Rectangle from its centre out to a corner, in place of corner to corner. */
+    var rectangleFromCentre by mutableStateOf(false)
+
+    /** Arc through three points (its ends, then one on it) in place of centre, start and end. */
+    var arcThroughPoints by mutableStateOf(false)
+
     // Drawing.
 
     private fun commit(s: Snap) {
@@ -276,7 +284,30 @@ class SketchEditor(
                     }
                 }
             }
-            SketchTool.Rectangle -> {
+            SketchTool.Rectangle -> if (rectangleFromCentre) {
+                val centre = pending.firstOrNull()
+                if (centre == null) {
+                    checkpoint()
+                    pending += placeForPending(s)
+                } else {
+                    val cx = sketch.x(centre); val cy = sketch.y(centre)
+                    if (abs(s.u - cx) < 1e-6 || abs(s.v - cy) < 1e-6) return
+                    checkpoint()
+                    val p3 = place(s)
+                    val p1 = sketch.addPoint(2 * cx - sketch.x(p3), 2 * cy - sketch.y(p3))
+                    val p2 = sketch.addPoint(sketch.x(p3), sketch.y(p1))
+                    val p4 = sketch.addPoint(sketch.x(p1), sketch.y(p3))
+                    val sides = listOf(
+                        sketch.addLine(p1, p2, construction), sketch.addLine(p2, p3, construction),
+                        sketch.addLine(p3, p4, construction), sketch.addLine(p4, p1, construction),
+                    )
+                    sides.forEachIndexed { i, l -> addQuietly(if (i % 2 == 0) Constraint.Horizontal(l) else Constraint.Vertical(l)) }
+                    // A construction diagonal keeps the centre in the middle.
+                    addQuietly(Constraint.Midpoint(centre, sketch.addLine(p1, p3, construction = true)))
+                    placedForPending.clear()
+                    pending.clear()
+                }
+            } else {
                 val first = pending.firstOrNull()
                 if (first == null) {
                     checkpoint()
@@ -311,7 +342,28 @@ class SketchEditor(
                     pending.clear()
                 }
             }
-            SketchTool.Arc -> {
+            SketchTool.Arc -> if (arcThroughPoints) {
+                when (pending.size) {
+                    0 -> { checkpoint(); pending += placeForPending(s) }
+                    1 -> {
+                        if (s.point === pending[0]) return
+                        checkpoint()
+                        pending += placeForPending(s)
+                    }
+                    else -> {
+                        val a = pending[0]
+                        val b = pending[1]
+                        val c = circleThrough(sketch.x(a), sketch.y(a), sketch.x(b), sketch.y(b), s.u, s.v) ?: return
+                        checkpoint()
+                        val centre = sketch.addPoint(c.first, c.second)
+                        // Arcs run anticlockwise from start to end, so pick the way that passes the third point.
+                        val passes = anticlockwiseBetween(c, sketch.x(a), sketch.y(a), s.u, s.v, sketch.x(b), sketch.y(b))
+                        if (passes) sketch.addArc(centre, a, b, construction) else sketch.addArc(centre, b, a, construction)
+                        placedForPending.clear()
+                        pending.clear()
+                    }
+                }
+            } else {
                 when (pending.size) {
                     0 -> { checkpoint(); pending += placeForPending(s) }
                     1 -> {
@@ -634,7 +686,9 @@ class SketchEditor(
 
     /** Brings the face's edges into the sketch as fixed curves to draw against. */
     fun projectOutline() {
-        val curves = outline?.invoke() ?: run { message = "The face's edges couldn't be found"; return }
+        // Construction points, flattened onto the sketch's plane.
+        val lone = points().map { p -> val d = p - plane.origin; d.dot(plane.x) to d.dot(plane.y) }
+        val curves = outline?.invoke() ?: if (lone.isEmpty()) run { message = "The face's edges couldn't be found"; return } else emptyList()
         checkpoint()
         fun fixedPoint(u: Double, v: Double): Point {
             sketch.points.firstOrNull { it !== sketch.origin && hypot(sketch.x(it) - u, sketch.y(it) - v) < 1e-6 }?.let { return it }
@@ -650,6 +704,7 @@ class SketchEditor(
             )
             ProfileCurve.Kind.Bezier -> {}
         }
+        for ((u, v) in lone) fixedPoint(u, v)
         changed()
     }
 
@@ -797,4 +852,19 @@ class SketchEditor(
         regions = finder.find(sketch.profileCurves())
         version++
     }
+}
+
+/** The centre of the circle through three points, or null if they're in a line. */
+internal fun circleThrough(ax: Double, ay: Double, bx: Double, by: Double, cx: Double, cy: Double): Pair<Double, Double>? {
+    val d = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by))
+    if (abs(d) < 1e-9) return null
+    val a2 = ax * ax + ay * ay; val b2 = bx * bx + by * by; val c2 = cx * cx + cy * cy
+    return (a2 * (by - cy) + b2 * (cy - ay) + c2 * (ay - by)) / d to (a2 * (cx - bx) + b2 * (ax - cx) + c2 * (bx - ax)) / d
+}
+
+/** True if going anticlockwise round centre from (ax, ay) passes (mx, my) before reaching (bx, by). */
+internal fun anticlockwiseBetween(centre: Pair<Double, Double>, ax: Double, ay: Double, mx: Double, my: Double, bx: Double, by: Double): Boolean {
+    fun angle(x: Double, y: Double) = atan2(y - centre.second, x - centre.first)
+    fun from(a: Double): Double { var d = a - angle(ax, ay); while (d < 0) d += 2 * PI; return d }
+    return from(angle(mx, my)) < from(angle(bx, by))
 }

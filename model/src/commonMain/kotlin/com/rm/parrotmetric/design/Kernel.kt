@@ -13,12 +13,14 @@ class KernelException(message: String) : Exception(message)
  * Calls that can't be done throw [KernelException].
  */
 interface Kernel {
-    fun extrude(id: Int, plane: SketchPlane, curves: List<ProfileCurve>, regions: List<RegionRef>, forward: Double, back: Double): Long
+    /** taper in radians leans the sides in going forward, pivoting at the plane. */
+    fun extrude(id: Int, plane: SketchPlane, curves: List<ProfileCurve>, regions: List<RegionRef>, forward: Double, back: Double, taper: Double = 0.0): Long
     fun revolve(id: Int, plane: SketchPlane, curves: List<ProfileCurve>, regions: List<RegionRef>, ax: Double, ay: Double, dx: Double, dy: Double, angle: Double): Long
     /** how is Join, Cut or Intersect. */
     fun combine(id: Int, target: Long, tool: Long, how: Operation): Long
     fun fillet(id: Int, body: Long, edges: List<String>, radius: Double): Long
-    fun chamfer(id: Int, body: Long, edges: List<String>, distance: Double): Long
+    /** kind is ChamferKind's ordinal; second is a distance or an angle in radians; see ChamferFeature. */
+    fun chamfer(id: Int, body: Long, edges: List<String>, distance: Double, kind: Int = 0, second: Double = 0.0, flip: Boolean = false): Long
     fun overlaps(a: Long, b: Long): Boolean
     /** A named flat face's centre and outward normal, or null if this body hasn't got it. */
     fun facePlane(body: Long, face: String): DoubleArray?
@@ -37,4 +39,8 @@ interface Kernel {
     fun centre(body: Long): Vec3
     fun retain(body: Long)
     fun release(body: Long)
+    /** Where a named face (or edge) of a body is and how big, to find it again by shape; null if the body hasn't got it. */
+    fun signature(body: Long, name: String, edge: Boolean): DoubleArray? = null
+    /** The face or edge of a body most like a signature, or null if none is close enough to be the same one. */
+    fun relocate(body: Long, signature: DoubleArray): String? = null
 }

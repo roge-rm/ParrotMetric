@@ -55,10 +55,10 @@ class CoreKernel(private val core: NativeCore) : Kernel {
         val points = regions.flatMap { listOf(it.u, it.v) }.toDoubleArray()
     }
 
-    override fun extrude(id: Int, plane: SketchPlane, curves: List<ProfileCurve>, regions: List<RegionRef>, forward: Double, back: Double): Long {
+    override fun extrude(id: Int, plane: SketchPlane, curves: List<ProfileCurve>, regions: List<RegionRef>, forward: Double, back: Double, taper: Double): Long {
         val c = Curves(curves)
         val p = Picks(regions)
-        return call { core.extrude(id, plane.numbers(), c.kinds, c.ids, c.nums, p.counts, p.ids, p.points, forward, back) }
+        return call { core.extrude(id, plane.numbers(), c.kinds, c.ids, c.nums, p.counts, p.ids, p.points, forward, back, taper) }
     }
 
     override fun revolve(id: Int, plane: SketchPlane, curves: List<ProfileCurve>, regions: List<RegionRef>, ax: Double, ay: Double, dx: Double, dy: Double, angle: Double): Long {
@@ -71,7 +71,8 @@ class CoreKernel(private val core: NativeCore) : Kernel {
         call { core.combine(id, target, tool, when (how) { Operation.Cut -> 1; Operation.Intersect -> 2; else -> 0 }) }
 
     override fun fillet(id: Int, body: Long, edges: List<String>, radius: Double) = call { core.fillet(id, body, edges.toTypedArray(), radius) }
-    override fun chamfer(id: Int, body: Long, edges: List<String>, distance: Double) = call { core.chamfer(id, body, edges.toTypedArray(), distance) }
+    override fun chamfer(id: Int, body: Long, edges: List<String>, distance: Double, kind: Int, second: Double, flip: Boolean) =
+        call { core.chamfer(id, body, edges.toTypedArray(), distance, kind, second, flip) }
     override fun overlaps(a: Long, b: Long) = call { core.overlaps(a, b) }
     override fun facePlane(body: Long, face: String): DoubleArray? = call { core.facePlane(body, face) }
     override fun faceNames(body: Long) = call { core.faceNames(body).toList() }
@@ -85,6 +86,8 @@ class CoreKernel(private val core: NativeCore) : Kernel {
         call { core.holeTool(id, plane.numbers(), at.flatMap { listOf(it.first, it.second) }.toDoubleArray(), diameter, depth, kind, topDiameter, topDepth) }
     override fun convertToSolid(id: Int, body: Long) = call { core.convertToSolid(id, body) }
     override fun centre(body: Long) = call { core.bodyCentre(body).let { Vec3(it[0], it[1], it[2]) } }
+    override fun signature(body: Long, name: String, edge: Boolean) = core.signature(body, name, edge)
+    override fun relocate(body: Long, signature: DoubleArray) = core.relocate(body, signature)
     override fun retain(body: Long) = core.retain(body)
     override fun release(body: Long) = core.release(body)
 }
@@ -93,14 +96,15 @@ class CoreKernel(private val core: NativeCore) : Kernel {
 class CoreViewport(private val core: NativeCore, private val gl: (() -> Unit) -> Unit) : Viewport {
     override fun show(
         bodies: List<Long>, sketches: List<Pair<SketchPlane, List<ProfileCurve>>>,
-        planes: List<SketchPlane>, axes: List<Pair<Vec3, Vec3>>, refit: Boolean,
+        planes: List<SketchPlane>, axes: List<Pair<Vec3, Vec3>>, points: List<Vec3>, refit: Boolean,
     ) {
         val all = sketches.flatMap { it.second }
         val c = Curves(all)
         val sketchPlanes = sketches.flatMap { it.first.numbers().asList() }.toDoubleArray()
         val construction = planes.flatMap { it.numbers().asList() }.toDoubleArray()
         val axisNumbers = axes.flatMap { (p, d) -> listOf(p.x, p.y, p.z, d.x, d.y, d.z) }.toDoubleArray()
-        core.show(bodies.toLongArray(), sketchPlanes, IntArray(sketches.size) { sketches[it].second.size }, c.kinds, c.ids, c.nums, construction, axisNumbers, refit)
+        core.show(bodies.toLongArray(), sketchPlanes, IntArray(sketches.size) { sketches[it].second.size }, c.kinds, c.ids, c.nums, construction, axisNumbers,
+            points.flatMap { listOf(it.x, it.y, it.z) }.toDoubleArray(), refit)
         gl {}
     }
 

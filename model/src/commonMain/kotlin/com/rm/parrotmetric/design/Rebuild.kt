@@ -4,6 +4,7 @@ import com.rm.parrotmetric.sketch.Line
 import com.rm.parrotmetric.sketch.SketchPlane
 import com.rm.parrotmetric.sketch.Vec3
 import kotlin.math.abs
+import kotlin.math.hypot
 import kotlin.math.sqrt
 
 /** A body after some feature: its label and the kernel's handle. */
@@ -14,10 +15,18 @@ class Built(
     val bodies: List<BodyState>,
     /** Construction axes by feature id: a point on each and its direction. */
     val axes: Map<Int, Pair<Vec3, Vec3>> = emptyMap(),
+    /** Construction points by feature id. */
+    val points: Map<Int, Vec3> = emptyMap(),
     /** Where each sketch ended up, by feature id. */
     val sketchPlanes: Map<Int, SketchPlane>,
     /** Why a feature couldn't be built, by feature id. */
     val errors: Map<Int, String>,
+    /** Features that built, but only after finding faces or edges again by shape: by id, what to check. */
+    val warnings: Map<Int, String> = emptyMap(),
+    /** For those, each lost face or edge name and the one found in its place. */
+    val found: Map<Int, Map<String, String>> = emptyMap(),
+    /** Where each face or edge a feature uses was when last found by name, by "id:name" (see Kernel.signature). */
+    val hints: Map<String, DoubleArray> = emptyMap(),
 )
 
 /**
@@ -27,6 +36,10 @@ class Built(
  *
  * A feature that fails is skipped: the bodies carry on as they were before
  * it, and its reason is in [Built.errors].
+ *
+ * Faces and edges are referred to by name. If an earlier change takes a name
+ * away, the one in the same place and of the same size is used instead, if
+ * there is one, and the feature gets a warning (see Kernel.relocate).
  */
 class Rebuilder(private val kernel: Kernel) {
     private class Step(
@@ -36,11 +49,19 @@ class Rebuilder(private val kernel: Kernel) {
         val error: String?,
         val bodyCount: Int,
         val axes: Map<Int, Pair<Vec3, Vec3>> = emptyMap(),
-    )
+        val points: Map<Int, Vec3> = emptyMap(),
+    ) {
+        /** Names found again by shape while building it, old to new. */
+        var found: Map<String, String> = emptyMap()
+    }
 
     private val steps = mutableListOf<Step>()
+    private var hints = mutableMapOf<String, DoubleArray>()
+    private val found = mutableMapOf<String, String>()
 
-    fun rebuild(features: List<Feature>): Built {
+    /** Builds the features. [hints] are those from the last build (Built.hints), to find lost faces and edges again. */
+    fun rebuild(features: List<Feature>, hints: Map<String, DoubleArray> = emptyMap()): Built {
+        this.hints = hints.toMutableMap()
         var from = 0
         while (from < steps.size && from < features.size && steps[from].key == features[from].key()) from++
         discardFrom(from)
@@ -51,21 +72,49 @@ class Rebuilder(private val kernel: Kernel) {
             val bodies = before?.bodies ?: emptyList()
             val planes = before?.planes ?: emptyMap()
             val made = before?.bodyCount ?: 0
+            found.clear()
             val step = try {
                 build(f, bodies, planes, made, features)
             } catch (e: KernelException) {
                 bodies.forEach { kernel.retain(it.handle) }
                 Step(f.key(), bodies, planes, e.message ?: "That couldn't be built", made)
             }
+            step.found = found.toMap()
             steps += step
         }
         val last = steps.lastOrNull()
         return Built(
             last?.bodies ?: emptyList(),
             steps.fold(emptyMap()) { m, s -> m + s.axes },
+            steps.fold(emptyMap()) { m, s -> m + s.points },
             last?.planes ?: emptyMap(),
             steps.withIndex().mapNotNull { (i, s) -> s.error?.let { features[i].id to it } }.toMap(),
+            steps.withIndex().mapNotNull { (i, s) ->
+                if (s.error == null && s.found.isNotEmpty()) features[i].id to "Something it uses changed and was found again by its shape. Check it's still the right one." else null
+            }.toMap(),
+            steps.withIndex().mapNotNull { (i, s) -> if (s.found.isNotEmpty()) features[i].id to s.found else null }.toMap(),
+            this.hints.toMap(),
         )
+    }
+
+    /**
+     * A face or edge a feature uses, by name. Its signature is kept while the
+     * name is there; once it's gone, the one most like that signature is used.
+     */
+    private fun ref(f: Feature, name: String, edge: Boolean, bodies: List<BodyState>): String {
+        val key = "${f.id}:$name"
+        for (b in bodies) {
+            val sig = kernel.signature(b.handle, name, edge) ?: continue
+            hints[key] = sig
+            return name
+        }
+        val sig = hints[key] ?: return name
+        for (b in bodies) {
+            val again = kernel.relocate(b.handle, sig) ?: continue
+            found[name] = again
+            return again
+        }
+        return name
     }
 
     /** Lets go of every body held. */
@@ -80,12 +129,12 @@ class Rebuilder(private val kernel: Kernel) {
 
     private fun build(f: Feature, bodies: List<BodyState>, planes: Map<Int, SketchPlane>, made: Int, all: List<Feature>): Step = when (f) {
         is SketchFeature -> {
-            val plane = resolvePlane(f.plane, bodies, f.name, planes)
+            val plane = resolvePlane(f.plane, bodies, f, planes)
             keep(bodies)
             Step(f.key(), bodies, planes + (f.id to plane), null, made)
         }
         is PlaneFeature -> {
-            val base = resolvePlane(f.base, bodies, f.name, planes)
+            val base = resolvePlane(f.base, bodies, f, planes)
             val plane = when (f.kind) {
                 PlaneFeature.Kind.Offset -> base.copy(name = f.name, origin = base.origin + base.normal * f.offset)
                 PlaneFeature.Kind.Angle -> {
@@ -96,7 +145,7 @@ class Rebuilder(private val kernel: Kernel) {
                     SketchPlane(f.name, base.origin, turn(base.x), turn(base.y))
                 }
                 PlaneFeature.Kind.Midway -> {
-                    val other = resolvePlane(f.other ?: throw KernelException("Pick the second plane or face"), bodies, f.name, planes)
+                    val other = resolvePlane(f.other ?: throw KernelException("Pick the second plane or face"), bodies, f, planes)
                     if (kotlin.math.abs(kotlin.math.abs(base.normal.dot(other.normal)) - 1) > 1e-6) throw KernelException("The two aren't parallel")
                     // Halfway along the base's normal to the other plane.
                     val gap = (other.origin - base.origin).dot(base.normal)
@@ -106,6 +155,10 @@ class Rebuilder(private val kernel: Kernel) {
             keep(bodies)
             Step(f.key(), bodies, planes + (f.id to plane), null, made)
         }
+        is PointFeature -> {
+            keep(bodies)
+            Step(f.key(), bodies, planes, null, made, points = mapOf(f.id to Vec3(f.x, f.y, f.z)))
+        }
         is AxisFeature -> {
             keep(bodies)
             Step(f.key(), bodies, planes, null, made, mapOf(f.id to (Vec3(f.x, f.y, f.z) to Transforms.unit(f.along))))
@@ -113,7 +166,9 @@ class Rebuilder(private val kernel: Kernel) {
         is ExtrudeFeature -> {
             val sketch = sketchOf(f.sketchId, all)
             val plane = planes[f.sketchId] ?: throw KernelException("Its sketch couldn't be built")
-            val tool = kernel.extrude(f.id, plane, sketch.curves(), f.regions, f.forward, f.back)
+            val target = f.upTo?.let { resolvePlane(it, bodies, f, planes) }
+            val tool = if (target == null) kernel.extrude(f.id, plane, sketch.curves(), f.regions, f.forward, f.back, f.taper)
+            else extrudeUpTo(f, plane, target, sketch)
             applyTool(f, tool, f.operation, bodies, planes, made)
         }
         is RevolveFeature -> {
@@ -124,19 +179,24 @@ class Rebuilder(private val kernel: Kernel) {
             applyTool(f, tool, f.operation, bodies, planes, made)
         }
         is FilletFeature -> edgeFeature(f, f.edges, bodies, planes, made) { body, edges -> kernel.fillet(f.id, body, edges, f.radius) }
-        is ChamferFeature -> edgeFeature(f, f.edges, bodies, planes, made) { body, edges -> kernel.chamfer(f.id, body, edges, f.distance) }
+        is ChamferFeature -> edgeFeature(f, f.edges, bodies, planes, made) { body, edges ->
+            kernel.chamfer(f.id, body, edges, f.distance, f.kind.ordinal, f.second, f.flip)
+        }
         is ImportFeature -> {
             val h = kernel.import(f.id, f.data, f.format)
             keep(bodies)
             Step(f.key(), bodies + BodyState("Body ${made + 1}", h), planes, null, made + 1)
         }
         is ShellFeature -> {
-            val body = bodyWithFace(f.faces.firstOrNull(), bodies) ?: throw KernelException("Pick the faces to leave open")
-            replace(f, bodies, planes, made, body) { kernel.shell(f.id, body.handle, f.faces, f.thickness) }
+            val faces = f.faces.map { ref(f, it, false, bodies) }
+            val body = bodyWithFace(faces.firstOrNull(), bodies) ?: throw KernelException("Pick the faces to leave open")
+            replace(f, bodies, planes, made, body) { kernel.shell(f.id, body.handle, faces, f.thickness) }
         }
         is DraftFeature -> {
-            val body = bodyWithFace(f.neutral, bodies) ?: throw KernelException("The face it pivots on isn't there any more")
-            replace(f, bodies, planes, made, body) { kernel.draft(f.id, body.handle, f.faces, f.neutral, f.angle) }
+            val neutral = ref(f, f.neutral, false, bodies)
+            val faces = f.faces.map { ref(f, it, false, bodies) }
+            val body = bodyWithFace(neutral, bodies) ?: throw KernelException("The face it pivots on isn't there any more")
+            replace(f, bodies, planes, made, body) { kernel.draft(f.id, body.handle, faces, neutral, f.angle) }
         }
         is HoleFeature -> {
             val sketch = sketchOf(f.sketchId, all)
@@ -149,7 +209,7 @@ class Rebuilder(private val kernel: Kernel) {
             applyTool(f, tool, Operation.Cut, bodies, planes, made)
         }
         is MirrorFeature -> {
-            val plane = resolvePlane(f.plane, bodies, f.name, planes)
+            val plane = resolvePlane(f.plane, bodies, f, planes)
             val m = Transforms.mirror(plane.origin, plane.normal)
             copies(f, bodies, planes, made, picked(f.bodies, bodies), f.join) { b -> listOf(kernel.transform(f.id, b.handle, m, "m")) }
         }
@@ -165,7 +225,7 @@ class Rebuilder(private val kernel: Kernel) {
         is CombineFeature -> combineBodies(f, bodies, planes, made)
         is SplitFeature -> {
             val body = bodies.firstOrNull { it.label == f.body } ?: throw KernelException("${f.body} isn't there any more")
-            val plane = resolvePlane(f.plane, bodies, f.name, planes)
+            val plane = resolvePlane(f.plane, bodies, f, planes)
             var pieces = kernel.split(f.id, body.handle, plane.origin, plane.normal)
             if (f.keep != 0) {
                 // Only the pieces on the side asked for.
@@ -187,14 +247,17 @@ class Rebuilder(private val kernel: Kernel) {
             replace(f, bodies, planes, made, body) { kernel.convertToSolid(f.id, body.handle) }
         }
         is MoveFeature -> {
-            val m = Transforms.then(Transforms.rotate(Transforms.unit(f.axis), f.angle), Transforms.translate(com.rm.parrotmetric.sketch.Vec3(f.dx, f.dy, f.dz)))
+            if (f.sx == 0.0 || f.sy == 0.0 || f.sz == 0.0) throw KernelException("Scale by something other than 0")
+            val turn = Transforms.then(Transforms.rotate(Transforms.unit(f.axis), f.angle), Transforms.translate(Vec3(f.dx, f.dy, f.dz)))
+            // Scaling is about each body's own middle.
+            fun matrix(b: BodyState) = if (!f.scaled) turn else Transforms.then(Transforms.scale(f.sx, f.sy, f.sz, kernel.centre(b.handle)), turn)
             val chosen = picked(f.bodies, bodies)
-            if (f.copy) copies(f, bodies, planes, made, chosen, false) { b -> listOf(kernel.transform(f.id, b.handle, m, "c")) }
+            if (f.copy) copies(f, bodies, planes, made, chosen, false) { b -> listOf(kernel.transform(f.id, b.handle, matrix(b), "c")) }
             else {
                 val out = mutableListOf<BodyState>()
                 try {
                     for (b in bodies) {
-                        if (b in chosen) out += BodyState(b.label, kernel.transform(f.id, b.handle, m, "t"))
+                        if (b in chosen) out += BodyState(b.label, kernel.transform(f.id, b.handle, matrix(b), "t"))
                         else { kernel.retain(b.handle); out += b }
                     }
                 } catch (e: KernelException) {
@@ -315,15 +378,16 @@ class Rebuilder(private val kernel: Kernel) {
     private fun keep(bodies: List<BodyState>) = bodies.forEach { kernel.retain(it.handle) }
 
     private fun sketchOf(id: Int, all: List<Feature>): SketchFeature =
-        all.firstOrNull { it.id == id } as? SketchFeature ?: throw KernelException("Its sketch has been deleted")
+        all.firstOrNull { it.id == id } as? SketchFeature ?: throw KernelException("Its sketch has been deleted or turned off")
 
-    private fun resolvePlane(ref: PlaneRef, bodies: List<BodyState>, name: String, planes: Map<Int, SketchPlane>): SketchPlane = when (val p = ref) {
+    private fun resolvePlane(ref: PlaneRef, bodies: List<BodyState>, owner: Feature, planes: Map<Int, SketchPlane>): SketchPlane = when (val p = ref) {
         is PlaneRef.Fixed -> p.plane
         is PlaneRef.Construction -> planes[p.featureId] ?: throw KernelException("Its plane has been deleted")
         is PlaneRef.OnFace -> {
-            val body = bodies.firstOrNull { p.face in kernel.faceNames(it.handle) }
+            val face = ref(owner, p.face, false, bodies)
+            val body = bodies.firstOrNull { face in kernel.faceNames(it.handle) }
                 ?: throw KernelException("The face it's on isn't there any more")
-            val d = kernel.facePlane(body.handle, p.face) ?: throw KernelException("The face it's on isn't there any more")
+            val d = kernel.facePlane(body.handle, face) ?: throw KernelException("The face it's on isn't there any more")
             val origin = Vec3(d[0], d[1], d[2])
             val n = Vec3(d[3], d[4], d[5])
             // x as it was, flattened onto the face; any direction across the face if that's gone.
@@ -332,6 +396,47 @@ class Rebuilder(private val kernel: Kernel) {
             x *= 1 / sqrt(x.dot(x))
             SketchPlane("On a face", origin, x, n.cross(x))
         }
+    }
+
+    /**
+     * An extrude as far as a plane or flat face. Parallel to the sketch, that's
+     * a distance. Slanted, it goes well past and is cut off where it crosses,
+     * keeping the part on the sketch's side.
+     */
+    private fun extrudeUpTo(f: ExtrudeFeature, plane: SketchPlane, target: SketchPlane, sketch: SketchFeature): Long {
+        val n = plane.normal
+        val m = target.normal
+        val facing = n.dot(m)
+        if (abs(facing) < 1e-6) throw KernelException("That face or plane runs alongside the sketch")
+        // How far along the sketch's normal its origin is from the target.
+        val reach = (target.origin - plane.origin).dot(m) / facing
+        if (abs(reach) < 1e-6) throw KernelException("That face or plane goes through the sketch")
+        val curves = sketch.curves()
+        fun extrude(length: Double) =
+            if (length > 0) kernel.extrude(f.id, plane, curves, f.regions, length, 0.0, f.taper)
+            else kernel.extrude(f.id, plane, curves, f.regions, 0.0, -length, f.taper)
+        if (abs(facing) > 1 - 1e-9) return extrude(reach)
+        // Far enough for any part of the sketch to reach the slanted target.
+        val spread = curves.maxOfOrNull { c -> maxOf(hypot(c.x1, c.y1), hypot(c.x2, c.y2), hypot(c.cx1, c.cy1), hypot(c.cx2, c.cy2)) + c.r } ?: 0.0
+        val far = abs(reach) + spread * sqrt(1 - facing * facing) / abs(facing) + 10
+        val tool = extrude(if (reach > 0) far else -far)
+        val pieces = try {
+            kernel.split(f.id, tool, target.origin, m)
+        } finally {
+            kernel.release(tool)
+        }
+        // The sketch is on the side the extrude starts from.
+        val side = -reach * facing
+        val kept = pieces.filter { (kernel.centre(it) - target.origin).dot(m) * side > 0 }
+        pieces.filter { it !in kept }.forEach { kernel.release(it) }
+        if (kept.isEmpty()) throw KernelException("It doesn't reach that face or plane")
+        var joined = kept[0]
+        for (h in kept.drop(1)) {
+            val next = try { kernel.combine(f.id, joined, h, Operation.Join) } finally { kernel.release(h) }
+            kernel.release(joined)
+            joined = next
+        }
+        return joined
     }
 
     private fun axisOf(a: AxisRef, s: SketchFeature): List<Double> = when (a) {
@@ -415,6 +520,8 @@ class Rebuilder(private val kernel: Kernel) {
         f: Feature, edges: List<String>, bodies: List<BodyState>, planes: Map<Int, SketchPlane>, made: Int,
         op: (Long, List<String>) -> Long,
     ): Step {
+        @Suppress("NAME_SHADOWING")
+        val edges = edges.map { ref(f, it, true, bodies) }
         val out = mutableListOf<BodyState>()
         var found = 0
         try {

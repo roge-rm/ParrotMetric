@@ -2,12 +2,10 @@ package com.rm.parrotmetric.desktop
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.unit.DpSize
@@ -20,7 +18,10 @@ import com.rm.parrotmetric.Core
 import com.rm.parrotmetric.app.AppController
 import com.rm.parrotmetric.app.FileSink
 import com.rm.parrotmetric.app.PlatformFiles
+import com.rm.parrotmetric.ui.LaunchSplash
 import com.rm.parrotmetric.ui.ModelScreen
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.awt.FileDialog
@@ -46,8 +47,9 @@ private fun smallScreen(): Boolean = runCatching {
     bounds.width < 1300 || bounds.height < 860
 }.getOrDefault(false)
 
-private fun icon(): BitmapPainter? = runCatching {
-    val bytes = Thread.currentThread().contextClassLoader.getResourceAsStream("parrotmetric.png")!!.use { it.readBytes() }
+/** An image from the app's resources: parrotmetric-small.png for small uses, parrotmetric.png in full. */
+private fun image(name: String): BitmapPainter? = runCatching {
+    val bytes = Thread.currentThread().contextClassLoader.getResourceAsStream(name)!!.use { it.readBytes() }
     BitmapPainter(org.jetbrains.skia.Image.makeFromEncoded(bytes).toComposeImageBitmap())
 }.getOrNull()
 
@@ -107,7 +109,8 @@ fun main(args: Array<String>) {
             size = DpSize(1280.dp, 860.dp),
             placement = if (smallScreen()) WindowPlacement.Maximized else WindowPlacement.Floating,
         )
-        val painter = remember { icon() }
+        val painter = remember { image("parrotmetric-small.png") }
+        val full = remember { image("parrotmetric.png") }
         Window(onCloseRequest = ::exitApplication, title = "ParrotMetric", icon = painter, state = window) {
             val scope = rememberCoroutineScope()
             lateinit var app: AppController
@@ -117,15 +120,16 @@ fun main(args: Array<String>) {
             LaunchedEffect(Unit) {
                 args.firstOrNull()?.let { File(it) }?.takeIf { it.isFile }?.let { app.opened(it.name, runCatching { it.readBytes() }.getOrNull()) }
             }
-            ModelScreen(
-                viewport = { DesktopViewport(view) },
-                logo = {
-                    painter?.let { Image(it, contentDescription = null, modifier = Modifier.size(34.dp).clip(RoundedCornerShape(10.dp))) }
-                },
-                state = app.state,
-                design = app.design,
-                actions = app.actions,
-            )
+            Box(Modifier.fillMaxSize()) {
+                ModelScreen(
+                    viewport = { DesktopViewport(view) },
+                    logo = { painter?.let { Image(it, contentDescription = null, modifier = Modifier.size(34.dp)) } },
+                    state = app.state,
+                    design = app.design,
+                    actions = app.actions,
+                )
+                LaunchSplash(full)
+            }
         }
     }
 }

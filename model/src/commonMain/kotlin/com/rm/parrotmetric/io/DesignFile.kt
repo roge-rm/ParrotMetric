@@ -65,6 +65,10 @@ object DesignFile {
         "bodies" to design.bodies.mapValues { (_, b) -> mapOf("name" to b.name, "component" to b.component, "hidden" to b.hidden) },
         "parameters" to design.parameters.map { mapOf("name" to it.name, "expression" to it.expression) },
         "expressions" to design.expressions.mapKeys { it.key.toString() },
+        "suppressed" to design.suppressed.sorted(),
+        // Only those of features still there.
+        "hints" to design.hints.filterKeys { k -> design.feature(k.substringBefore(':').toIntOrNull() ?: -1) != null }
+            .mapValues { it.value.toList() },
     ).toString()
 
     /** Reads a file into the design. Returns its title. Throws IllegalArgumentException if it can't. */
@@ -81,7 +85,10 @@ object DesignFile {
         val expressions = (root["expressions"] as? Json.Obj)?.fields?.map { (k, v) ->
             k.toInt() to (v as Json.Obj).fields.mapValues { (it.value as Json.Str).value }
         }?.toMap() ?: emptyMap()
-        into.load(features, root.int("marker"), bodies, parameters, expressions)
+        val suppressed = (root["suppressed"] as? Json.Arr)?.items?.map { (it as Json.Num).value.toInt() }?.toSet() ?: emptySet()
+        val hints = (root["hints"] as? Json.Obj)?.fields?.mapValues { (_, v) -> (v as Json.Arr).items.map { (it as Json.Num).value }.toDoubleArray() }
+            ?: emptyMap()
+        into.load(features, root.int("marker"), bodies, parameters, expressions, suppressed, hints)
         return (root["title"] as? Json.Str)?.value ?: "Untitled"
     }
 
@@ -125,13 +132,16 @@ object DesignFile {
                 "type" to "plane", "kind" to f.kind.name, "base" to plane(f.base), "offset" to f.offset, "angle" to f.angle,
                 "turnRoundY" to f.turnRoundY, "other" to f.other?.let { plane(it) },
             )
+            is com.rm.parrotmetric.design.PointFeature -> mapOf("type" to "point", "x" to f.x, "y" to f.y, "z" to f.z)
             is AxisFeature -> mapOf("type" to "axis", "x" to f.x, "y" to f.y, "z" to f.z, "along" to f.along.name)
             is MoveFeature -> mapOf(
                 "type" to "move", "bodies" to f.bodies, "dx" to f.dx, "dy" to f.dy, "dz" to f.dz, "axis" to f.axis.name, "angle" to f.angle, "copy" to f.copy,
+                "sx" to f.sx, "sy" to f.sy, "sz" to f.sz,
             )
             is ExtrudeFeature -> mapOf(
                 "type" to "extrude", "sketch" to f.sketchId, "regions" to writeRegions(f.regions),
                 "forward" to f.forward, "back" to f.back, "operation" to f.operation.name,
+                "taper" to f.taper, "upTo" to f.upTo?.let { plane(it) },
             )
             is RevolveFeature -> mapOf(
                 "type" to "revolve", "sketch" to f.sketchId, "regions" to writeRegions(f.regions),
@@ -143,7 +153,9 @@ object DesignFile {
                 "angle" to f.angle, "operation" to f.operation.name,
             )
             is FilletFeature -> mapOf("type" to "fillet", "edges" to f.edges, "radius" to f.radius)
-            is ChamferFeature -> mapOf("type" to "chamfer", "edges" to f.edges, "distance" to f.distance)
+            is ChamferFeature -> mapOf(
+                "type" to "chamfer", "edges" to f.edges, "distance" to f.distance, "kind" to f.kind.name, "second" to f.second, "flip" to f.flip,
+            )
             is ImportFeature -> mapOf("type" to "import", "format" to f.format, "data" to Base64.encode(f.data))
             else -> throw IllegalArgumentException("Can't save ${f.name}")
         }
@@ -175,12 +187,15 @@ object DesignFile {
                 id, name, PlaneFeature.Kind.valueOf(o.str("kind")), plane(o.obj("base")), o.num("offset"), o.num("angle"),
                 o.bool("turnRoundY"), (o["other"] as? Json.Obj)?.let { plane(it) },
             )
+            "point" -> com.rm.parrotmetric.design.PointFeature(id, name, o.num("x"), o.num("y"), o.num("z"))
             "axis" -> AxisFeature(id, name, o.num("x"), o.num("y"), o.num("z"), Axis3.valueOf(o.str("along")))
             "move" -> MoveFeature(
                 id, name, strings(o.arr("bodies")), o.num("dx"), o.num("dy"), o.num("dz"), Axis3.valueOf(o.str("axis")), o.num("angle"), o.bool("copy"),
+                o.numOr("sx", 1.0), o.numOr("sy", 1.0), o.numOr("sz", 1.0),
             )
             "extrude" -> ExtrudeFeature(
                 id, name, o.int("sketch"), readRegions(o.arr("regions")), o.num("forward"), o.num("back"), Operation.valueOf(o.str("operation")),
+                o.numOr("taper", 0.0), (o["upTo"] as? Json.Obj)?.let { plane(it) },
             )
             "revolve" -> {
                 val axis = when (val a = o.str("axis")) {
@@ -191,7 +206,11 @@ object DesignFile {
                 RevolveFeature(id, name, o.int("sketch"), readRegions(o.arr("regions")), axis, o.num("angle"), Operation.valueOf(o.str("operation")))
             }
             "fillet" -> FilletFeature(id, name, o.arr("edges").map { (it as Json.Str).value }, o.num("radius"))
-            "chamfer" -> ChamferFeature(id, name, o.arr("edges").map { (it as Json.Str).value }, o.num("distance"))
+            "chamfer" -> ChamferFeature(
+                id, name, o.arr("edges").map { (it as Json.Str).value }, o.num("distance"),
+                (o["kind"] as? Json.Str)?.let { com.rm.parrotmetric.design.ChamferKind.valueOf(it.value) } ?: com.rm.parrotmetric.design.ChamferKind.Equal,
+                o.numOr("second", 0.0), (o["flip"] as? Json.Bool)?.value ?: false,
+            )
             "import" -> ImportFeature(id, name, Base64.decode(o.str("data")), o.int("format"))
             else -> throw IllegalArgumentException("This file has a step this version can't read: $type")
         }

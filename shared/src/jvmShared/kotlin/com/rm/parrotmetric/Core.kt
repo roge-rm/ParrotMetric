@@ -11,15 +11,19 @@ object Core : NativeCore {
     override external fun setScratchDirectory(path: String)
 
     // Kernel. Bodies are handles; each made comes retained once.
-    override external fun extrude(id: Int, plane: DoubleArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, pickCounts: IntArray, pickIds: IntArray, pickPoints: DoubleArray, forward: Double, back: Double): Long
+    override external fun extrude(id: Int, plane: DoubleArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, pickCounts: IntArray, pickIds: IntArray, pickPoints: DoubleArray, forward: Double, back: Double, taper: Double): Long
     override external fun revolve(id: Int, plane: DoubleArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, pickCounts: IntArray, pickIds: IntArray, pickPoints: DoubleArray, ax: Double, ay: Double, dx: Double, dy: Double, angle: Double): Long
     /** how: 0 join, 1 cut, 2 intersect. */
     override external fun combine(id: Int, target: Long, tool: Long, how: Int): Long
     override external fun fillet(id: Int, body: Long, edges: Array<String>, radius: Double): Long
-    override external fun chamfer(id: Int, body: Long, edges: Array<String>, distance: Double): Long
+    override external fun chamfer(id: Int, body: Long, edges: Array<String>, distance: Double, kind: Int, second: Double, flip: Boolean): Long
     override external fun overlaps(a: Long, b: Long): Boolean
     override external fun facePlane(body: Long, name: String): DoubleArray
     override external fun faceNames(body: Long): Array<String>
+    /** Where a named face (or edge) is and how big, to find it again by shape; null if the body hasn't got it. */
+    override external fun signature(body: Long, name: String, edge: Boolean): DoubleArray?
+    /** The face or edge most like a signature, or null if none is close enough. */
+    override external fun relocate(body: Long, signature: DoubleArray): String?
     override external fun importBody(id: Int, data: ByteArray, format: Int): Long
     override external fun shell(id: Int, body: Long, open: Array<String>, thickness: Double): Long
     override external fun draft(id: Int, body: Long, faces: Array<String>, neutral: String, angle: Double): Long
@@ -42,8 +46,8 @@ object Core : NativeCore {
     override external fun exportBodies(bodies: LongArray, names: Array<String>, format: Int, quality: Int): ByteArray?
 
     // What's shown and selected.
-    /** Bodies, then sketches (a plane each and their curves), then construction planes (nine numbers each) and axes (six each). */
-    override external fun show(bodies: LongArray, planes: DoubleArray, curveCounts: IntArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, constructionPlanes: DoubleArray, axes: DoubleArray, refit: Boolean)
+    /** Bodies, then sketches (a plane each and their curves), then construction planes (nine numbers each), axes (six each) and points (three each). */
+    override external fun show(bodies: LongArray, planes: DoubleArray, curveCounts: IntArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, constructionPlanes: DoubleArray, axes: DoubleArray, points: DoubleArray, refit: Boolean)
     override external fun selectedPlanes(): IntArray
     /** Lines describing what's selected: lengths, areas, gaps, angles, the body's volume and size. */
     override external fun measure(): Array<String>

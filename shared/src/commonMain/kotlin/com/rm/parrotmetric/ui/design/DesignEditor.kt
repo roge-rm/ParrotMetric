@@ -19,6 +19,8 @@ import com.rm.parrotmetric.design.ShellFeature
 import com.rm.parrotmetric.design.SplitFeature
 import com.rm.parrotmetric.design.Built
 import com.rm.parrotmetric.design.ChamferFeature
+import com.rm.parrotmetric.design.ChamferKind
+import com.rm.parrotmetric.design.PointFeature
 import com.rm.parrotmetric.design.Design
 import com.rm.parrotmetric.design.ExtrudeFeature
 import com.rm.parrotmetric.design.Feature
@@ -50,10 +52,10 @@ import kotlin.math.sin
 
 /** The 3D view, as the design editor uses it. The platform supplies it. */
 interface Viewport {
-    /** Shows these bodies, these sketches with their areas pickable, and construction planes and axes. Clears the selection. */
+    /** Shows these bodies, these sketches with their areas pickable, and construction planes, axes and points. Clears the selection. */
     fun show(
         bodies: List<Long>, sketches: List<Pair<SketchPlane, List<ProfileCurve>>>,
-        planes: List<SketchPlane>, axes: List<Pair<Vec3, Vec3>>, refit: Boolean,
+        planes: List<SketchPlane>, axes: List<Pair<Vec3, Vec3>>, points: List<Vec3>, refit: Boolean,
     )
     /** Selected construction planes, by their place in the list shown. */
     fun selectedPlanes(): List<Int>
@@ -80,8 +82,11 @@ interface Viewport {
     fun triangles(): Int
 }
 
-/** A step for the history bar. */
-data class HistoryEntry(val id: Int, val name: String, val kind: Kind, val error: String?, val active: Boolean) {
+/** A step for the history bar. [warning] is set when it built only after finding something again by its shape; [off] when turned off. */
+data class HistoryEntry(
+    val id: Int, val name: String, val kind: Kind, val error: String?, val active: Boolean,
+    val warning: String? = null, val off: Boolean = false,
+) {
     enum class Kind { Sketch, Create, Modify, Construct, Import }
 }
 
@@ -135,15 +140,17 @@ class DesignEditor(
 
     fun history(): List<HistoryEntry> {
         val errors = built?.errors ?: emptyMap()
+        val warnings = built?.warnings ?: emptyMap()
         return design.features.mapIndexed { i, f ->
             val kind = when (f) {
                 is SketchFeature -> HistoryEntry.Kind.Sketch
                 is ExtrudeFeature, is RevolveFeature -> HistoryEntry.Kind.Create
                 is ImportFeature -> HistoryEntry.Kind.Import
-                is PlaneFeature, is AxisFeature -> HistoryEntry.Kind.Construct
+                is PlaneFeature, is AxisFeature, is PointFeature -> HistoryEntry.Kind.Construct
                 else -> HistoryEntry.Kind.Modify
             }
-            HistoryEntry(f.id, f.name, kind, errors[f.id], i < design.marker)
+            val off = f.id in design.suppressed
+            HistoryEntry(f.id, f.name, kind, if (off) null else errors[f.id], i < design.marker, if (off) null else warnings[f.id], off)
         }
     }
 
@@ -301,6 +308,13 @@ class DesignEditor(
         changed()
     }
 
+    /** Turns a step off, leaving it in the history unbuilt, or on again. */
+    fun setOff(id: Int, off: Boolean) {
+        checkpoint()
+        if (off) design.suppressed += id else design.suppressed -= id
+        changed()
+    }
+
     /** Rolls the marker to just after the feature at this place in the history. */
     fun rollTo(index: Int) {
         checkpoint()
@@ -402,12 +416,13 @@ class DesignEditor(
                 val refitNow = pendingRefit
                 pendingRefit = false
                 val features = featuresToBuild()
+                val hints = design.hints.toMap()
                 val draft = panel
                 // The first body to appear is framed.
                 val hadBodies = built?.bodies?.isNotEmpty() == true
                 val result = withContext(Dispatchers.Default) {
                     lock.withLock {
-                        val b = rebuilder.rebuild(features)
+                        val b = rebuilder.rebuild(features, hints)
                         val sketches = sketchesToShow(features, draft)
                         val shown = sketches.mapNotNull { s -> b.sketchPlanes[s.id]?.let { s to it } }
                         val refit = refitNow || (!hadBodies && b.bodies.isNotEmpty())
@@ -416,13 +431,15 @@ class DesignEditor(
                         shownBodies = visible
                         viewport.show(
                             visible.map { it.handle }, shown.map { it.second to it.first.sketch.profileCurves() },
-                            planeFeatures.map { b.sketchPlanes.getValue(it.id) }, b.axes.values.toList(), refit,
+                            planeFeatures.map { b.sketchPlanes.getValue(it.id) }, b.axes.values.toList(), b.points.values.toList(), refit,
                         )
                         shownPlanes = planeFeatures
                         Triple(b, shown.map { it.first }, draft)
                     }
                 }
                 built = result.first
+                design.hints.clear()
+                design.hints.putAll(result.first.hints)
                 shownSketches = result.second
                 triangles = viewport.triangles()
                 onShown()
@@ -446,7 +463,7 @@ class DesignEditor(
     private fun featuresToBuild(): List<Feature> = com.rm.parrotmetric.design.Parametrics.apply(design, rawFeatures())
 
     private fun rawFeatures(): List<Feature> {
-        val active = design.active
+        val active = design.built
         val draft = panel ?: return active
         // Fillets and chamfers pick edges on the body before them, so they're left out while being picked.
         val f = draft.feature() ?: return active
@@ -474,7 +491,7 @@ class DesignEditor(
     // Panels.
 
     /** Opens Extrude or Revolve, starting from any sketch areas already selected. */
-    fun startExtrude() = openArea(ExtrudeDraft(null))
+    fun startExtrude() = openArea(ExtrudeDraft(null).also { it.planes = planeChoices() })
     fun startRevolve() = openArea(RevolveDraft(null))
 
     private fun openArea(d: AreaDraft) {
@@ -513,10 +530,23 @@ class DesignEditor(
         rebuild()
     }
 
+    fun startPoint() {
+        val d = PointDraft(null)
+        // At the middle of a selected flat face, if there is one.
+        viewport.selectedFaces().firstOrNull { it.second.isNotEmpty() }?.let { (b, face) ->
+            shownBodies.getOrNull(b)?.let { body -> kernel.facePlane(body.handle, face) }?.let { c -> d.x = c[0]; d.y = c[1]; d.z = c[2] }
+        }
+        panel = d
+        rebuild()
+    }
+
     fun startAxis() {
         panel = AxisDraft(null)
         rebuild()
     }
+
+    /** Construction points as last built, for Project in sketches. */
+    fun constructionPoints(): List<Vec3> = built?.points?.values?.toList().orEmpty()
 
     /** Construction axes so far, for patterns round them. */
     fun axisFeatures(): List<AxisFeature> = design.active.filterIsInstance<AxisFeature>()
@@ -580,11 +610,25 @@ class DesignEditor(
             is SplitFeature -> SplitDraft(f)
             is MoveFeature -> MoveDraft(f)
             is com.rm.parrotmetric.design.ConvertFeature -> ConvertDraft(f)
+            is PointFeature -> PointDraft(f)
             is PlaneFeature -> PlaneDraft(f, f.kind).also { it.planes = planeChoices().filter { c -> c.second != PlaneRef.Construction(f.id) } }
             is AxisFeature -> AxisDraft(f)
             else -> return f
         }
         design.expressions[id]?.let { d.exprs.putAll(it) }
+        // Faces and edges found again by shape are picked in place of their lost names, to check.
+        built?.found?.get(id)?.let { found ->
+            fun now(n: String) = found[n] ?: n
+            when (d) {
+                is EdgeDraft -> d.edges = d.edges.map(::now)
+                is FaceDraft -> { d.faces = d.faces.map(::now); d.neutral = d.neutral?.let(::now) }
+                else -> {}
+            }
+        }
+        if (d is ExtrudeDraft) d.planes = planeChoices().let { choices ->
+            val own = d.upTo
+            if (own != null && choices.none { it.second == own }) choices + ("Its face" to own) else choices
+        }
         if (d is BodyDraft) d.planes = planeChoices().let { choices ->
             val own = (f as? MirrorFeature)?.plane ?: (f as? SplitFeature)?.plane
             if (own != null && choices.none { it.second == own }) choices + ("Its face" to own) else choices
@@ -599,6 +643,12 @@ class DesignEditor(
         if (measuring) measureLines = viewport.measure()
         when (val d = panel) {
             is AreaDraft -> {
+                // Up to a face: the face tapped last.
+                if (d is ExtrudeDraft && d.upToOn) viewport.selectedFaces().lastOrNull { it.second.isNotEmpty() }?.let { (_, face) ->
+                    val ref = PlaneRef.OnFace(face, Vec3(1.0, 0.0, 0.0))
+                    d.planes = d.planes.filter { it.first != "The face" } + ("The face" to ref)
+                    d.upTo = ref
+                }
                 val picked = viewport.selectedRegions()
                 if (picked.isEmpty()) {
                     d.regions = emptyList()
@@ -700,6 +750,12 @@ class DesignEditor(
         var distance by mutableStateOf(10.0)
         var other by mutableStateOf(10.0)
         var direction by mutableStateOf(Direction.OneSide)
+        var taperDegrees by mutableStateOf((editing?.taper ?: 0.0) * 180 / PI)
+        /** Going as far as [upTo] in place of a distance. */
+        var upToOn by mutableStateOf(editing?.upTo != null)
+        var upTo by mutableStateOf<PlaneRef?>(editing?.upTo)
+        /** What it can go up to: the origin planes, the tapped face and construction planes. */
+        var planes by mutableStateOf<List<Pair<String, PlaneRef>>>(emptyList())
 
         init {
             if (editing != null) {
@@ -717,13 +773,20 @@ class DesignEditor(
         override fun feature(): Feature? {
             val s = sketchId ?: return null
             if (regions.isEmpty()) return null
+            val taper = taperDegrees * PI / 180
+            if (upToOn) {
+                val target = upTo ?: return null
+                return ExtrudeFeature(id, name, s, regions, 0.0, 0.0, operation, taper, target)
+            }
             val (fwd, back) = when (direction) {
                 Direction.OneSide -> distance to 0.0
                 Direction.Symmetric -> distance / 2 to distance / 2
                 Direction.TwoSides -> distance to other
             }
-            return ExtrudeFeature(id, name, s, regions, fwd, back, operation)
+            return ExtrudeFeature(id, name, s, regions, fwd, back, operation, taper)
         }
+
+        override fun missing() = if (regions.isEmpty()) "Tap an area of a sketch" else "Tap the face to go up to"
     }
 
     inner class RevolveDraft(editing: RevolveFeature?) : AreaDraft(editing) {
@@ -866,8 +929,15 @@ class DesignEditor(
         var axis by mutableStateOf(editing?.axis ?: Axis3.Z)
         var degrees by mutableStateOf((editing?.angle ?: 0.0) * 180 / PI)
         var copy by mutableStateOf(editing?.copy ?: false)
+        var sx by mutableStateOf(editing?.sx ?: 1.0)
+        var sy by mutableStateOf(editing?.sy ?: 1.0)
+        var sz by mutableStateOf(editing?.sz ?: 1.0)
+        /** The same scale every way, or one for each. */
+        var evenly by mutableStateOf(editing == null || (editing.sx == editing.sy && editing.sy == editing.sz))
         init { if (editing != null) bodies = editing.bodies }
-        override fun feature() = MoveFeature(id, name, bodies, dx, dy, dz, axis, degrees * PI / 180, copy)
+        override fun feature() =
+            if (evenly) MoveFeature(id, name, bodies, dx, dy, dz, axis, degrees * PI / 180, copy, sx, sx, sx)
+            else MoveFeature(id, name, bodies, dx, dy, dz, axis, degrees * PI / 180, copy, sx, sy, sz)
     }
 
     inner class PlaneDraft(editing: PlaneFeature?, val kind: PlaneFeature.Kind) : FeatureDraft() {
@@ -884,6 +954,16 @@ class DesignEditor(
             return PlaneFeature(id, name, kind, base, offset, degrees * PI / 180, turnRoundY, other)
         }
         override fun missing() = "Pick the second plane"
+    }
+
+    inner class PointDraft(editing: PointFeature?) : FeatureDraft() {
+        val id = editing?.id ?: newId()
+        private val name = editing?.name ?: nextName("Point", design.features.count { it is PointFeature })
+        var x by mutableStateOf(editing?.x ?: 0.0)
+        var y by mutableStateOf(editing?.y ?: 0.0)
+        var z by mutableStateOf(editing?.z ?: 0.0)
+        override fun feature() = PointFeature(id, name, x, y, z)
+        override fun missing() = ""
     }
 
     inner class AxisDraft(editing: AxisFeature?) : FeatureDraft() {
@@ -905,18 +985,30 @@ class DesignEditor(
         }
         var edges by mutableStateOf<List<String>>(emptyList())
         var size by mutableStateOf(if (chamfer) 1.0 else 2.0)
+        var kind by mutableStateOf(ChamferKind.Equal)
+        /** The second distance in mm, or the angle in degrees. */
+        var second by mutableStateOf(1.0)
+        var flip by mutableStateOf(false)
 
         init {
             when (editing) {
                 is FilletFeature -> { edges = editing.edges; size = editing.radius }
-                is ChamferFeature -> { edges = editing.edges; size = editing.distance }
+                is ChamferFeature -> {
+                    edges = editing.edges; size = editing.distance; kind = editing.kind; flip = editing.flip
+                    second = if (editing.kind == ChamferKind.DistanceAngle) editing.second * 180 / PI else editing.second
+                }
                 else -> {}
             }
         }
 
         override fun feature(): Feature? {
             if (edges.isEmpty()) return null
-            return if (chamfer) ChamferFeature(id, name, edges, size) else FilletFeature(id, name, edges, size)
+            if (!chamfer) return FilletFeature(id, name, edges, size)
+            return when (kind) {
+                ChamferKind.Equal -> ChamferFeature(id, name, edges, size)
+                ChamferKind.TwoDistances -> ChamferFeature(id, name, edges, size, kind, second, flip)
+                ChamferKind.DistanceAngle -> ChamferFeature(id, name, edges, size, kind, second * PI / 180, flip)
+            }
         }
 
         override fun missing() = "Tap the edges to ${if (chamfer) "bevel" else "round"}"

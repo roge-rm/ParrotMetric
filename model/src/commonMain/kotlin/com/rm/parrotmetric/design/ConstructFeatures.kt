@@ -19,6 +19,17 @@ data class PlaneFeature(
     override fun key() = this
 }
 
+/** A point in space at (x, y, z), shown in the view and taken into sketches by Project. */
+data class PointFeature(
+    override val id: Int,
+    override val name: String,
+    val x: Double,
+    val y: Double,
+    val z: Double,
+) : Feature() {
+    override fun key() = this
+}
+
 /** A straight axis through (x, y, z) along an origin axis, for patterns and turning. */
 data class AxisFeature(
     override val id: Int,

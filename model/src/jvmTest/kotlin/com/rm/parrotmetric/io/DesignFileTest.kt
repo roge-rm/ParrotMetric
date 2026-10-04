@@ -1,5 +1,6 @@
 package com.rm.parrotmetric.io
 
+import com.rm.parrotmetric.design.ChamferFeature
 import com.rm.parrotmetric.design.Design
 import com.rm.parrotmetric.design.ExtrudeFeature
 import com.rm.parrotmetric.design.FilletFeature
@@ -66,11 +67,19 @@ class DesignFileTest {
             com.rm.parrotmetric.design.CombineFeature(d.newId(), "Combine", "Body 1", listOf("Body 2"), Operation.Cut, true),
             com.rm.parrotmetric.design.SplitFeature(d.newId(), "Split", "Body 1", PlaneRef.OnFace("F1.s2", Vec3(0.0, 1.0, 0.0))),
             com.rm.parrotmetric.design.MoveFeature(d.newId(), "Move", listOf("Body 3"), 1.0, 2.0, 3.0, com.rm.parrotmetric.design.Axis3.Z, 0.5, true),
+            com.rm.parrotmetric.design.MoveFeature(d.newId(), "Scale", listOf("Body 3"), 0.0, 0.0, 0.0, com.rm.parrotmetric.design.Axis3.Z, 0.0, false, 2.0, 1.0, 0.5),
+            ChamferFeature(d.newId(), "Chamfer", listOf("F1.s1|F1.end"), 1.0, com.rm.parrotmetric.design.ChamferKind.DistanceAngle, 0.5, true),
+            ExtrudeFeature(d.newId(), "Up to", 1, emptyList(), 0.0, 0.0, Operation.Join, 0.1, PlaneRef.OnFace("F1.end", Vec3(1.0, 0.0, 0.0))),
+            com.rm.parrotmetric.design.PointFeature(d.newId(), "Point", 1.0, 2.0, 3.0),
         )
         features.forEach { d.add(it) }
+        d.suppressed += features[1].id
+        d.hints["${features[0].id}:F1.end"] = doubleArrayOf(0.0, 1.0, 2.5)
         val back = Design()
         DesignFile.read(DesignFile.write(d, "x"), back)
         assertEquals(features, back.features)
+        assertEquals(setOf(features[1].id), back.suppressed)
+        assertContentEquals(doubleArrayOf(0.0, 1.0, 2.5), back.hints["${features[0].id}:F1.end"])
     }
 
     @Test

@@ -12,10 +12,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -23,6 +20,7 @@ import androidx.lifecycle.lifecycleScope
 import com.rm.parrotmetric.app.AppController
 import com.rm.parrotmetric.app.FileSink
 import com.rm.parrotmetric.app.PlatformFiles
+import com.rm.parrotmetric.ui.LaunchSplash
 import com.rm.parrotmetric.ui.ModelScreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -92,7 +90,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         Core.setScratchDirectory(cacheDir.absolutePath)
         app = AppController(Core, files, lifecycleScope) { work -> view?.gl(work) }
+        // Only when the app starts, not when the activity is made again on turning the phone.
+        val starting = savedInstanceState == null
         setContent {
+            Box(Modifier.fillMaxSize()) {
             ModelScreen(
                 viewport = {
                     AndroidView(
@@ -102,22 +103,13 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxSize(),
                     )
                 },
-                logo = {
-                    // The icon's two layers, cropped to its visible middle.
-                    Box(Modifier.size(34.dp).clip(RoundedCornerShape(10.dp))) {
-                        for (layer in listOf(R.mipmap.ic_launcher_background, R.mipmap.ic_launcher_foreground)) {
-                            Image(
-                                painterResource(layer),
-                                contentDescription = null,
-                                modifier = Modifier.fillMaxSize().graphicsLayer(scaleX = 1.5f, scaleY = 1.5f),
-                            )
-                        }
-                    }
-                },
+                logo = { Image(painterResource(R.drawable.logo_small), contentDescription = null, modifier = Modifier.size(34.dp)) },
                 state = app.state,
                 design = app.design,
                 actions = app.actions,
             )
+            LaunchSplash(painterResource(R.drawable.logo_full), starting)
+            }
         }
     }
 

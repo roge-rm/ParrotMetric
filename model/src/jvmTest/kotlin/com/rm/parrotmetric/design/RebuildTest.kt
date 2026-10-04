@@ -18,6 +18,9 @@ private class FakeKernel : Kernel {
     val bodies = mutableMapOf<Long, Box>()
     val counts = mutableMapOf<Long, Int>()
     val calls = mutableListOf<String>()
+    /** What extrudes call their side, to take a name away. */
+    var side = "s1"
+    var lastForward = 0.0
     private var next = 1L
 
     private fun make(b: Box): Long {
@@ -27,11 +30,22 @@ private class FakeKernel : Kernel {
         return h
     }
 
-    override fun extrude(id: Int, plane: SketchPlane, curves: List<ProfileCurve>, regions: List<RegionRef>, forward: Double, back: Double): Long {
+    override fun extrude(id: Int, plane: SketchPlane, curves: List<ProfileCurve>, regions: List<RegionRef>, forward: Double, back: Double, taper: Double): Long {
         calls += "extrude $id"
+        lastForward = forward
         val x = curves.minOf { minOf(it.x1, it.x2) }
         val w = curves.maxOf { maxOf(it.x1, it.x2) } - x
-        return make(Box(x, x + w, listOf("F$id.s1", "F$id.end")))
+        return make(Box(x, x + w, listOf("F$id.$side", "F$id.end")))
+    }
+
+    /** A box's place along x, for faces and edges it has. */
+    override fun signature(body: Long, name: String, edge: Boolean) = bodies.getValue(body).let { b ->
+        if (name.split('|').all { it in b.faces }) doubleArrayOf(b.from, b.to, if (edge) 1.0 else 0.0) else null
+    }
+
+    override fun relocate(body: Long, signature: DoubleArray) = bodies.getValue(body).let { b ->
+        if (b.from != signature[0] || b.to != signature[1]) null
+        else if (signature[2] == 1.0) b.faces.take(2).sorted().joinToString("|") else b.faces.first()
     }
 
     override fun revolve(id: Int, plane: SketchPlane, curves: List<ProfileCurve>, regions: List<RegionRef>, ax: Double, ay: Double, dx: Double, dy: Double, angle: Double) =
@@ -52,7 +66,7 @@ private class FakeKernel : Kernel {
         return make(bodies.getValue(body).let { it.copy(faces = it.faces + "F$id.r") })
     }
 
-    override fun chamfer(id: Int, body: Long, edges: List<String>, distance: Double) = fillet(id, body, edges, distance)
+    override fun chamfer(id: Int, body: Long, edges: List<String>, distance: Double, kind: Int, second: Double, flip: Boolean) = fillet(id, body, edges, distance)
 
     override fun overlaps(a: Long, b: Long): Boolean {
         val x = bodies.getValue(a); val y = bodies.getValue(b)
@@ -169,6 +183,58 @@ class RebuildTest {
         assertEquals("The fillet doesn't fit", built.errors[bad.id])
         assertEquals("Its edges aren't there any more", built.errors[missing.id])
         assertEquals(1, built.bodies.size)
+    }
+
+    @Test
+    fun aLostEdgeIsFoundAgainByItsShape() {
+        val k = FakeKernel()
+        val d = Design()
+        val e = extrude(d, sketchAt(d, 0.0, 40.0), Operation.NewBody)
+        val edge = "F${e.id}.end|F${e.id}.s1"
+        val fillet = FilletFeature(d.newId(), "Fillet", listOf(edge), 2.0)
+        d.add(fillet)
+        val first = Rebuilder(k).rebuild(d.active)
+        assertTrue(first.hints.containsKey("${fillet.id}:$edge"))
+        assertTrue(first.warnings.isEmpty())
+
+        // The extrude's side is named differently now, as if its sketch line had been redrawn.
+        k.side = "s9"
+        val again = Rebuilder(k).rebuild(d.active, first.hints)
+        assertTrue(again.errors.isEmpty(), "${again.errors}")
+        assertEquals(mapOf(edge to "F${e.id}.end|F${e.id}.s9"), again.found[fillet.id])
+        assertTrue(again.warnings.containsKey(fillet.id))
+        assertTrue(k.calls.last().endsWith("[F${e.id}.end|F${e.id}.s9]"))
+
+        // Without knowing where it was, it fails as before.
+        assertEquals("Its edges aren't there any more", Rebuilder(k).rebuild(d.active).errors[fillet.id])
+    }
+
+    @Test
+    fun aStepTurnedOffIsLeftOut() {
+        val k = FakeKernel()
+        val d = Design()
+        val e = extrude(d, sketchAt(d, 0.0, 40.0), Operation.NewBody)
+        d.suppressed += e.id
+        assertEquals(0, Rebuilder(k).rebuild(d.built).bodies.size)
+        assertEquals(2, d.active.size)
+        d.suppressed -= e.id
+        assertEquals(1, Rebuilder(k).rebuild(d.built).bodies.size)
+    }
+
+    @Test
+    fun anExtrudeGoesUpToAParallelPlane() {
+        val k = FakeKernel()
+        val d = Design()
+        val s = sketchAt(d, 0.0, 40.0)
+        val up = SketchPlane.Top.copy(origin = Vec3(0.0, 0.0, 25.0))
+        d.add(ExtrudeFeature(d.newId(), "Extrude", s.id, listOf(RegionRef(listOf(1, 2, 3, 4), 0.0, 0.0)), 0.0, 0.0, Operation.NewBody, upTo = PlaneRef.Fixed(up)))
+        val built = Rebuilder(k).rebuild(d.active)
+        assertTrue(built.errors.isEmpty(), "${built.errors}")
+        assertEquals(25.0, k.lastForward)
+
+        // A plane through the sketch has nowhere to go.
+        d.replace((d.features[1] as ExtrudeFeature).copy(upTo = PlaneRef.Fixed(SketchPlane.Top)))
+        assertEquals("That face or plane goes through the sketch", Rebuilder(k).rebuild(d.active).errors[d.features[1].id])
     }
 
     @Test

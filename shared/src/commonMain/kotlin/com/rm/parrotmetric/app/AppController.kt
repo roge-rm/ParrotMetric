@@ -191,7 +191,7 @@ class AppController(
             val name = design.nextSketchName()
             val (ref, p) = if (plane != null) PlaneRef.Fixed(plane) to plane else design.sketchPlaneUnderSelection(state.yaw, name) ?: return
             newSketch = ref to name
-            openSketch(SketchEditor(p, name, Sketch(), regionFinder, outlineFor(ref, p), design::names))
+            openSketch(SketchEditor(p, name, Sketch(), regionFinder, outlineFor(ref, p), design::names, design::constructionPoints))
         }
 
         override fun finishSketch() {
@@ -216,7 +216,7 @@ class AppController(
                 val plane = design.planeOf(f) ?: return
                 design.checkpoint()
                 newSketch = null
-                openSketch(SketchEditor(plane, f.name, f.sketch, regionFinder, outlineFor(f.plane, plane), design::names))
+                openSketch(SketchEditor(plane, f.name, f.sketch, regionFinder, outlineFor(f.plane, plane), design::names, design::constructionPoints))
             } else {
                 design.edit(id)
             }

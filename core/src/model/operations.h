@@ -27,10 +27,11 @@ struct RegionPick {
  * Sweeps sketch regions straight along the plane's normal, from `back`
  * behind the plane to `forward` in front of it (mm; either may be negative,
  * but not both ending where they start). Sides are named F<id>.s<curve>,
- * the ends F<id>.start and F<id>.end.
+ * the ends F<id>.start and F<id>.end. A taper (radians) leans the sides in
+ * going forward, pivoting at the plane.
  */
 NamedShape extrude(int id, const gp_Ax3& plane, const std::vector<SketchCurve>& curves, const std::vector<RegionPick>& picks,
-                   double forward, double back);
+                   double forward, double back, double taper = 0);
 
 /**
  * Turns sketch regions round an axis in the sketch plane, from (ax, ay)
@@ -47,8 +48,16 @@ NamedShape combine(int id, const NamedShape& target, const NamedShape& tool, Com
 /** Rounds the named edges. New faces are F<id>.r(<edge name>). */
 NamedShape fillet(int id, const NamedShape& body, const std::vector<std::string>& edges, double radius);
 
-/** Bevels the named edges by distance. New faces are F<id>.c(<edge name>). */
-NamedShape chamfer(int id, const NamedShape& body, const std::vector<std::string>& edges, double distance);
+enum class ChamferKind { Equal, TwoDistances, DistanceAngle };
+
+/**
+ * Bevels the named edges: distance along both faces, or along one face with
+ * `second` along the other (mm) or at `second` radians to it. The first face
+ * of each edge gets `distance`, the other one if flip. New faces are
+ * F<id>.c(<edge name>).
+ */
+NamedShape chamfer(int id, const NamedShape& body, const std::vector<std::string>& edges, double distance,
+                   ChamferKind kind = ChamferKind::Equal, double second = 0, bool flip = false);
 
 /** Hollows a solid to walls `thickness` thick inside it, leaving the named faces open. */
 NamedShape shell(int id, const NamedShape& body, const std::vector<std::string>& open, double thickness);
@@ -61,7 +70,8 @@ NamedShape draft(int id, const NamedShape& body, const std::vector<std::string>&
 
 /**
  * A moved copy of a body: m is a 3x4 matrix, rows of rotation then
- * translation. Faces are named F<id>.<tag>(<old name>).
+ * translation, and may scale, unevenly too. Faces are named
+ * F<id>.<tag>(<old name>).
  */
 NamedShape transformed(int id, const NamedShape& body, const double m[12], const std::string& tag);
 

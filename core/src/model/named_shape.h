@@ -37,6 +37,21 @@ struct NamedShape {
 };
 
 /**
+ * Where a named face or edge is and how big, to find it again by shape when
+ * an earlier change has taken its name away: kind (0 face, 1 edge), surface or
+ * curve type, centre (x, y, z), direction (a flat face's outward normal or a
+ * straight edge's direction; zero otherwise), size (area or length) and the
+ * body's size (its box's diagonal). Empty if the body has no such name.
+ */
+std::vector<double> signatureOf(const NamedShape& body, const std::string& name, bool edge);
+
+/**
+ * The name of the face or edge in body most like a signature, or empty if
+ * none is close enough to be the same one.
+ */
+std::string relocate(const NamedShape& body, const std::vector<double>& signature);
+
+/**
  * Carries face names from the inputs of an OCCT operation to its result:
  * faces it kept keep their names, faces it changed pass theirs on. Faces
  * left without a name get "<prefix>.n<k>".

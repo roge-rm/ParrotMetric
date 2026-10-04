@@ -30,6 +30,7 @@ import androidx.compose.ui.window.ComposeViewport
 import com.rm.parrotmetric.app.AppController
 import com.rm.parrotmetric.app.FileSink
 import com.rm.parrotmetric.app.PlatformFiles
+import com.rm.parrotmetric.ui.LaunchSplash
 import com.rm.parrotmetric.ui.ModelScreen
 import com.rm.parrotmetric.ui.ViewControls
 import com.rm.parrotmetric.ui.viewGestures
@@ -162,10 +163,11 @@ private fun WebApp() {
     }
     LaunchedEffect(view) { view.drawLoop() }
     var logo by remember { mutableStateOf<ImageBitmap?>(null) }
+    var full by remember { mutableStateOf<ImageBitmap?>(null) }
     LaunchedEffect(Unit) {
-        fetchBytes("icons/icon-256.png") { f ->
-            if (f != null) logo = org.jetbrains.skia.Image.makeFromEncoded(ByteArray(pickedSize(f)) { pickedByte(f, it).toByte() }).toComposeImageBitmap()
-        }
+        fun decode(f: JsAny) = org.jetbrains.skia.Image.makeFromEncoded(ByteArray(pickedSize(f)) { pickedByte(f, it).toByte() }).toComposeImageBitmap()
+        fetchBytes("icons/small-128.png") { f -> if (f != null) logo = decode(f) }
+        fetchBytes("icons/icon-512.png") { f -> if (f != null) full = decode(f) }
     }
     val controls = remember(view) {
         object : ViewControls {
@@ -178,6 +180,7 @@ private fun WebApp() {
             }
         }
     }
+    Box(Modifier.fillMaxSize()) {
     ModelScreen(
         viewport = {
             Box(Modifier.fillMaxSize().onSizeChanged { view.resize(it.width, it.height) }.viewGestures(controls)) {
@@ -186,12 +189,14 @@ private fun WebApp() {
                 view.problem?.let { Text("No 3D view: $it", Modifier.align(Alignment.Center).padding(24.dp), color = Color(0xFFE8DCC8)) }
             }
         },
-        logo = { logo?.let { Image(it, contentDescription = null, modifier = Modifier.size(34.dp).clip(RoundedCornerShape(10.dp))) } },
+        logo = { logo?.let { Image(it, contentDescription = null, modifier = Modifier.size(34.dp)) } },
         state = app.state,
         design = app.design,
         actions = app.actions,
         seeThrough = true,
     )
+    LaunchSplash(full?.let { androidx.compose.ui.graphics.painter.BitmapPainter(it) })
+    }
 }
 
 @OptIn(ExperimentalComposeUiApi::class)

@@ -31,3 +31,17 @@ kotlin {
         }
     }
 }
+
+/** The version, from app/build.gradle.kts where it's set, as APP_VERSION for every platform. */
+val appVersion = tasks.register("appVersion") {
+    val out = layout.buildDirectory.dir("generated/appVersion")
+    val name = Regex("versionName = \"([^\"]+)\"").find(rootProject.file("app/build.gradle.kts").readText())!!.groupValues[1]
+    inputs.property("version", name)
+    outputs.dir(out)
+    doLast {
+        val file = out.get().file("com/rm/parrotmetric/app/AppVersion.kt").asFile
+        file.parentFile.mkdirs()
+        file.writeText("package com.rm.parrotmetric.app\n\nconst val APP_VERSION = \"$name\"\n")
+    }
+}
+kotlin.sourceSets.commonMain { kotlin.srcDir(appVersion) }

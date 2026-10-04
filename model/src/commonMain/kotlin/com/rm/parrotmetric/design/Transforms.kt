@@ -14,6 +14,10 @@ internal object Transforms {
 
     fun translate(v: Vec3) = doubleArrayOf(1.0, 0.0, 0.0, v.x, 0.0, 1.0, 0.0, v.y, 0.0, 0.0, 1.0, v.z)
 
+    /** Scaling by (x, y, z) about the point c. */
+    fun scale(x: Double, y: Double, z: Double, c: Vec3) =
+        doubleArrayOf(x, 0.0, 0.0, c.x * (1 - x), 0.0, y, 0.0, c.y * (1 - y), 0.0, 0.0, z, c.z * (1 - z))
+
     /** Turning round an axis through the origin. */
     fun rotate(axis: Vec3, angle: Double): DoubleArray {
         val c = cos(angle); val s = sin(angle); val t = 1 - c
