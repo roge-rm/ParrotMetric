@@ -525,6 +525,24 @@ class DesignEditor(
     /** The parameters' values, for number fields. */
     fun names(): Map<String, Double> = com.rm.parrotmetric.design.Parametrics.values(design.parameters)
 
+    fun useConfiguration(name: String) {
+        checkpoint()
+        design.useConfiguration(name)
+        changed()
+    }
+
+    fun saveConfiguration(name: String) {
+        checkpoint()
+        design.saveConfiguration(name)
+        changed()
+    }
+
+    fun removeConfiguration(name: String) {
+        checkpoint()
+        design.removeConfiguration(name)
+        changed()
+    }
+
     fun setParameters(list: List<com.rm.parrotmetric.design.Parameter>) {
         checkpoint()
         design.parameters.clear()

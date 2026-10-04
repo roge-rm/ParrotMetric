@@ -120,4 +120,27 @@ class DesignFileTest {
             DesignFile.read("{\"format\":\"parrotmetric\",\"version\":99,\"marker\":0,\"features\":[]}", Design())
         }
     }
+
+    @Test
+    fun configurationsComeBackAndSwitch() {
+        val d = Design()
+        d.parameters += com.rm.parrotmetric.design.Parameter("width", "20")
+        d.parameters += com.rm.parrotmetric.design.Parameter("height", "5")
+        val f = ExtrudeFeature(d.newId(), "Extrude", 1, emptyList(), 5.0, 0.0, Operation.NewBody)
+        d.add(f)
+        d.saveConfiguration("Small")
+        d.parameters[0] = d.parameters[0].copy(expression = "40")
+        d.suppressed += f.id
+        d.saveConfiguration("Big")
+        val back = Design()
+        DesignFile.read(DesignFile.write(back.let { d }, "x"), back)
+        assertEquals(listOf("Small", "Big"), back.configurations.map { it.name })
+        assertEquals("Big", back.configuration)
+        back.useConfiguration("Small")
+        assertEquals("20", back.parameters[0].expression)
+        assertTrue(back.suppressed.isEmpty())
+        back.useConfiguration("Big")
+        assertEquals("40", back.parameters[0].expression)
+        assertEquals(setOf(f.id), back.suppressed)
+    }
 }

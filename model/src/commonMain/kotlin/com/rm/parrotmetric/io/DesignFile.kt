@@ -85,6 +85,10 @@ object DesignFile {
         "parameters" to design.parameters.map { mapOf("name" to it.name, "expression" to it.expression) },
         "expressions" to design.expressions.mapKeys { it.key.toString() },
         "suppressed" to design.suppressed.sorted(),
+        "configurations" to design.configurations.map { c ->
+            mapOf("name" to c.name, "parameters" to c.parameters, "suppressed" to c.suppressed.sorted())
+        },
+        "configuration" to design.configuration,
         // Only those of features still there.
         "hints" to design.hints.filterKeys { k -> design.feature(k.substringBefore(':').toIntOrNull() ?: -1) != null }
             .mapValues { it.value.toList() },
@@ -114,7 +118,18 @@ object DesignFile {
         val suppressed = (root["suppressed"] as? Json.Arr)?.items?.map { (it as Json.Num).value.toInt() }?.toSet() ?: emptySet()
         val hints = (root["hints"] as? Json.Obj)?.fields?.mapValues { (_, v) -> (v as Json.Arr).items.map { (it as Json.Num).value }.toDoubleArray() }
             ?: emptyMap()
-        into.load(features, root.int("marker"), bodies, parameters, expressions, suppressed, hints)
+        val configurations = (root["configurations"] as? Json.Arr)?.items?.map { c ->
+            c as Json.Obj
+            Design.Configuration(
+                c.str("name"),
+                (c["parameters"] as? Json.Obj)?.fields?.mapValues { (it.value as Json.Str).value } ?: emptyMap(),
+                (c["suppressed"] as? Json.Arr)?.items?.map { (it as Json.Num).value.toInt() }?.toSet() ?: emptySet(),
+            )
+        } ?: emptyList()
+        into.load(
+            features, root.int("marker"), bodies, parameters, expressions, suppressed, hints,
+            configurations, (root["configuration"] as? Json.Str)?.value,
+        )
         return (root["title"] as? Json.Str)?.value ?: "Untitled"
     }
 

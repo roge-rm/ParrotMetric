@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -190,7 +191,24 @@ fun ParametersSheet(editor: DesignEditor, close: () -> Unit) {
     val list = editor.design.parameters.toList()
     val values = editor.names()
     var adding by remember { mutableStateOf(false) }
+    var naming by remember { mutableStateOf(false) }
     SheetFrame("Parameters", close) {
+        // Configurations: each a set of these values and features turned off.
+        val configs = editor.design.configurations.map { it.name }
+        val current = editor.design.configuration
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            for (c in configs) Surface(
+                onClick = { editor.useConfiguration(c) },
+                shape = RoundedCornerShape(14.dp),
+                color = if (c == current) Palette.mint.copy(alpha = 0.2f) else Palette.raised,
+                contentColor = if (c == current) Palette.mint else Palette.text,
+            ) { Text(c, Modifier.padding(horizontal = 12.dp, vertical = 8.dp), fontSize = 13.sp, fontWeight = FontWeight.SemiBold) }
+            if (current != null) TextButton(onClick = { editor.saveConfiguration(current) }) { Text("Update $current", color = Palette.mint, fontSize = 13.sp) }
+            TextButton(onClick = { naming = true }) { Text(if (configs.isEmpty()) "Save as a configuration" else "Save as new", color = Palette.mint, fontSize = 13.sp) }
+            if (current != null) IconButton(onClick = { editor.removeConfiguration(current) }) {
+                Icon(Icons.delete, "Remove $current", Modifier.size(18.dp), tint = Palette.muted)
+            }
+        }
         if (list.isEmpty()) Text("No parameters yet", fontSize = 14.sp, color = Palette.muted)
         Column(Modifier.heightIn(max = 300.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             list.forEachIndexed { i, p ->
@@ -209,6 +227,11 @@ fun ParametersSheet(editor: DesignEditor, close: () -> Unit) {
         Surface(onClick = { adding = true }, modifier = Modifier.fillMaxWidth().height(46.dp), shape = RoundedCornerShape(16.dp), color = Palette.raised, contentColor = Palette.text) {
             Box(contentAlignment = Alignment.Center) { Text("Add a parameter", fontSize = 14.sp, fontWeight = FontWeight.SemiBold) }
         }
+    }
+    if (naming) NameDialog("New configuration", "Configuration ${editor.design.configurations.size + 1}", { naming = false }) { name ->
+        val n = name.trim()
+        if (n.isNotEmpty()) editor.saveConfiguration(n)
+        naming = false
     }
     if (adding) NameDialog("New parameter", "width", { adding = false }) { name ->
         val n = name.trim()

@@ -30,6 +30,35 @@ class Design {
     /** Features turned off: kept in the history but not built. */
     val suppressed = mutableSetOf<Int>()
 
+    /** A named version of the design: its parameters' expressions and which features are off. */
+    data class Configuration(val name: String, val parameters: Map<String, String>, val suppressed: Set<Int>)
+
+    /** The design's configurations, and the one in use, if any. */
+    val configurations = mutableListOf<Configuration>()
+    var configuration: String? = null
+
+    /** Keeps the parameters and features turned off as they are now, as [name], and uses it. */
+    fun saveConfiguration(name: String) {
+        val c = Configuration(name, parameters.associate { it.name to it.expression }, suppressed.toSet())
+        val i = configurations.indexOfFirst { it.name == name }
+        if (i >= 0) configurations[i] = c else configurations += c
+        configuration = name
+    }
+
+    /** Puts a configuration's parameter values and features turned off in place. Parameters it doesn't have keep theirs. */
+    fun useConfiguration(name: String) {
+        val c = configurations.firstOrNull { it.name == name } ?: return
+        for (i in parameters.indices) c.parameters[parameters[i].name]?.let { parameters[i] = parameters[i].copy(expression = it) }
+        suppressed.clear()
+        suppressed += c.suppressed.filter { id -> list.any { it.id == id } }
+        configuration = name
+    }
+
+    fun removeConfiguration(name: String) {
+        configurations.removeAll { it.name == name }
+        if (configuration == name) configuration = null
+    }
+
     /** Where the faces and edges features use last were, to find them again (see Built.hints). */
     val hints = mutableMapOf<String, DoubleArray>()
     fun nameOf(label: String) = info(label).name ?: label
@@ -48,7 +77,11 @@ class Design {
         features: List<Feature>, marker: Int, bodyInfo: Map<String, BodyInfo> = emptyMap(),
         parameters: List<Parameter> = emptyList(), expressions: Map<Int, Map<String, String>> = emptyMap(),
         suppressed: Set<Int> = emptySet(), hints: Map<String, DoubleArray> = emptyMap(),
+        configurations: List<Configuration> = emptyList(), configuration: String? = null,
     ) {
+        this.configurations.clear()
+        this.configurations += configurations
+        this.configuration = configuration?.takeIf { n -> configurations.any { it.name == n } }
         this.suppressed.clear()
         this.suppressed += suppressed
         this.hints.clear()
@@ -107,6 +140,8 @@ class Design {
         internal val expressions: Map<Int, Map<String, String>>,
         internal val dimensionExpressions: Map<com.rm.parrotmetric.sketch.Constraint.Dimension, String?>,
         internal val suppressed: Set<Int>,
+        internal val configurations: List<Configuration> = emptyList(),
+        internal val configuration: String? = null,
     )
 
     fun snapshot() = Snapshot(
@@ -118,6 +153,8 @@ class Design {
         list.filterIsInstance<SketchFeature>().flatMap { f -> f.sketch.constraints.filterIsInstance<com.rm.parrotmetric.sketch.Constraint.Dimension>() }
             .associateWith { it.expression },
         suppressed.toSet(),
+        configurations.toList(),
+        configuration,
     )
 
     fun restore(s: Snapshot) {
@@ -135,5 +172,8 @@ class Design {
         for ((d, e) in s.dimensionExpressions) d.expression = e
         suppressed.clear()
         suppressed += s.suppressed
+        configurations.clear()
+        configurations += s.configurations
+        configuration = s.configuration
     }
 }
