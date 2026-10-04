@@ -5,6 +5,9 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
@@ -21,6 +24,8 @@ import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerType
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
@@ -73,11 +78,27 @@ fun SketchOverlay(
     val slop = 8 * density
     // How near, on screen, a touch has to be to snap or hit.
     val reach = 16 * density
+    // A finger is down, hiding what's under it, so the magnifier shows; not for a mouse.
+    var touching by remember { mutableStateOf(false) }
 
     Canvas(
         Modifier.fillMaxSize().pointerInput(editor) {
+            // With a mouse, the shape being drawn follows the pointer between clicks.
+            awaitPointerEventScope {
+                while (true) {
+                    val e = awaitPointerEvent()
+                    val c = e.changes.firstOrNull() ?: continue
+                    if (c.type != PointerType.Mouse || c.pressed) continue
+                    when (e.type) {
+                        PointerEventType.Move -> proj.toPlane(c.position)?.let { editor.hover(it.first, it.second, reach * proj.mmPerPixel()) }
+                        PointerEventType.Exit -> editor.hover(null, 0.0, 0.0)
+                    }
+                }
+            }
+        }.pointerInput(editor) {
             awaitEachGesture {
                 val down = awaitFirstDown(requireUnconsumed = false)
+                touching = down.type != PointerType.Mouse
                 fun plane(o: Offset) = proj.toPlane(o)
                 fun tol() = reach * proj.mmPerPixel()
                 var multi = false
@@ -111,6 +132,7 @@ fun SketchOverlay(
                     }
                     event.changes.forEach { it.consume() }
                     if (pressed.isEmpty()) {
+                        touching = false
                         if (!multi) {
                             val up = event.changes.firstOrNull()?.position ?: last
                             val tappedNote = if (!moved && editor.tool in setOf(SketchTool.Select, SketchTool.Dimension)) {
@@ -132,7 +154,7 @@ fun SketchOverlay(
     ) {
         editor.version // Redraw on every change.
         drawSketch(editor, proj, density, measurer)
-        editor.preview?.let { snap ->
+        if (touching) editor.preview?.let { snap ->
             val finger = proj.toScreen(snap.u, snap.v)
             val r = 52 * density
             val lens = Offset(finger.x, (finger.y - 120 * density).coerceAtLeast(r + 8 * density))
@@ -264,6 +286,15 @@ private fun DrawScope.drawSketch(editor: SketchEditor, proj: PlaneProjection, de
             else -> {}
         }
         drawCircle(free, 4.5f * dp * (if (magnified) 0.4f else 1f), end)
+        // Its size as it's drawn, beside the pointer.
+        if (!magnified) liveSize(editor, snap.u, snap.v)?.let { label ->
+            val text = measurer.measure(label, TextStyle(color = Palette.text, fontSize = 13.sp, fontFamily = FontFamily.Monospace))
+            val w = text.size.width + 16 * dp
+            val h = 24 * dp
+            val at = end + Offset(22 * dp, -30 * dp)
+            drawRoundRect(Color(0xFF2C3433), Offset(at.x, at.y - h / 2), Size(w, h), CornerRadius(h / 2))
+            drawText(text, topLeft = Offset(at.x + 8 * dp, at.y - text.size.height / 2))
+        }
     }
 
     // Points: the origin, line ends and centres.
@@ -291,6 +322,51 @@ private fun DrawScope.drawSketch(editor: SketchEditor, proj: PlaneProjection, de
         } else {
             drawGlyph(a.kind, a.centre, dp, if (isChosen) chosen else Palette.yellow)
         }
+    }
+}
+
+/** Sizes in mm as labels show them: up to two decimals, no trailing zeros. */
+private fun mm(v: Double): String {
+    val r = kotlin.math.round(v * 100) / 100
+    return if (r == floor(r)) r.toLong().toString() else r.toString()
+}
+
+private fun degrees(a: Double) = mm(a * 180 / PI) + "°"
+
+/** What the shape being drawn measures with its next point at (u, v), or null before it has a first point. */
+private fun liveSize(editor: SketchEditor, u: Double, v: Double): String? {
+    val s = editor.sketch
+    val p = editor.pending
+    if (p.isEmpty()) return null
+    val x0 = s.x(p[0]); val y0 = s.y(p[0])
+    return when (editor.tool) {
+        SketchTool.Line -> {
+            val a = p.last()
+            val dx = u - s.x(a); val dy = v - s.y(a)
+            mm(hypot(dx, dy)) + "  " + degrees(atan2(dy, dx))
+        }
+        SketchTool.Rectangle -> {
+            val k = if (editor.rectangleFromCentre) 2 else 1
+            mm(kotlin.math.abs(u - x0) * k) + " × " + mm(kotlin.math.abs(v - y0) * k)
+        }
+        SketchTool.Circle -> "⌀ " + mm(2 * hypot(u - x0, v - y0))
+        SketchTool.Polygon -> "R " + mm(hypot(u - x0, v - y0))
+        SketchTool.Arc -> when {
+            editor.arcThroughPoints && p.size == 1 -> mm(hypot(u - x0, v - y0))
+            editor.arcThroughPoints -> circleThrough(x0, y0, s.x(p[1]), s.y(p[1]), u, v)?.let { c -> "R " + mm(hypot(x0 - c.first, y0 - c.second)) }
+            p.size == 1 -> "R " + mm(hypot(u - x0, v - y0))
+            else -> {
+                var sweep = atan2(v - y0, u - x0) - atan2(s.y(p[1]) - y0, s.x(p[1]) - x0)
+                while (sweep <= 0) sweep += 2 * PI
+                degrees(sweep)
+            }
+        }
+        SketchTool.Slot -> if (p.size == 1) mm(hypot(u - x0, v - y0)) else {
+            val bx = s.x(p[1]); val by = s.y(p[1])
+            val len = hypot(bx - x0, by - y0).coerceAtLeast(1e-9)
+            "↕ " + mm(2 * kotlin.math.abs((bx - x0) * (v - y0) - (by - y0) * (u - x0)) / len)
+        }
+        else -> null
     }
 }
 

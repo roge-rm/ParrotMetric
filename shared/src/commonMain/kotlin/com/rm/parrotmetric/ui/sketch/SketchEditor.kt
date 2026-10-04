@@ -146,14 +146,30 @@ class SketchEditor(
 
     // Touches.
 
+    /** This press placed a shape's first point, so lifting without moving leaves the shape waiting for its next. */
+    private var startedShape = false
+    /** Where this press snapped, for a line dragged out away from the chain it was continuing. */
+    private var pressedAt: Snap? = null
+
     /**
      * A finger went down. True if the sketch takes the drag (drawing, or
      * moving a point or curve); false leaves the drag free to pan the view.
+     *
+     * Shapes are dragged out: the press places the first point and lifting
+     * places the next, so one drag makes a line, rectangle or circle. Taps
+     * work too, one point each.
      */
     fun press(u: Double, v: Double, tol: Double): Boolean {
         dragged = false
         if (isDrawing()) {
-            preview = snap(u, v, tol)
+            val s = snap(u, v, tol)
+            preview = s
+            pressedAt = s
+            startedShape = false
+            if (pending.isEmpty() && tool != SketchTool.Point && tool != SketchTool.Spline) {
+                commit(s)
+                startedShape = true
+            }
             return true
         }
         if (tool == SketchTool.Select) {
@@ -169,8 +185,15 @@ class SketchEditor(
         return false
     }
 
+    /** The mouse moved with no button down: the shape being drawn follows it. Null when it leaves the sketch. */
+    fun hover(u: Double?, v: Double, tol: Double) {
+        preview = if (u != null && isDrawing()) snap(u, v, tol) else null
+    }
+
     /** A second finger came down: whatever the first was doing stops. */
     fun cancelPress() {
+        if (startedShape) endDrawing()
+        startedShape = false
         preview = null
         if (dragged) changed()
         dragging = emptyList()
@@ -196,7 +219,18 @@ class SketchEditor(
     /** The finger lifted. [moved] if it went further than a tap. */
     fun release(u: Double, v: Double, tol: Double, moved: Boolean) {
         if (isDrawing()) {
-            commit(snap(u, v, tol))
+            val start = pressedAt
+            // A line dragged out away from the chain's end starts a new chain where the drag began.
+            if (tool == SketchTool.Line && moved && !startedShape && start != null) {
+                val end = pending.lastOrNull()
+                if (end != null && start.point !== end && hypot(start.u - sketch.x(end), start.v - sketch.y(end)) > tol) {
+                    endDrawing()
+                    commit(start)
+                }
+            }
+            if (!(startedShape && !moved)) commit(snap(u, v, tol))
+            startedShape = false
+            pressedAt = null
             preview = null
             return
         }
