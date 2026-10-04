@@ -2,6 +2,7 @@ package com.rm.parrotmetric.design
 
 import com.rm.parrotmetric.sketch.ProfileCurve
 import com.rm.parrotmetric.sketch.SketchPlane
+import com.rm.parrotmetric.sketch.Vec3
 
 /** A failure the person can act on, with a short reason fit to show them. */
 class KernelException(message: String) : Exception(message)
@@ -23,6 +24,14 @@ interface Kernel {
     fun facePlane(body: Long, face: String): DoubleArray?
     fun faceNames(body: Long): List<String>
     fun import(id: Int, data: ByteArray, format: Int): Long
+    fun shell(id: Int, body: Long, open: List<String>, thickness: Double): Long
+    fun draft(id: Int, body: Long, faces: List<String>, neutral: String, angle: Double): Long
+    /** A moved copy, solid or mesh. m is 3x4, rows of rotation then translation. */
+    fun transform(id: Int, body: Long, m: DoubleArray, tag: String): Long
+    /** The pieces either side of a plane through origin. */
+    fun split(id: Int, body: Long, origin: Vec3, normal: Vec3): List<Long>
+    /** The shape holes at these plane points take out; kind is HoleKind's ordinal. */
+    fun holeTool(id: Int, plane: SketchPlane, at: List<Pair<Double, Double>>, diameter: Double, depth: Double, kind: Int, topDiameter: Double, topDepth: Double): Long
     fun retain(body: Long)
     fun release(body: Long)
 }

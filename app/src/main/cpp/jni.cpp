@@ -359,6 +359,114 @@ JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_importBody(JNIEnv* env, jo
     }
 }
 
+JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_shell(JNIEnv* env, jobject, jint id, jlong body, jobjectArray open, jdouble t) {
+    try {
+        std::unique_lock<std::mutex> g(lock);
+        pm::NamedShape s = solidOf(body);
+        g.unlock();
+        pm::Body out;
+        out.solid = pm::shell(id, s, strings(env, open), t);
+        g.lock();
+        return store.add(std::move(out));
+    } catch (const std::exception& e) {
+        fail(env, e.what());
+        return 0;
+    }
+}
+
+JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_draft(JNIEnv* env, jobject, jint id, jlong body, jobjectArray faces, jstring neutral, jdouble angle) {
+    try {
+        const char* c = env->GetStringUTFChars(neutral, nullptr);
+        std::string n(c);
+        env->ReleaseStringUTFChars(neutral, c);
+        std::unique_lock<std::mutex> g(lock);
+        pm::NamedShape s = solidOf(body);
+        g.unlock();
+        pm::Body out;
+        out.solid = pm::draft(id, s, strings(env, faces), n, angle);
+        g.lock();
+        return store.add(std::move(out));
+    } catch (const std::exception& e) {
+        fail(env, e.what());
+        return 0;
+    }
+}
+
+/** A moved copy of a solid or mesh: m is twelve numbers, rows of rotation then translation. */
+JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_transform(JNIEnv* env, jobject, jint id, jlong body, jdoubleArray m, jstring tag) {
+    try {
+        auto mat = doubles(env, m);
+        const char* c = env->GetStringUTFChars(tag, nullptr);
+        std::string t(c);
+        env->ReleaseStringUTFChars(tag, c);
+        std::unique_lock<std::mutex> g(lock);
+        const pm::Body b = store.get(body);
+        g.unlock();
+        pm::Body out;
+        if (b.mesh) out.mesh = b.mesh->transformed(mat.data());
+        else out.solid = pm::transformed(id, *b.solid, mat.data(), t);
+        g.lock();
+        return store.add(std::move(out));
+    } catch (const std::exception& e) {
+        fail(env, e.what());
+        return 0;
+    }
+}
+
+/** The pieces of a solid or mesh either side of a plane: origin and normal, six numbers. */
+JNIEXPORT jlongArray JNICALL Java_com_rm_parrotmetric_Core_split(JNIEnv* env, jobject, jint id, jlong body, jdoubleArray plane) {
+    try {
+        auto p = doubles(env, plane);
+        std::unique_lock<std::mutex> g(lock);
+        const pm::Body b = store.get(body);
+        g.unlock();
+        std::vector<pm::Body> pieces;
+        if (b.mesh) {
+            auto [front, back] = b.mesh->split(p.data(), p.data() + 3);
+            if (front.empty() || back.empty()) throw std::runtime_error("The plane doesn't cut through the body");
+            pm::Body f, k;
+            f.mesh = front;
+            k.mesh = back;
+            pieces.push_back(std::move(f));
+            pieces.push_back(std::move(k));
+        } else {
+            for (auto& n : pm::split(id, *b.solid, gp_Pnt(p[0], p[1], p[2]), gp_Dir(p[3], p[4], p[5]))) {
+                pm::Body piece;
+                piece.solid = std::move(n);
+                pieces.push_back(std::move(piece));
+            }
+        }
+        g.lock();
+        std::vector<jlong> handles;
+        for (auto& piece : pieces) handles.push_back(store.add(std::move(piece)));
+        g.unlock();
+        jlongArray out = env->NewLongArray(jsize(handles.size()));
+        env->SetLongArrayRegion(out, 0, jsize(handles.size()), handles.data());
+        return out;
+    } catch (const std::exception& e) {
+        fail(env, e.what());
+        return nullptr;
+    }
+}
+
+/** The shape holes take out: plane (nine numbers), points as u v pairs, kind 0 simple, 1 counterbore, 2 countersink. */
+JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_holeTool(JNIEnv* env, jobject, jint id, jdoubleArray plane, jdoubleArray points,
+                                                              jdouble diameter, jdouble depth, jint kind, jdouble topDiameter, jdouble topDepth) {
+    try {
+        auto p = doubles(env, plane);
+        auto pts = doubles(env, points);
+        std::vector<std::pair<double, double>> at;
+        for (size_t i = 0; i + 1 < pts.size(); i += 2) at.push_back({pts[i], pts[i + 1]});
+        pm::Body out;
+        out.solid = pm::holeTool(id, planeOf(p.data()), at, diameter, depth, pm::HoleKind(kind), topDiameter, topDepth);
+        std::lock_guard<std::mutex> g(lock);
+        return store.add(std::move(out));
+    } catch (const std::exception& e) {
+        fail(env, e.what());
+        return 0;
+    }
+}
+
 /** A body's face names; none for a mesh. */
 JNIEXPORT jobjectArray JNICALL Java_com_rm_parrotmetric_Core_faceNames(JNIEnv* env, jobject, jlong h) {
     std::unique_lock<std::mutex> g(lock);
@@ -538,9 +646,10 @@ JNIEXPORT jintArray JNICALL Java_com_rm_parrotmetric_Core_selectedRegions(JNIEnv
     return a;
 }
 
-/** Selects edges by name and sketch regions by (sketch, region) pairs, as when editing a feature. */
-JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_select(JNIEnv* env, jobject, jobjectArray edges, jintArray regions) {
+/** Selects edges and faces by name and sketch regions by (sketch, region) pairs, as when editing a feature. */
+JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_select(JNIEnv* env, jobject, jobjectArray edges, jintArray regions, jobjectArray faces) {
     auto names = strings(env, edges);
+    auto faceNames = strings(env, faces);
     auto r = ints(env, regions);
     std::lock_guard<std::mutex> g(lock);
     selection.clear();
@@ -552,6 +661,8 @@ JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_select(JNIEnv* env, jobject
         } else {
             for (uint32_t e = 0; e < s.edgeNames.size(); ++e)
                 if (std::find(names.begin(), names.end(), s.edgeNames[e]) != names.end()) selection.push_back({pm::Pick::Edge, b, e});
+            for (uint32_t f = 0; f < s.faceNames.size(); ++f)
+                if (std::find(faceNames.begin(), faceNames.end(), s.faceNames[f]) != faceNames.end()) selection.push_back({pm::Pick::Face, b, f});
         }
     }
     renderer.setSelection(selection);

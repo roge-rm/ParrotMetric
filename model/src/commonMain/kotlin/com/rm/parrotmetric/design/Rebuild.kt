@@ -76,7 +76,7 @@ class Rebuilder(private val kernel: Kernel) {
 
     private fun build(f: Feature, bodies: List<BodyState>, planes: Map<Int, SketchPlane>, made: Int, all: List<Feature>): Step = when (f) {
         is SketchFeature -> {
-            val plane = resolvePlane(f, bodies)
+            val plane = resolvePlane(f.plane, bodies, f.name)
             keep(bodies)
             Step(f.key(), bodies, planes + (f.id to plane), null, made)
         }
@@ -100,6 +100,165 @@ class Rebuilder(private val kernel: Kernel) {
             keep(bodies)
             Step(f.key(), bodies + BodyState("Body ${made + 1}", h), planes, null, made + 1)
         }
+        is ShellFeature -> {
+            val body = bodyWithFace(f.faces.firstOrNull(), bodies) ?: throw KernelException("Pick the faces to leave open")
+            replace(f, bodies, planes, made, body) { kernel.shell(f.id, body.handle, f.faces, f.thickness) }
+        }
+        is DraftFeature -> {
+            val body = bodyWithFace(f.neutral, bodies) ?: throw KernelException("The face it pivots on isn't there any more")
+            replace(f, bodies, planes, made, body) { kernel.draft(f.id, body.handle, f.faces, f.neutral, f.angle) }
+        }
+        is HoleFeature -> {
+            val sketch = sketchOf(f.sketchId, all)
+            val plane = planes[f.sketchId] ?: throw KernelException("Its sketch couldn't be built")
+            val s = sketch.sketch
+            // The sketch's lone points, not the ends of its curves.
+            val at = s.points.filter { p -> p !== s.origin && s.curves.none { p in it.points() } }.map { s.x(it) to s.y(it) }
+            if (at.isEmpty()) throw KernelException("Its sketch has no points for holes")
+            val tool = kernel.holeTool(f.id, plane, at, f.diameter, f.depth, f.kind.ordinal, f.topDiameter, f.topDepth)
+            applyTool(f, tool, Operation.Cut, bodies, planes, made)
+        }
+        is MirrorFeature -> {
+            val plane = resolvePlane(f.plane, bodies, f.name)
+            val m = Transforms.mirror(plane.origin, plane.normal)
+            copies(f, bodies, planes, made, picked(f.bodies, bodies), f.join) { b -> listOf(kernel.transform(f.id, b.handle, m, "m")) }
+        }
+        is PatternFeature -> {
+            val mats = patternMatrices(f)
+            copies(f, bodies, planes, made, picked(f.bodies, bodies), f.join) { b ->
+                mats.mapIndexed { i, m -> kernel.transform(f.id, b.handle, m, "p$i") }
+            }
+        }
+        is CombineFeature -> combineBodies(f, bodies, planes, made)
+        is SplitFeature -> {
+            val body = bodies.firstOrNull { it.label == f.body } ?: throw KernelException("${f.body} isn't there any more")
+            val plane = resolvePlane(f.plane, bodies, f.name)
+            val pieces = kernel.split(f.id, body.handle, plane.origin, plane.normal)
+            val out = mutableListOf<BodyState>()
+            var count = made
+            for (b in bodies) {
+                if (b != body) { kernel.retain(b.handle); out += b; continue }
+                pieces.forEachIndexed { i, h -> out += if (i == 0) BodyState(b.label, h) else BodyState("Body ${++count}", h) }
+            }
+            Step(f.key(), out, planes, null, count)
+        }
+        is MoveFeature -> {
+            val m = Transforms.then(Transforms.rotate(Transforms.unit(f.axis), f.angle), Transforms.translate(com.rm.parrotmetric.sketch.Vec3(f.dx, f.dy, f.dz)))
+            val chosen = picked(f.bodies, bodies)
+            if (f.copy) copies(f, bodies, planes, made, chosen, false) { b -> listOf(kernel.transform(f.id, b.handle, m, "c")) }
+            else {
+                val out = mutableListOf<BodyState>()
+                try {
+                    for (b in bodies) {
+                        if (b in chosen) out += BodyState(b.label, kernel.transform(f.id, b.handle, m, "t"))
+                        else { kernel.retain(b.handle); out += b }
+                    }
+                } catch (e: KernelException) {
+                    out.forEach { kernel.release(it.handle) }
+                    throw e
+                }
+                Step(f.key(), out, planes, null, made)
+            }
+        }
+        else -> throw KernelException("This version can't build ${f.name}")
+    }
+
+    private fun bodyWithFace(face: String?, bodies: List<BodyState>): BodyState? =
+        face?.let { n -> bodies.firstOrNull { n in kernel.faceNames(it.handle) } }
+
+    /** The bodies named, or all of them when none are. */
+    private fun picked(labels: BodyPick, bodies: List<BodyState>): List<BodyState> {
+        if (labels.isEmpty()) return bodies
+        val out = bodies.filter { it.label in labels }
+        if (out.isEmpty()) throw KernelException("Its bodies aren't there any more")
+        return out
+    }
+
+    /** One body changed by an operation, the rest kept. */
+    private fun replace(f: Feature, bodies: List<BodyState>, planes: Map<Int, SketchPlane>, made: Int, body: BodyState, op: () -> Long): Step {
+        val h = op()
+        val out = bodies.map { b -> if (b == body) BodyState(b.label, h) else b.also { kernel.retain(it.handle) } }
+        return Step(f.key(), out, planes, null, made)
+    }
+
+    /** Copies of chosen bodies, joined to their body or added as new bodies. */
+    private fun copies(
+        f: Feature, bodies: List<BodyState>, planes: Map<Int, SketchPlane>, made: Int, chosen: List<BodyState>, join: Boolean,
+        make: (BodyState) -> List<Long>,
+    ): Step {
+        val out = mutableListOf<BodyState>()
+        val added = mutableListOf<BodyState>()
+        var count = made
+        try {
+            for (b in bodies) {
+                if (b !in chosen) { kernel.retain(b.handle); out += b; continue }
+                val made2 = make(b)
+                if (join) {
+                    var joined = b.handle
+                    kernel.retain(joined)
+                    for (h in made2) {
+                        val next = try { kernel.combine(f.id, joined, h, Operation.Join) } finally { kernel.release(h) }
+                        kernel.release(joined)
+                        joined = next
+                    }
+                    out += BodyState(b.label, joined)
+                } else {
+                    kernel.retain(b.handle)
+                    out += b
+                    for (h in made2) added += BodyState("Body ${++count}", h)
+                }
+            }
+        } catch (e: KernelException) {
+            (out + added).forEach { kernel.release(it.handle) }
+            throw e
+        }
+        return Step(f.key(), out + added, planes, null, count)
+    }
+
+    private fun patternMatrices(f: PatternFeature): List<DoubleArray> {
+        if (f.count < 1 || f.count > 500 || f.count2 < 1 || f.count2 > 500) throw KernelException("Use between 1 and 500 copies")
+        val out = mutableListOf<DoubleArray>()
+        if (f.circular) {
+            val full = kotlin.math.abs(kotlin.math.abs(f.angle) - 2 * kotlin.math.PI) < 1e-9
+            val step = if (full) f.angle / f.count else f.angle / (f.count - 1).coerceAtLeast(1)
+            for (i in 1 until f.count) out += Transforms.rotate(Transforms.unit(f.axis), step * i)
+        } else {
+            val d1 = Transforms.unit(f.axis)
+            val d2 = f.axis2?.let { Transforms.unit(it) }
+            for (i in 0 until f.count) for (j in 0 until (if (d2 != null) f.count2 else 1)) {
+                if (i == 0 && j == 0) continue
+                var v = d1 * (f.spacing * i)
+                if (d2 != null) v += d2 * (f.spacing2 * j)
+                out += Transforms.translate(v)
+            }
+        }
+        return out
+    }
+
+    private fun combineBodies(f: CombineFeature, bodies: List<BodyState>, planes: Map<Int, SketchPlane>, made: Int): Step {
+        val target = bodies.firstOrNull { it.label == f.target } ?: throw KernelException("${f.target} isn't there any more")
+        val tools = bodies.filter { it.label in f.tools && it != target }
+        if (tools.isEmpty()) throw KernelException("Pick the bodies to combine with")
+        var result = target.handle
+        kernel.retain(result)
+        try {
+            for (t in tools) {
+                val next = kernel.combine(f.id, result, t.handle, f.operation)
+                kernel.release(result)
+                result = next
+            }
+        } catch (e: KernelException) {
+            kernel.release(result)
+            throw e
+        }
+        val out = bodies.mapNotNull { b ->
+            when {
+                b == target -> BodyState(b.label, result)
+                b in tools && !f.keepTools -> null
+                else -> b.also { kernel.retain(it.handle) }
+            }
+        }
+        return Step(f.key(), out, planes, null, made)
     }
 
     private fun keep(bodies: List<BodyState>) = bodies.forEach { kernel.retain(it.handle) }
@@ -107,7 +266,7 @@ class Rebuilder(private val kernel: Kernel) {
     private fun sketchOf(id: Int, all: List<Feature>): SketchFeature =
         all.firstOrNull { it.id == id } as? SketchFeature ?: throw KernelException("Its sketch has been deleted")
 
-    private fun resolvePlane(f: SketchFeature, bodies: List<BodyState>): SketchPlane = when (val p = f.plane) {
+    private fun resolvePlane(ref: PlaneRef, bodies: List<BodyState>, name: String): SketchPlane = when (val p = ref) {
         is PlaneRef.Fixed -> p.plane
         is PlaneRef.OnFace -> {
             val body = bodies.firstOrNull { p.face in kernel.faceNames(it.handle) }

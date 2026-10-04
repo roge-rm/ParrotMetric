@@ -3,6 +3,7 @@ package com.rm.parrotmetric.design
 import com.rm.parrotmetric.sketch.ProfileCurve
 import com.rm.parrotmetric.sketch.Sketch
 import com.rm.parrotmetric.sketch.SketchPlane
+import com.rm.parrotmetric.sketch.Vec3
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -61,6 +62,24 @@ private class FakeKernel : Kernel {
     override fun facePlane(body: Long, face: String) = doubleArrayOf(0.0, 0.0, 10.0, 0.0, 0.0, 1.0)
     override fun faceNames(body: Long) = bodies.getValue(body).faces
     override fun import(id: Int, data: ByteArray, format: Int) = make(Box(0.0, 1.0, listOf("F$id.i0")))
+    override fun shell(id: Int, body: Long, open: List<String>, thickness: Double) = make(bodies.getValue(body))
+    override fun draft(id: Int, body: Long, faces: List<String>, neutral: String, angle: Double) = make(bodies.getValue(body))
+
+    /** Moves along x by the matrix's x translation, or mirrors when the first entry is negative. */
+    override fun transform(id: Int, body: Long, m: DoubleArray, tag: String): Long {
+        calls += "transform $id $tag"
+        val b = bodies.getValue(body)
+        return if (m[0] < 0) make(Box(-b.to, -b.from, b.faces)) else make(Box(b.from + m[3], b.to + m[3], b.faces))
+    }
+
+    override fun split(id: Int, body: Long, origin: Vec3, normal: Vec3): List<Long> {
+        val b = bodies.getValue(body)
+        if (origin.x <= b.from || origin.x >= b.to) throw KernelException("The plane doesn't cut through the body")
+        return listOf(make(Box(b.from, origin.x, b.faces)), make(Box(origin.x, b.to, b.faces)))
+    }
+
+    override fun holeTool(id: Int, plane: SketchPlane, at: List<Pair<Double, Double>>, diameter: Double, depth: Double, kind: Int, topDiameter: Double, topDepth: Double) =
+        make(Box(at.minOf { it.first }, at.maxOf { it.first } + diameter, emptyList()))
     override fun retain(body: Long) { counts[body] = counts.getValue(body) + 1 }
     override fun release(body: Long) {
         val n = counts.getValue(body) - 1
@@ -182,5 +201,39 @@ class RebuildTest {
     fun edgeNamesSplitOnlyBetweenFaces() {
         val r = Rebuilder(FakeKernel())
         assertEquals(listOf("F2.r(F1.end|F1.s1)", "F1.s2"), r.facesOf("F2.r(F1.end|F1.s1)|F1.s2"))
+    }
+
+    @Test
+    fun mirrorsAndPatternsJoinOrAddBodies() {
+        val k = FakeKernel()
+        val d = Design()
+        extrude(d, sketchAt(d, 0.0, 10.0), Operation.NewBody)
+        d.add(MirrorFeature(d.newId(), "Mirror", emptyList(), PlaneRef.Fixed(SketchPlane.Right), join = false))
+        val r = Rebuilder(k)
+        assertEquals(2, r.rebuild(d.active).bodies.size)
+        d.add(PatternFeature(d.newId(), "Pattern", listOf("Body 1"), false, Axis3.X, 3, 20.0, 0.0, null, 1, 0.0, join = false))
+        val built = r.rebuild(d.active)
+        assertEquals(listOf("Body 1", "Body 2", "Body 3", "Body 4"), built.bodies.map { it.label })
+        assertEquals(40.0, k.bodies.getValue(built.bodies.last().handle).from)
+        r.clear()
+        assertTrue(k.bodies.isEmpty())
+    }
+
+    @Test
+    fun combineSplitAndMove() {
+        val k = FakeKernel()
+        val d = Design()
+        extrude(d, sketchAt(d, 0.0, 10.0), Operation.NewBody)
+        extrude(d, sketchAt(d, 50.0, 10.0), Operation.NewBody)
+        d.add(CombineFeature(d.newId(), "Combine", "Body 1", listOf("Body 2"), Operation.Join, keepTools = false))
+        d.add(SplitFeature(d.newId(), "Split", "Body 1", PlaneRef.Fixed(SketchPlane("x=30", Vec3(30.0, 0.0, 0.0), Vec3(0.0, 1.0, 0.0), Vec3(0.0, 0.0, 1.0)))))
+        d.add(MoveFeature(d.newId(), "Move", listOf("Body 3"), 5.0, 0.0, 0.0, Axis3.Z, 0.0, copy = true))
+        val r = Rebuilder(k)
+        val built = r.rebuild(d.active)
+        assertTrue(built.errors.isEmpty(), built.errors.toString())
+        assertEquals(listOf("Body 1", "Body 3", "Body 4"), built.bodies.map { it.label })
+        assertEquals(35.0, k.bodies.getValue(built.bodies[2].handle).from)
+        r.clear()
+        assertTrue(k.bodies.isEmpty())
     }
 }

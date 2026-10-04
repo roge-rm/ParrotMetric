@@ -49,6 +49,36 @@ NamedShape fillet(int id, const NamedShape& body, const std::vector<std::string>
 /** Bevels the named edges by distance. New faces are F<id>.c(<edge name>). */
 NamedShape chamfer(int id, const NamedShape& body, const std::vector<std::string>& edges, double distance);
 
+/** Hollows a solid to walls `thickness` thick inside it, leaving the named faces open. */
+NamedShape shell(int id, const NamedShape& body, const std::vector<std::string>& open, double thickness);
+
+/**
+ * Tilts the named faces by angle radians, pivoting where they meet the
+ * named neutral face and pulling along its normal.
+ */
+NamedShape draft(int id, const NamedShape& body, const std::vector<std::string>& faces, const std::string& neutral, double angle);
+
+/**
+ * A moved copy of a body: m is a 3x4 matrix, rows of rotation then
+ * translation. Faces are named F<id>.<tag>(<old name>).
+ */
+NamedShape transformed(int id, const NamedShape& body, const double m[12], const std::string& tag);
+
+/** The solid pieces of a body on each side of a plane. */
+std::vector<NamedShape> split(int id, const NamedShape& body, const gp_Pnt& origin, const gp_Dir& normal);
+
+/** How a hole's top is shaped. */
+enum class HoleKind { Simple, Counterbore, Countersink };
+
+/**
+ * The shape a set of holes takes out: one per (u, v) on the plane, going in
+ * against its normal. depth 0 goes right through (2 m). A counterbore is a
+ * wider step `topDepth` deep; a countersink a 90 degree cone `topDiameter`
+ * across at the top.
+ */
+NamedShape holeTool(int id, const gp_Ax3& plane, const std::vector<std::pair<double, double>>& at, double diameter, double depth,
+                    HoleKind kind, double topDiameter, double topDepth);
+
 /** The plane of a named flat face, facing out, with x as given if it lies in the plane. Throws if the face isn't flat. */
 gp_Ax3 facePlane(const NamedShape& body, const std::string& face);
 

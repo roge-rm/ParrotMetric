@@ -1,6 +1,16 @@
 package com.rm.parrotmetric.io
 
+import com.rm.parrotmetric.design.Axis3
 import com.rm.parrotmetric.design.AxisRef
+import com.rm.parrotmetric.design.CombineFeature
+import com.rm.parrotmetric.design.DraftFeature
+import com.rm.parrotmetric.design.HoleFeature
+import com.rm.parrotmetric.design.HoleKind
+import com.rm.parrotmetric.design.MirrorFeature
+import com.rm.parrotmetric.design.MoveFeature
+import com.rm.parrotmetric.design.PatternFeature
+import com.rm.parrotmetric.design.ShellFeature
+import com.rm.parrotmetric.design.SplitFeature
 import com.rm.parrotmetric.design.ChamferFeature
 import com.rm.parrotmetric.design.Design
 import com.rm.parrotmetric.design.ExtrudeFeature
@@ -77,13 +87,24 @@ object DesignFile {
         }
         val base = mapOf("id" to f.id, "name" to f.name)
         val extra: Map<String, Any?> = when (f) {
-            is SketchFeature -> mapOf(
-                "type" to "sketch",
-                "plane" to when (val p = f.plane) {
-                    is PlaneRef.Fixed -> mapOf("name" to p.plane.name, "origin" to vec(p.plane.origin), "x" to vec(p.plane.x), "y" to vec(p.plane.y))
-                    is PlaneRef.OnFace -> mapOf("face" to p.face, "x" to vec(p.x))
-                },
-                "sketch" to sketch(f.sketch),
+            is SketchFeature -> mapOf("type" to "sketch", "plane" to plane(f.plane), "sketch" to sketch(f.sketch))
+            is ShellFeature -> mapOf("type" to "shell", "faces" to f.faces, "thickness" to f.thickness)
+            is DraftFeature -> mapOf("type" to "draft", "faces" to f.faces, "neutral" to f.neutral, "angle" to f.angle)
+            is HoleFeature -> mapOf(
+                "type" to "hole", "sketch" to f.sketchId, "diameter" to f.diameter, "depth" to f.depth, "kind" to f.kind.name,
+                "topDiameter" to f.topDiameter, "topDepth" to f.topDepth,
+            )
+            is MirrorFeature -> mapOf("type" to "mirror", "bodies" to f.bodies, "plane" to plane(f.plane), "join" to f.join)
+            is PatternFeature -> mapOf(
+                "type" to "pattern", "bodies" to f.bodies, "circular" to f.circular, "axis" to f.axis.name, "count" to f.count,
+                "spacing" to f.spacing, "angle" to f.angle, "axis2" to f.axis2?.name, "count2" to f.count2, "spacing2" to f.spacing2, "join" to f.join,
+            )
+            is CombineFeature -> mapOf(
+                "type" to "combine", "target" to f.target, "tools" to f.tools, "operation" to f.operation.name, "keepTools" to f.keepTools,
+            )
+            is SplitFeature -> mapOf("type" to "split", "body" to f.body, "plane" to plane(f.plane))
+            is MoveFeature -> mapOf(
+                "type" to "move", "bodies" to f.bodies, "dx" to f.dx, "dy" to f.dy, "dz" to f.dz, "axis" to f.axis.name, "angle" to f.angle, "copy" to f.copy,
             )
             is ExtrudeFeature -> mapOf(
                 "type" to "extrude", "sketch" to f.sketchId, "regions" to writeRegions(f.regions),
@@ -112,12 +133,22 @@ object DesignFile {
         val type = o.str("type")
         extraCodecs.firstOrNull { it.type == type }?.let { return it.read(o) ?: throw IllegalArgumentException("Can't read $name") }
         return when (type) {
-            "sketch" -> {
-                val p = o.obj("plane")
-                val plane = if (p["face"] != null) PlaneRef.OnFace(p.str("face"), vec(p["x"]))
-                else PlaneRef.Fixed(SketchPlane(p.str("name"), vec(p["origin"]), vec(p["x"]), vec(p["y"])))
-                SketchFeature(id, name, plane, sketch(o.obj("sketch")))
-            }
+            "sketch" -> SketchFeature(id, name, plane(o.obj("plane")), sketch(o.obj("sketch")))
+            "shell" -> ShellFeature(id, name, strings(o.arr("faces")), o.num("thickness"))
+            "draft" -> DraftFeature(id, name, strings(o.arr("faces")), o.str("neutral"), o.num("angle"))
+            "hole" -> HoleFeature(
+                id, name, o.int("sketch"), o.num("diameter"), o.num("depth"), HoleKind.valueOf(o.str("kind")), o.num("topDiameter"), o.num("topDepth"),
+            )
+            "mirror" -> MirrorFeature(id, name, strings(o.arr("bodies")), plane(o.obj("plane")), o.bool("join"))
+            "pattern" -> PatternFeature(
+                id, name, strings(o.arr("bodies")), o.bool("circular"), Axis3.valueOf(o.str("axis")), o.int("count"), o.num("spacing"), o.num("angle"),
+                (o["axis2"] as? Json.Str)?.let { Axis3.valueOf(it.value) }, o.int("count2"), o.num("spacing2"), o.bool("join"),
+            )
+            "combine" -> CombineFeature(id, name, o.str("target"), strings(o.arr("tools")), Operation.valueOf(o.str("operation")), o.bool("keepTools"))
+            "split" -> SplitFeature(id, name, o.str("body"), plane(o.obj("plane")))
+            "move" -> MoveFeature(
+                id, name, strings(o.arr("bodies")), o.num("dx"), o.num("dy"), o.num("dz"), Axis3.valueOf(o.str("axis")), o.num("angle"), o.bool("copy"),
+            )
             "extrude" -> ExtrudeFeature(
                 id, name, o.int("sketch"), readRegions(o.arr("regions")), o.num("forward"), o.num("back"), Operation.valueOf(o.str("operation")),
             )
@@ -135,6 +166,17 @@ object DesignFile {
             else -> throw IllegalArgumentException("This file has a step this version can't read: $type")
         }
     }
+
+    private fun strings(j: List<Json>) = j.map { (it as Json.Str).value }
+
+    private fun plane(p: PlaneRef): Map<String, Any?> = when (p) {
+        is PlaneRef.Fixed -> mapOf("name" to p.plane.name, "origin" to vec(p.plane.origin), "x" to vec(p.plane.x), "y" to vec(p.plane.y))
+        is PlaneRef.OnFace -> mapOf("face" to p.face, "x" to vec(p.x))
+    }
+
+    private fun plane(p: Json.Obj): PlaneRef =
+        if (p["face"] != null) PlaneRef.OnFace(p.str("face"), vec(p["x"]))
+        else PlaneRef.Fixed(SketchPlane(p.str("name"), vec(p["origin"]), vec(p["x"]), vec(p["y"])))
 
     // Sketches: points, curves and constraints, each referring to the others by id.
 

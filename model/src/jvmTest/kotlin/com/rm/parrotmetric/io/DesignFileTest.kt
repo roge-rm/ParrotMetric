@@ -52,6 +52,26 @@ class DesignFileTest {
     }
 
     @Test
+    fun modifyStepsComeBackTheSame() {
+        val d = Design()
+        val top = PlaneRef.Fixed(SketchPlane.Top)
+        val features = listOf(
+            com.rm.parrotmetric.design.ShellFeature(d.newId(), "Shell", listOf("F1.end"), 2.0),
+            com.rm.parrotmetric.design.DraftFeature(d.newId(), "Draft", listOf("F1.s1"), "F1.start", 0.1),
+            com.rm.parrotmetric.design.HoleFeature(d.newId(), "Hole", 1, 4.0, 0.0, com.rm.parrotmetric.design.HoleKind.Countersink, 8.0, 0.0),
+            com.rm.parrotmetric.design.MirrorFeature(d.newId(), "Mirror", listOf("Body 1"), top, true),
+            com.rm.parrotmetric.design.PatternFeature(d.newId(), "Pattern", emptyList(), false, com.rm.parrotmetric.design.Axis3.X, 3, 10.0, 0.0, com.rm.parrotmetric.design.Axis3.Y, 2, 5.0, false),
+            com.rm.parrotmetric.design.CombineFeature(d.newId(), "Combine", "Body 1", listOf("Body 2"), Operation.Cut, true),
+            com.rm.parrotmetric.design.SplitFeature(d.newId(), "Split", "Body 1", PlaneRef.OnFace("F1.s2", Vec3(0.0, 1.0, 0.0))),
+            com.rm.parrotmetric.design.MoveFeature(d.newId(), "Move", listOf("Body 3"), 1.0, 2.0, 3.0, com.rm.parrotmetric.design.Axis3.Z, 0.5, true),
+        )
+        features.forEach { d.add(it) }
+        val back = Design()
+        DesignFile.read(DesignFile.write(d, "x"), back)
+        assertEquals(features, back.features)
+    }
+
+    @Test
     fun otherFilesAreTurnedAway() {
         assertFailsWith<IllegalArgumentException> { DesignFile.read("{\"format\":\"something\"}", Design()) }
         assertFailsWith<IllegalArgumentException> { DesignFile.read("not json", Design()) }

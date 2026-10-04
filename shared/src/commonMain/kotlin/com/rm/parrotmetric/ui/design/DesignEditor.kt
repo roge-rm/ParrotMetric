@@ -4,7 +4,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.rm.parrotmetric.design.Axis3
 import com.rm.parrotmetric.design.AxisRef
+import com.rm.parrotmetric.design.CombineFeature
+import com.rm.parrotmetric.design.DraftFeature
+import com.rm.parrotmetric.design.HoleFeature
+import com.rm.parrotmetric.design.HoleKind
+import com.rm.parrotmetric.design.MirrorFeature
+import com.rm.parrotmetric.design.MoveFeature
+import com.rm.parrotmetric.design.PatternFeature
+import com.rm.parrotmetric.design.ShellFeature
+import com.rm.parrotmetric.design.SplitFeature
 import com.rm.parrotmetric.design.Built
 import com.rm.parrotmetric.design.ChamferFeature
 import com.rm.parrotmetric.design.Design
@@ -45,7 +55,7 @@ interface Viewport {
     fun selectedFaces(): List<Pair<Int, String>>
     /** Selected sketch areas as sketch number (in the order shown) and area number. */
     fun selectedRegions(): List<Pair<Int, Int>>
-    fun select(edges: List<String>, regions: List<Pair<Int, Int>>)
+    fun select(edges: List<String>, regions: List<Pair<Int, Int>>, faces: List<String> = emptyList())
     fun clearSelection()
     fun viewFrom(yaw: Float, pitch: Float)
     fun fit()
@@ -263,7 +273,7 @@ class DesignEditor(
         val f = draft.feature() ?: return active
         val i = active.indexOfFirst { it.id == f.id }
         return when {
-            draft is EdgeDraft -> if (i >= 0) active.subList(0, i) else active
+            draft is EdgeDraft || draft is FaceDraft -> if (i >= 0) active.subList(0, i) else active
             i >= 0 -> active.toMutableList().also { it[i] = f }
             else -> active + f
         }
@@ -304,6 +314,56 @@ class DesignEditor(
         rebuild()
     }
 
+    fun startShell() = openFaces(FaceDraft(null, tilt = false))
+    fun startDraft() = openFaces(FaceDraft(null, tilt = true))
+
+    private fun openFaces(d: FaceDraft) {
+        d.faces = viewport.selectedFaces().map { it.second }
+        panel = d
+        rebuild()
+    }
+
+    fun startHole() {
+        panel = HoleDraft(null)
+        rebuild()
+    }
+
+    fun startMirror() = openBodies(MirrorDraft(null))
+    fun startPattern() = openBodies(PatternDraft(null))
+    fun startCombine() = openBodies(CombineDraft(null))
+    fun startSplit() = openBodies(SplitDraft(null))
+    fun startMove() = openBodies(MoveDraft(null))
+
+    private fun openBodies(d: BodyDraft) {
+        d.planes = planeChoices()
+        d.bodies = pickedBodies()
+        panel = d
+        rebuild()
+    }
+
+    /** Bodies under the selected faces, in the order they were tapped. */
+    private fun pickedBodies(): List<String> {
+        val bodies = built?.bodies ?: return emptyList()
+        return viewport.selectedFaces().mapNotNull { bodies.getOrNull(it.first)?.label }.distinct()
+    }
+
+    /** Planes to mirror or split across: the origin planes, and the selected flat face if there is one. */
+    private fun planeChoices(): List<Pair<String, PlaneRef>> {
+        val out = mutableListOf(
+            "Top" to PlaneRef.Fixed(SketchPlane.Top) as PlaneRef,
+            "Front" to PlaneRef.Fixed(SketchPlane.Front),
+            "Right" to PlaneRef.Fixed(SketchPlane.Right),
+        )
+        viewport.selectedFaces().firstOrNull()?.let { out += "The face" to PlaneRef.OnFace(it.second, Vec3(1.0, 0.0, 0.0)) }
+        return out
+    }
+
+    /** Sketches with lone points, for holes, newest first. */
+    fun holeSketches(): List<SketchFeature> = design.active.filterIsInstance<SketchFeature>().filter { f ->
+        val s = f.sketch
+        s.points.any { p -> p !== s.origin && s.curves.none { p in it.points() } }
+    }.reversed()
+
     /** Opens a feature's panel to change it. */
     fun edit(id: Int): Feature? {
         val f = design.feature(id) ?: return null
@@ -312,7 +372,19 @@ class DesignEditor(
             is RevolveFeature -> RevolveDraft(f)
             is FilletFeature -> EdgeDraft(f, chamfer = false)
             is ChamferFeature -> EdgeDraft(f, chamfer = true)
+            is ShellFeature -> FaceDraft(f, tilt = false)
+            is DraftFeature -> FaceDraft(f, tilt = true)
+            is HoleFeature -> HoleDraft(f)
+            is MirrorFeature -> MirrorDraft(f)
+            is PatternFeature -> PatternDraft(f)
+            is CombineFeature -> CombineDraft(f)
+            is SplitFeature -> SplitDraft(f)
+            is MoveFeature -> MoveDraft(f)
             else -> return f
+        }
+        if (d is BodyDraft) d.planes = planeChoices().let { choices ->
+            val own = (f as? MirrorFeature)?.plane ?: (f as? SplitFeature)?.plane
+            if (own != null && choices.none { it.second == own }) choices + ("Its face" to own) else choices
         }
         panel = d
         rebuild()
@@ -337,6 +409,21 @@ class DesignEditor(
                 rebuild()
             }
             is EdgeDraft -> d.edges = viewport.selectedEdges()
+            is FaceDraft -> {
+                val faces = viewport.selectedFaces().map { it.second }
+                if (d.tilt && d.pickingPivot) {
+                    faces.lastOrNull()?.let { d.neutral = it }
+                    d.pickingPivot = false
+                    viewport.select(emptyList(), emptyList())
+                } else d.faces = faces
+            }
+            is BodyDraft -> {
+                val picked = pickedBodies()
+                if (picked.isNotEmpty() || viewport.selectedFaces().isEmpty()) {
+                    d.bodies = picked
+                    rebuild()
+                }
+            }
             else -> {}
         }
     }
@@ -355,6 +442,7 @@ class DesignEditor(
                 viewport.select(emptyList(), pairs)
             }
             is EdgeDraft -> viewport.select(d.edges, emptyList())
+            is FaceDraft -> viewport.select(emptyList(), emptyList(), d.faces + listOfNotNull(d.neutral))
         }
     }
 
@@ -450,6 +538,118 @@ class DesignEditor(
             if (regions.isEmpty()) return null
             return RevolveFeature(id, name, s, regions, axis, degrees * PI / 180, operation)
         }
+    }
+
+    private fun nextName(prefix: String, count: Int) = "$prefix ${count + 1}"
+
+    /** Shell (faces left open) or Draft (faces tilted, and the face they pivot on). */
+    inner class FaceDraft(editing: Feature?, val tilt: Boolean) : FeatureDraft() {
+        val id = editing?.id ?: newId()
+        private val name = editing?.name ?: if (tilt) nextName("Draft", design.features.count { it is DraftFeature })
+        else nextName("Shell", design.features.count { it is ShellFeature })
+        var faces by mutableStateOf<List<String>>(emptyList())
+        var neutral by mutableStateOf<String?>(null)
+        var pickingPivot by mutableStateOf(false)
+        var size by mutableStateOf(if (tilt) 3.0 else 2.0)  // Degrees for a draft, mm for a shell.
+
+        init {
+            when (editing) {
+                is ShellFeature -> { faces = editing.faces; size = editing.thickness }
+                is DraftFeature -> { faces = editing.faces; neutral = editing.neutral; size = editing.angle * 180 / PI }
+                else -> {}
+            }
+        }
+
+        override fun feature(): Feature? = if (tilt) {
+            val n = neutral
+            if (faces.isEmpty() || n == null) null else DraftFeature(id, name, faces - n, n, size * PI / 180)
+        } else {
+            if (faces.isEmpty()) null else ShellFeature(id, name, faces, size)
+        }
+
+        override fun missing() = if (tilt && neutral == null) "Pick the face they pivot on" else "Tap the faces"
+    }
+
+    inner class HoleDraft(editing: HoleFeature?) : FeatureDraft() {
+        val id = editing?.id ?: newId()
+        private val name = editing?.name ?: nextName("Hole", design.features.count { it is HoleFeature })
+        var sketchId by mutableStateOf(editing?.sketchId ?: holeSketches().firstOrNull()?.id)
+        var diameter by mutableStateOf(editing?.diameter ?: 3.0)
+        var depth by mutableStateOf(editing?.depth ?: 10.0)
+        var through by mutableStateOf(editing?.depth == 0.0)
+        var kind by mutableStateOf(editing?.kind ?: HoleKind.Simple)
+        var topDiameter by mutableStateOf(editing?.topDiameter ?: 6.0)
+        var topDepth by mutableStateOf(editing?.topDepth ?: 3.0)
+
+        override fun feature(): Feature? {
+            val s = sketchId ?: return null
+            return HoleFeature(id, name, s, diameter, if (through) 0.0 else depth, kind, topDiameter, topDepth)
+        }
+
+        override fun missing() = "Draw points with the Point tool in a sketch first"
+    }
+
+    /** Features that work on whole bodies. An empty pick means every body, except where noted. */
+    abstract inner class BodyDraft(editing: Feature?) : FeatureDraft() {
+        val id = editing?.id ?: newId()
+        var bodies by mutableStateOf<List<String>>(emptyList())
+        var planes: List<Pair<String, PlaneRef>> = emptyList()
+        override fun missing() = "Tap a face of each body to use"
+    }
+
+    inner class MirrorDraft(editing: MirrorFeature?) : BodyDraft(editing) {
+        private val name = editing?.name ?: nextName("Mirror", design.features.count { it is MirrorFeature })
+        var plane by mutableStateOf<PlaneRef>(editing?.plane ?: PlaneRef.Fixed(SketchPlane.Right))
+        var join by mutableStateOf(editing?.join ?: true)
+        init { if (editing != null) bodies = editing.bodies }
+        override fun feature() = MirrorFeature(id, name, bodies, plane, join)
+    }
+
+    inner class PatternDraft(editing: PatternFeature?) : BodyDraft(editing) {
+        private val name = editing?.name ?: nextName("Pattern", design.features.count { it is PatternFeature })
+        var circular by mutableStateOf(editing?.circular ?: false)
+        var axis by mutableStateOf(editing?.axis ?: Axis3.X)
+        var count by mutableStateOf((editing?.count ?: 3).toDouble())
+        var spacing by mutableStateOf(editing?.spacing ?: 20.0)
+        var degrees by mutableStateOf((editing?.angle ?: (2 * PI)) * 180 / PI)
+        var axis2 by mutableStateOf<Axis3?>(editing?.axis2)
+        var count2 by mutableStateOf((editing?.count2 ?: 2).toDouble())
+        var spacing2 by mutableStateOf(editing?.spacing2 ?: 20.0)
+        var join by mutableStateOf(editing?.join ?: true)
+        init { if (editing != null) bodies = editing.bodies }
+        override fun feature() = PatternFeature(
+            id, name, bodies, circular, axis, count.toInt(), spacing, degrees * PI / 180, axis2, count2.toInt(), spacing2, join,
+        )
+    }
+
+    inner class CombineDraft(editing: CombineFeature?) : BodyDraft(editing) {
+        private val name = editing?.name ?: nextName("Combine", design.features.count { it is CombineFeature })
+        var operation by mutableStateOf(editing?.operation ?: Operation.Join)
+        var keepTools by mutableStateOf(editing?.keepTools ?: false)
+        init { if (editing != null) bodies = listOf(editing.target) + editing.tools }
+        override fun feature(): Feature? =
+            if (bodies.size < 2) null else CombineFeature(id, name, bodies[0], bodies.drop(1), operation, keepTools)
+        override fun missing() = "Tap a face of the body to keep, then of each body to combine with it"
+    }
+
+    inner class SplitDraft(editing: SplitFeature?) : BodyDraft(editing) {
+        private val name = editing?.name ?: nextName("Split", design.features.count { it is SplitFeature })
+        var plane by mutableStateOf<PlaneRef>(editing?.plane ?: PlaneRef.Fixed(SketchPlane.Right))
+        init { if (editing != null) bodies = listOf(editing.body) }
+        override fun feature(): Feature? = bodies.firstOrNull()?.let { SplitFeature(id, name, it, plane) }
+        override fun missing() = "Tap a face of the body to split"
+    }
+
+    inner class MoveDraft(editing: MoveFeature?) : BodyDraft(editing) {
+        private val name = editing?.name ?: nextName("Move", design.features.count { it is MoveFeature })
+        var dx by mutableStateOf(editing?.dx ?: 0.0)
+        var dy by mutableStateOf(editing?.dy ?: 0.0)
+        var dz by mutableStateOf(editing?.dz ?: 0.0)
+        var axis by mutableStateOf(editing?.axis ?: Axis3.Z)
+        var degrees by mutableStateOf((editing?.angle ?: 0.0) * 180 / PI)
+        var copy by mutableStateOf(editing?.copy ?: false)
+        init { if (editing != null) bodies = editing.bodies }
+        override fun feature() = MoveFeature(id, name, bodies, dx, dy, dz, axis, degrees * PI / 180, copy)
     }
 
     inner class EdgeDraft(editing: Feature?, val chamfer: Boolean) : FeatureDraft() {

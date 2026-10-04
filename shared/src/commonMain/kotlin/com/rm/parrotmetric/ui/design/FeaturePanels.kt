@@ -8,6 +8,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -57,11 +60,24 @@ fun FeaturePanel(editor: DesignEditor) {
     val d = editor.panel ?: return
     Surface(color = Palette.surface, shape = RoundedCornerShape(26.dp)) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            // Long panels scroll, so the model stays in view above them.
+            Column(
+                Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
             when (d) {
                 is DesignEditor.ExtrudeDraft -> ExtrudeSettings(editor, d)
                 is DesignEditor.RevolveDraft -> RevolveSettings(editor, d)
                 is DesignEditor.EdgeDraft -> EdgeSettings(editor, d)
+                is DesignEditor.FaceDraft -> FaceSettings(editor, d)
+                is DesignEditor.HoleDraft -> HoleSettings(editor, d)
+                is DesignEditor.MirrorDraft -> MirrorSettings(editor, d)
+                is DesignEditor.PatternDraft -> PatternSettings(editor, d)
+                is DesignEditor.CombineDraft -> CombineSettings(editor, d)
+                is DesignEditor.SplitDraft -> SplitSettings(editor, d)
+                is DesignEditor.MoveDraft -> MoveSettings(editor, d)
                 else -> {}
+            }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button("Cancel", Palette.raised, Palette.text, Modifier.weight(1f)) { editor.cancelPanel() }
@@ -72,7 +88,7 @@ fun FeaturePanel(editor: DesignEditor) {
 }
 
 @Composable
-private fun Header(title: String, icon: ImageVector, tint: Color, picked: String?) {
+internal fun Header(title: String, icon: ImageVector, tint: Color, picked: String?) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Icon(icon, null, Modifier.size(22.dp), tint = tint)
         Spacer(Modifier.width(10.dp))
@@ -85,7 +101,7 @@ private fun Header(title: String, icon: ImageVector, tint: Color, picked: String
     }
 }
 
-private fun count(n: Int, one: String, many: String) = if (n == 1) "1 $one" else "$n $many"
+internal fun count(n: Int, one: String, many: String) = if (n == 1) "1 $one" else "$n $many"
 
 @Composable
 private fun ExtrudeSettings(editor: DesignEditor, d: DesignEditor.ExtrudeDraft) {
@@ -168,7 +184,7 @@ fun NumberRow(label: String, value: Double, unit: String, allowNegative: Boolean
     }
     fun apply() {
         val v = Expression.evaluate(field.text)
-        bad = v == null || (!allowNegative && v <= 0) || v == 0.0
+        bad = v == null || (!allowNegative && v <= 0)
         if (!bad && v != value) onChange(v!!)
     }
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -220,4 +236,118 @@ private fun Button(label: String, colour: Color, text: Color, modifier: Modifier
     Surface(onClick = onClick, modifier = modifier.height(50.dp), shape = RoundedCornerShape(18.dp), color = colour, contentColor = text) {
         Box(contentAlignment = Alignment.Center) { Text(label, fontSize = 15.sp, fontWeight = FontWeight.Bold) }
     }
+}
+
+@Composable
+internal fun Toggle(label: String, on: Boolean, onChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth().height(44.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, Modifier.weight(1f), fontSize = 14.sp, color = Palette.text)
+        androidx.compose.material3.Switch(
+            checked = on,
+            onCheckedChange = onChange,
+            colors = androidx.compose.material3.SwitchDefaults.colors(checkedTrackColor = Palette.mint, checkedThumbColor = Palette.ink),
+        )
+    }
+}
+
+private fun bodiesLabel(bodies: List<String>, emptyMeans: String) = when (bodies.size) {
+    0 -> emptyMeans
+    1 -> bodies[0]
+    else -> "${bodies.size} bodies"
+}
+
+@Composable
+internal fun FaceSettings(editor: DesignEditor, d: DesignEditor.FaceDraft) {
+    Header(if (d.tilt) "Draft" else "Shell", if (d.tilt) Icons.draft else Icons.shell, Palette.modify, if (d.faces.isEmpty()) null else count(d.faces.size, "face", "faces"))
+    if (d.tilt) {
+        Segmented(listOf("Faces to tilt", "Pivot face"), if (d.pickingPivot) 1 else 0) { d.pickingPivot = it == 1 }
+        NumberRow("Angle", d.size, "°", allowNegative = true) { d.size = it; editor.draftChanged() }
+    } else {
+        NumberRow("Walls", d.size, "mm", allowNegative = false) { d.size = it; editor.draftChanged() }
+    }
+}
+
+@Composable
+internal fun HoleSettings(editor: DesignEditor, d: DesignEditor.HoleDraft) {
+    Header("Hole", Icons.hole, Palette.modify, null)
+    val sketches = editor.holeSketches()
+    if (sketches.size > 1) Segmented(sketches.take(4).map { it.name }, sketches.indexOfFirst { it.id == d.sketchId }.coerceAtLeast(0)) {
+        d.sketchId = sketches[it].id
+        editor.draftChanged()
+    }
+    Segmented(listOf("Simple", "Counterbore", "Countersink"), d.kind.ordinal) { d.kind = com.rm.parrotmetric.design.HoleKind.entries[it]; editor.draftChanged() }
+    NumberRow("Diameter", d.diameter, "mm", allowNegative = false) { d.diameter = it; editor.draftChanged() }
+    Toggle("All the way through", d.through) { d.through = it; editor.draftChanged() }
+    if (!d.through) NumberRow("Depth", d.depth, "mm", allowNegative = false) { d.depth = it; editor.draftChanged() }
+    if (d.kind != com.rm.parrotmetric.design.HoleKind.Simple) NumberRow("Top", d.topDiameter, "mm", allowNegative = false) { d.topDiameter = it; editor.draftChanged() }
+    if (d.kind == com.rm.parrotmetric.design.HoleKind.Counterbore) NumberRow("Top depth", d.topDepth, "mm", allowNegative = false) { d.topDepth = it; editor.draftChanged() }
+}
+
+@Composable
+private fun PlaneRow(d: DesignEditor.BodyDraft, current: com.rm.parrotmetric.design.PlaneRef, set: (com.rm.parrotmetric.design.PlaneRef) -> Unit) {
+    Segmented(d.planes.map { it.first }, d.planes.indexOfFirst { it.second == current }.coerceAtLeast(0)) { set(d.planes[it].second) }
+}
+
+@Composable
+private fun AxisRow(label: String, axis: com.rm.parrotmetric.design.Axis3?, allowNone: Boolean, set: (com.rm.parrotmetric.design.Axis3?) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(label, Modifier.width(80.dp), fontSize = 14.sp, color = Palette.muted)
+        val options = (if (allowNone) listOf<com.rm.parrotmetric.design.Axis3?>(null) else emptyList()) + com.rm.parrotmetric.design.Axis3.entries
+        Box(Modifier.weight(1f)) {
+            Segmented(options.map { it?.name ?: "None" }, options.indexOf(axis).coerceAtLeast(0)) { set(options[it]) }
+        }
+    }
+}
+
+@Composable
+internal fun MirrorSettings(editor: DesignEditor, d: DesignEditor.MirrorDraft) {
+    Header("Mirror", Icons.mirror, Palette.modify, bodiesLabel(d.bodies, "All bodies"))
+    PlaneRow(d, d.plane) { d.plane = it; editor.draftChanged() }
+    Toggle("Join to the original", d.join) { d.join = it; editor.draftChanged() }
+}
+
+@Composable
+internal fun PatternSettings(editor: DesignEditor, d: DesignEditor.PatternDraft) {
+    Header("Pattern", Icons.pattern, Palette.modify, bodiesLabel(d.bodies, "All bodies"))
+    Segmented(listOf("In a row", "Round an axis"), if (d.circular) 1 else 0) { d.circular = it == 1; editor.draftChanged() }
+    AxisRow(if (d.circular) "Round" else "Along", d.axis, false) { d.axis = it!!; editor.draftChanged() }
+    NumberRow("Count", d.count, "", allowNegative = false) { d.count = it; editor.draftChanged() }
+    if (d.circular) {
+        NumberRow("Angle", d.degrees, "°", allowNegative = true) { d.degrees = it; editor.draftChanged() }
+    } else {
+        NumberRow("Spacing", d.spacing, "mm", allowNegative = true) { d.spacing = it; editor.draftChanged() }
+        AxisRow("And along", d.axis2, true) { d.axis2 = it; editor.draftChanged() }
+        if (d.axis2 != null) {
+            NumberRow("Count", d.count2, "", allowNegative = false) { d.count2 = it; editor.draftChanged() }
+            NumberRow("Spacing", d.spacing2, "mm", allowNegative = true) { d.spacing2 = it; editor.draftChanged() }
+        }
+    }
+    Toggle("Join to the original", d.join) { d.join = it; editor.draftChanged() }
+}
+
+@Composable
+internal fun CombineSettings(editor: DesignEditor, d: DesignEditor.CombineDraft) {
+    Header("Combine", Icons.combine, Palette.modify, if (d.bodies.isEmpty()) null else d.bodies.joinToString(" + "))
+    Segmented(listOf("Join", "Cut", "Intersect"), d.operation.ordinal - 1) {
+        d.operation = com.rm.parrotmetric.design.Operation.entries[it + 1]
+        editor.draftChanged()
+    }
+    Toggle("Keep the others", d.keepTools) { d.keepTools = it; editor.draftChanged() }
+}
+
+@Composable
+internal fun SplitSettings(editor: DesignEditor, d: DesignEditor.SplitDraft) {
+    Header("Split", Icons.cut, Palette.modify, d.bodies.firstOrNull())
+    PlaneRow(d, d.plane) { d.plane = it; editor.draftChanged() }
+}
+
+@Composable
+internal fun MoveSettings(editor: DesignEditor, d: DesignEditor.MoveDraft) {
+    Header("Move", Icons.move, Palette.modify, bodiesLabel(d.bodies, "All bodies"))
+    NumberRow("X", d.dx, "mm", allowNegative = true) { d.dx = it; editor.draftChanged() }
+    NumberRow("Y", d.dy, "mm", allowNegative = true) { d.dy = it; editor.draftChanged() }
+    NumberRow("Z", d.dz, "mm", allowNegative = true) { d.dz = it; editor.draftChanged() }
+    AxisRow("Turn round", d.axis, false) { d.axis = it!!; editor.draftChanged() }
+    NumberRow("By", d.degrees, "°", allowNegative = true) { d.degrees = it; editor.draftChanged() }
+    Toggle("Move a copy", d.copy) { d.copy = it; editor.draftChanged() }
 }

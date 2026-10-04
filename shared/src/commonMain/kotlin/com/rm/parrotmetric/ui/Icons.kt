@@ -45,6 +45,7 @@ object Icons {
     val open = stroke("open", "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z", "M12 10v6M9 13l3 3 3-3")
     val fillet = stroke("fillet", "M4 20v-8a8 8 0 0 1 8-8h8")
     val chamfer = stroke("chamfer", "M4 20v-9l7-7h9")
+    val draft = stroke("draft", "M7 20L9 4h6l2 16", "M4 20h16")
     val shell = stroke("shell", "M3 7h18v13H3z", "M7 7v9h10V7")
     val hole = stroke("hole", "M6 6a6 2.5 0 1 0 12 0a6 2.5 0 1 0-12 0", "M6 6v12c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5V6")
     val mirror = stroke("mirror", "M12 3v2M12 8v2M12 13v2M12 18v2", "M9 6L3 18h6zM15 6l6 12h-6z")

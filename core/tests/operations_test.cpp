@@ -109,3 +109,51 @@ TEST_CASE("a fillet too big fails with a reason") {
     CHECK_THROWS_WITH(fillet(2, box, {"F1.end|F1.s1"}, 20), Catch::Matchers::Equals("The fillet doesn't fit"));
     CHECK_THROWS_WITH(fillet(2, box, {"F9.end|F9.s1"}, 1), Catch::Matchers::Equals("The edges to round aren't there any more"));
 }
+
+TEST_CASE("a shell leaves walls round an open top") {
+    NamedShape box = extrude(1, top, rectangle(40, 20), {{{1, 2, 3, 4}, 5, 5}}, 10, 0);
+    NamedShape cup = shell(2, box, {"F1.end"}, 2);
+    // The box less the hollow: 36 x 16 x 8 taken out.
+    CHECK(volume(cup) == Catch::Approx(8000 - 36 * 16 * 8).epsilon(1e-4));
+    CHECK(has(cup.faceNames(), "F1.s1"));
+}
+
+TEST_CASE("a draft tilts the sides") {
+    NamedShape box = extrude(1, top, rectangle(40, 20), {{{1, 2, 3, 4}, 5, 5}}, 10, 0);
+    NamedShape tilted = draft(2, box, {"F1.s1", "F1.s2", "F1.s3", "F1.s4"}, "F1.start", 5 * M_PI / 180);
+    CHECK(volume(tilted) < volume(box));
+    CHECK(volume(tilted) > volume(box) * 0.8);
+}
+
+TEST_CASE("a mirrored copy keeps the old names inside its own") {
+    NamedShape box = extrude(1, top, rectangle(10, 10), {{{1, 2, 3, 4}, 5, 5}}, 10, 0);
+    // Mirror across the YZ plane: x becomes -x.
+    const double m[12] = {-1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0};
+    NamedShape copy = transformed(2, box, m, "m");
+    CHECK(volume(copy) == Catch::Approx(1000));
+    CHECK(has(copy.faceNames(), "F2.m(F1.end)"));
+    GProp_GProps p;
+    BRepGProp::VolumeProperties(copy.shape, p);
+    CHECK(p.CentreOfMass().X() == Catch::Approx(-5));
+}
+
+TEST_CASE("a plane through a body splits it in two") {
+    NamedShape box = extrude(1, top, rectangle(40, 20), {{{1, 2, 3, 4}, 5, 5}}, 10, 0);
+    auto pieces = split(2, box, gp_Pnt(10, 0, 0), gp_Dir(1, 0, 0));
+    REQUIRE(pieces.size() == 2);
+    double a = volume(pieces[0]), b = volume(pieces[1]);
+    CHECK(std::min(a, b) == Catch::Approx(2000));
+    CHECK(std::max(a, b) == Catch::Approx(6000));
+    CHECK_THROWS(split(2, box, gp_Pnt(100, 0, 0), gp_Dir(1, 0, 0)));
+}
+
+TEST_CASE("holes go down from the top face") {
+    NamedShape box = extrude(1, top, rectangle(40, 20), {{{1, 2, 3, 4}, 5, 5}}, 10, 0);
+    gp_Ax3 onTop(gp_Pnt(0, 0, 10), gp::DZ(), gp::DX());
+    NamedShape through = holeTool(2, onTop, {{10, 10}, {30, 10}}, 4, 0, HoleKind::Simple, 0, 0);
+    NamedShape drilled = combine(2, box, through, Combine::Cut);
+    CHECK(volume(drilled) == Catch::Approx(8000 - 2 * M_PI * 4 * 10).epsilon(1e-4));
+    NamedShape bored = holeTool(3, onTop, {{20, 10}}, 4, 6, HoleKind::Counterbore, 8, 2);
+    NamedShape withBore = combine(3, box, bored, Combine::Cut);
+    CHECK(volume(withBore) == Catch::Approx(8000 - M_PI * 16 * 2 - M_PI * 4 * 4).epsilon(1e-3));
+}

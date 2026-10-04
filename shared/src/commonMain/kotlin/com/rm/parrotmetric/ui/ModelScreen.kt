@@ -244,8 +244,11 @@ private fun HistoryBar(design: DesignEditor, actions: ModelActions) {
     design.built
     val history = design.history()
     val marker = design.design.marker
+    val scroll = rememberScrollState()
+    // New steps come in at the end, so keep the end in view as the history grows.
+    LaunchedEffect(history.size) { scroll.animateScrollTo(scroll.maxValue) }
     Row(
-        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 4.dp),
+        Modifier.fillMaxWidth().horizontalScroll(scroll).padding(horizontal = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -344,19 +347,23 @@ private fun ToolSheet(group: ToolGroup, state: ModelState, design: DesignEditor,
             Tool("Open", Icons.open) { actions.openFile() },
         )
         ToolGroup.Modify -> if (meshTools) listOf(
-            Tool("Plane cut", Icons.cut, null),
-            Tool("Combine", Icons.combine, null),
-            Tool("Mirror", Icons.mirror, null),
-            Tool("Move", Icons.move, null),
+            Tool("Split", Icons.cut) { design.startSplit() },
+            Tool("Combine", Icons.combine) { design.startCombine() },
+            Tool("Mirror", Icons.mirror) { design.startMirror() },
+            Tool("Move", Icons.move) { design.startMove() },
+            Tool("Pattern", Icons.pattern) { design.startPattern() },
+            Tool("Hole", Icons.hole) { design.startHole() },
         ) else listOf(
             Tool("Fillet", Icons.fillet) { design.startFillet() },
             Tool("Chamfer", Icons.chamfer) { design.startChamfer() },
-            Tool("Shell", Icons.shell, null),
-            Tool("Hole", Icons.hole, null),
-            Tool("Mirror", Icons.mirror, null),
-            Tool("Pattern", Icons.pattern, null),
-            Tool("Combine", Icons.combine, null),
-            Tool("Move", Icons.move, null),
+            Tool("Shell", Icons.shell) { design.startShell() },
+            Tool("Hole", Icons.hole) { design.startHole() },
+            Tool("Draft", Icons.draft) { design.startDraft() },
+            Tool("Mirror", Icons.mirror) { design.startMirror() },
+            Tool("Pattern", Icons.pattern) { design.startPattern() },
+            Tool("Combine", Icons.combine) { design.startCombine() },
+            Tool("Split", Icons.cut) { design.startSplit() },
+            Tool("Move", Icons.move) { design.startMove() },
         )
         ToolGroup.Construct -> listOf(Tool("Plane", Icons.plane, null), Tool("Axis", Icons.axis, null), Tool("Point", Icons.point, null))
         ToolGroup.Inspect -> listOf(Tool("Measure", Icons.measure, null), Tool("Section", Icons.section, null))

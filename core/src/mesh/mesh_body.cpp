@@ -67,6 +67,20 @@ Mesh MeshBody::toMesh() const {
     return mesh;
 }
 
+MeshBody MeshBody::transformed(const double m[12]) const {
+    manifold::mat3x4 t({m[0], m[4], m[8]}, {m[1], m[5], m[9]}, {m[2], m[6], m[10]}, {m[3], m[7], m[11]});
+    return MeshBody(m_->Transform(t));
+}
+
+std::pair<MeshBody, MeshBody> MeshBody::split(const double origin[3], const double normal[3]) const {
+    manifold::vec3 n(normal[0], normal[1], normal[2]);
+    double offset = origin[0] * normal[0] + origin[1] * normal[1] + origin[2] * normal[2];
+    auto [front, back] = m_->SplitByPlane(n, offset);
+    return {MeshBody(front), MeshBody(back)};
+}
+
+bool MeshBody::empty() const { return m_->IsEmpty(); }
+
 double MeshBody::volume() const { return m_->Volume(); }
 size_t MeshBody::triangleCount() const { return m_->NumTri(); }
 

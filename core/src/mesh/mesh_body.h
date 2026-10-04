@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <utility>
 
 #include "mesh/mesh.h"
 
@@ -29,6 +30,11 @@ public:
 
     MeshBody boolean(const MeshBody& tool, BooleanOp op) const;
     MeshBody translated(float x, float y, float z) const;
+    /** Moved by a 3x4 matrix, rows of rotation and then translation: m[0..3] is the first row. */
+    MeshBody transformed(const double m[12]) const;
+    /** The parts on each side of a plane: first the side the normal points to. Either may be empty. */
+    std::pair<MeshBody, MeshBody> split(const double origin[3], const double normal[3]) const;
+    bool empty() const;
 
     Mesh toMesh() const;
     double volume() const;

@@ -34,6 +34,12 @@ object Core {
     external fun facePlane(body: Long, name: String): DoubleArray
     external fun faceNames(body: Long): Array<String>
     external fun importBody(id: Int, data: ByteArray, format: Int): Long
+    external fun shell(id: Int, body: Long, open: Array<String>, thickness: Double): Long
+    external fun draft(id: Int, body: Long, faces: Array<String>, neutral: String, angle: Double): Long
+    external fun transform(id: Int, body: Long, m: DoubleArray, tag: String): Long
+    /** plane: origin then normal. */
+    external fun split(id: Int, body: Long, plane: DoubleArray): LongArray
+    external fun holeTool(id: Int, plane: DoubleArray, points: DoubleArray, diameter: Double, depth: Double, kind: Int, topDiameter: Double, topDepth: Double): Long
     external fun retain(body: Long)
     external fun release(body: Long)
     external fun isMesh(body: Long): Boolean
@@ -51,7 +57,7 @@ object Core {
     external fun selectedFaces(): Array<String>
     /** Pairs of sketch number and region number. */
     external fun selectedRegions(): IntArray
-    external fun select(edges: Array<String>, regions: IntArray)
+    external fun select(edges: Array<String>, regions: IntArray, faces: Array<String>)
 
     /** A sketch's closed regions; see jni.cpp for the layouts. */
     external fun findRegions(kinds: IntArray, ids: IntArray, numbers: DoubleArray): FloatArray

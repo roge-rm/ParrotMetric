@@ -75,6 +75,13 @@ object CoreKernel : Kernel {
     override fun facePlane(body: Long, face: String): DoubleArray? = call { Core.facePlane(body, face) }
     override fun faceNames(body: Long) = call { Core.faceNames(body).toList() }
     override fun import(id: Int, data: ByteArray, format: Int) = call { Core.importBody(id, data, format) }
+    override fun shell(id: Int, body: Long, open: List<String>, thickness: Double) = call { Core.shell(id, body, open.toTypedArray(), thickness) }
+    override fun draft(id: Int, body: Long, faces: List<String>, neutral: String, angle: Double) = call { Core.draft(id, body, faces.toTypedArray(), neutral, angle) }
+    override fun transform(id: Int, body: Long, m: DoubleArray, tag: String) = call { Core.transform(id, body, m, tag) }
+    override fun split(id: Int, body: Long, origin: com.rm.parrotmetric.sketch.Vec3, normal: com.rm.parrotmetric.sketch.Vec3) =
+        call { Core.split(id, body, doubleArrayOf(origin.x, origin.y, origin.z, normal.x, normal.y, normal.z)).toList() }
+    override fun holeTool(id: Int, plane: SketchPlane, at: List<Pair<Double, Double>>, diameter: Double, depth: Double, kind: Int, topDiameter: Double, topDepth: Double) =
+        call { Core.holeTool(id, plane.numbers(), at.flatMap { listOf(it.first, it.second) }.toDoubleArray(), diameter, depth, kind, topDiameter, topDepth) }
     override fun retain(body: Long) = Core.retain(body)
     override fun release(body: Long) = Core.release(body)
 }
@@ -93,8 +100,8 @@ class CoreViewport(private val gl: (() -> Unit) -> Unit) : Viewport {
     override fun selectedFaces() = Core.selectedFaces().map { s -> s.substringBefore('\t').toInt() to s.substringAfter('\t') }
     override fun selectedRegions() = Core.selectedRegions().let { r -> List(r.size / 2) { r[2 * it] to r[2 * it + 1] } }
 
-    override fun select(edges: List<String>, regions: List<Pair<Int, Int>>) {
-        Core.select(edges.toTypedArray(), regions.flatMap { listOf(it.first, it.second) }.toIntArray())
+    override fun select(edges: List<String>, regions: List<Pair<Int, Int>>, faces: List<String>) {
+        Core.select(edges.toTypedArray(), regions.flatMap { listOf(it.first, it.second) }.toIntArray(), faces.toTypedArray())
         gl {}
     }
 
