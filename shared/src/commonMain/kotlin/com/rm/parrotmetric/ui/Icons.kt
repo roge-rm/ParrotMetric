@@ -1,0 +1,61 @@
+package com.rm.parrotmetric.ui
+
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.addPathNodes
+import androidx.compose.ui.unit.dp
+
+/** Line icons on a 24 unit grid, drawn for the app. Tinted where they're used. */
+object Icons {
+    private fun stroke(name: String, vararg paths: String, width: Float = 1.8f) =
+        ImageVector.Builder(name, 24.dp, 24.dp, 24f, 24f).apply {
+            for (d in paths) {
+                addPath(
+                    pathData = addPathNodes(d),
+                    stroke = SolidColor(Color.Black),
+                    strokeLineWidth = width,
+                    strokeLineCap = StrokeCap.Round,
+                    strokeLineJoin = StrokeJoin.Round,
+                )
+            }
+        }.build()
+
+    private fun circle(cx: Float, cy: Float, r: Float) =
+        "M${cx - r},${cy}a$r,$r 0 1,0 ${2 * r},0a$r,$r 0 1,0 ${-2 * r},0"
+
+    val sketch = stroke("sketch", "M4 20h4L18 10l-4-4L4 16z", "M13 7l4 4")
+    val create = stroke("create", "M12 3l8 4.5v9L12 21l-8-4.5v-9z", "M12 12l8-4.5M12 12v9M12 12L4 7.5")
+    val modify = stroke("modify", "M5 20v-8a7 7 0 0 1 7-7h7")
+    val construct = stroke("construct", "M2.5 16l6-8h13l-6 8z", "M12 2v2M12 6v2M12 18v2M12 21v1")
+    val inspect = stroke("inspect", "M4.3 8h15.4a1.8 1.8 0 0 1 1.8 1.8v4.4a1.8 1.8 0 0 1-1.8 1.8H4.3a1.8 1.8 0 0 1-1.8-1.8V9.8A1.8 1.8 0 0 1 4.3 8z", "M7 8v3M11 8v4M15 8v3M19 8v2")
+
+    val undo = stroke("undo", "M9 14L4 9l5-5", "M4 9h10.5a5.5 5.5 0 0 1 0 11H11")
+    val redo = stroke("redo", "M15 14l5-5-5-5", "M20 9H9.5a5.5 5.5 0 0 0 0 11H13")
+    val parts = stroke("parts", "M12 3l9 5-9 5-9-5z", "M3 13l9 5 9-5", "M3 17.5l9 5 9-5")
+    val fit = stroke("fit", "M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5")
+    val close = stroke("close", "M6 6l12 12M18 6L6 18", width = 2.4f)
+    val more = stroke("more", "M6 9l6 6 6-6", width = 2f)
+
+    val box = stroke("box", "M12 3l8 4.5v9L12 21l-8-4.5v-9z", "M12 12l8-4.5M12 12v9M12 12L4 7.5")
+    val extrude = stroke("extrude", "M5 15l7 4 7-4", "M12 19V9", "M8.5 12.5L12 9l3.5 3.5", "M5 15V7l7-4 7 4v8")
+    val revolve = stroke("revolve", "M12 3v18", "M7 6a9 3 0 1 0 10 0", "M15 4.5l2 1.5-2 1.5")
+    val open = stroke("open", "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z", "M12 10v6M9 13l3 3 3-3")
+    val fillet = stroke("fillet", "M4 20v-8a8 8 0 0 1 8-8h8")
+    val chamfer = stroke("chamfer", "M4 20v-9l7-7h9")
+    val shell = stroke("shell", "M3 7h18v13H3z", "M7 7v9h10V7")
+    val hole = stroke("hole", "M6 6a6 2.5 0 1 0 12 0a6 2.5 0 1 0-12 0", "M6 6v12c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5V6")
+    val mirror = stroke("mirror", "M12 3v2M12 8v2M12 13v2M12 18v2", "M9 6L3 18h6zM15 6l6 12h-6z")
+    val pattern = stroke("pattern", "M4.5 3h4a1.5 1.5 0 0 1 1.5 1.5v4a1.5 1.5 0 0 1-1.5 1.5h-4A1.5 1.5 0 0 1 3 8.5v-4A1.5 1.5 0 0 1 4.5 3zM15.5 3h4A1.5 1.5 0 0 1 21 4.5v4a1.5 1.5 0 0 1-1.5 1.5h-4A1.5 1.5 0 0 1 14 8.5v-4A1.5 1.5 0 0 1 15.5 3zM4.5 14h4a1.5 1.5 0 0 1 1.5 1.5v4a1.5 1.5 0 0 1-1.5 1.5h-4A1.5 1.5 0 0 1 3 19.5v-4A1.5 1.5 0 0 1 4.5 14zM15.5 14h4a1.5 1.5 0 0 1 1.5 1.5v4a1.5 1.5 0 0 1-1.5 1.5h-4a1.5 1.5 0 0 1-1.5-1.5v-4a1.5 1.5 0 0 1 1.5-1.5z")
+    val combine = stroke("combine", circle(9f, 12f, 6f), circle(15f, 12f, 6f))
+    val move = stroke("move", "M12 3v18M3 12h18", "M8 7l4-4 4 4M8 17l4 4 4-4")
+    val cut = stroke("cut", "M3 13h18", "M6 9l6-6 6 6", "M6 17h12v4H6z")
+    val plane = stroke("plane", "M2.5 16l6-8h13l-6 8z")
+    val axis = stroke("axis", "M4 20L20 4", "M8 20h-4v-4")
+    val point = stroke("point", circle(12f, 12f, 3f), "M12 3v3M12 18v3M3 12h3M18 12h3")
+    val measure = stroke("measure", "M4 20L20 4", "M4 16v4h4M16 4h4v4")
+    val section = stroke("section", "M3 12h18", "M12 3a9 9 0 0 1 9 9H3a9 9 0 0 1 9-9z")
+    val export = stroke("export", "M12 15V3M8 7l4-4 4 4", "M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6")
+}

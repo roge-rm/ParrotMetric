@@ -9,6 +9,7 @@
 #include <stdexcept>
 
 #include "io/exchange.h"
+#include "display/display_mesh.h"
 #include "mesh/mesh_body.h"
 #include "mesh/stl.h"
 #include "render/renderer.h"
@@ -21,10 +22,23 @@ pm::Renderer renderer;
 std::optional<pm::MeshBody> body;  // What's shown and what the mesh exports write.
 std::optional<pm::Solid> solid;    // The same as a solid, until a mesh edit; for STEP and IGES.
 
-void show(const pm::MeshBody& b, std::optional<pm::Solid> s = std::nullopt) {
+std::vector<pm::Pick> selection;
+
+void show(const pm::MeshBody& b, std::optional<pm::Solid> s = std::nullopt, bool refit = true) {
+    std::vector<pm::DisplayMesh> shown;
+    shown.push_back(s ? s->display() : pm::displayMesh(b.toMesh()));
     body = b;
     solid = std::move(s);
-    renderer.setMesh(b.toMesh());
+    selection.clear();
+    renderer.setBodies(std::move(shown), refit);
+}
+
+jintArray selectionCounts(JNIEnv* env) {
+    jint counts[2] = {0, 0};
+    for (const auto& p : selection) counts[p.kind == pm::Pick::Edge ? 1 : 0]++;
+    jintArray out = env->NewIntArray(2);
+    env->SetIntArrayRegion(out, 0, 2, counts);
+    return out;
 }
 
 jstring error(JNIEnv* env, const std::exception& e) { return env->NewStringUTF(e.what()); }
@@ -106,7 +120,7 @@ JNIEXPORT jstring JNICALL Java_com_rm_parrotmetric_Core_cutHole(JNIEnv* env, job
         pm::MeshBody tool = pm::MeshBody::box(w, d, h * 2).translated(lo[0] + w * 0.5f, lo[1] + d * 0.5f, lo[2] - h * 0.5f);
         pm::MeshBody result = current->boolean(tool, pm::BooleanOp::Cut);
         std::lock_guard<std::mutex> g(lock);
-        show(result);
+        show(result, std::nullopt, false);
         return nullptr;
     } catch (const std::exception& e) {
         return error(env, e);
@@ -140,9 +154,63 @@ JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_surfaceChanged(JNIEnv*, job
     renderer.surfaceChanged(w, h);
 }
 
-JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_drawFrame(JNIEnv*, jobject) {
+/** True while the view is moving and wants another frame. */
+JNIEXPORT jboolean JNICALL Java_com_rm_parrotmetric_Core_drawFrame(JNIEnv*, jobject) {
     std::lock_guard<std::mutex> g(lock);
-    renderer.draw();
+    return renderer.draw();
+}
+
+JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_setDensity(JNIEnv*, jobject, jfloat d) {
+    std::lock_guard<std::mutex> g(lock);
+    renderer.setDensity(d);
+}
+
+/**
+ * Selects or unselects what's under the point, or clears the selection on
+ * empty space. GL thread. Returns how many faces and edges are selected.
+ */
+JNIEXPORT jintArray JNICALL Java_com_rm_parrotmetric_Core_tap(JNIEnv* env, jobject, jfloat x, jfloat y) {
+    std::lock_guard<std::mutex> g(lock);
+    pm::Pick p = renderer.pick(x, y);
+    if (p.kind == pm::Pick::None) {
+        selection.clear();
+    } else {
+        auto it = std::find(selection.begin(), selection.end(), p);
+        if (it != selection.end()) selection.erase(it);
+        else selection.push_back(p);
+    }
+    renderer.setSelection(selection);
+    return selectionCounts(env);
+}
+
+JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_clearSelection(JNIEnv*, jobject) {
+    std::lock_guard<std::mutex> g(lock);
+    selection.clear();
+    renderer.setSelection(selection);
+}
+
+JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_pan(JNIEnv*, jobject, jfloat dx, jfloat dy) {
+    std::lock_guard<std::mutex> g(lock);
+    renderer.pan(dx, dy);
+}
+
+JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_fit(JNIEnv*, jobject) {
+    std::lock_guard<std::mutex> g(lock);
+    renderer.fit();
+}
+
+JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_viewFrom(JNIEnv*, jobject, jfloat yaw, jfloat pitch) {
+    std::lock_guard<std::mutex> g(lock);
+    renderer.viewFrom(yaw, pitch);
+}
+
+/** The camera's yaw and pitch in radians, for the orientation cube. */
+JNIEXPORT jfloatArray JNICALL Java_com_rm_parrotmetric_Core_cameraAngles(JNIEnv* env, jobject) {
+    std::lock_guard<std::mutex> g(lock);
+    jfloat a[2] = {renderer.yaw(), renderer.pitch()};
+    jfloatArray out = env->NewFloatArray(2);
+    env->SetFloatArrayRegion(out, 0, 2, a);
+    return out;
 }
 
 JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_orbit(JNIEnv*, jobject, jfloat dx, jfloat dy) {

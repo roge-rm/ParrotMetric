@@ -16,9 +16,9 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
-            implementation(libs.jb.compose.runtime)
-            implementation(libs.jb.compose.foundation)
-            implementation(libs.jb.compose.ui)
+            api(libs.jb.compose.runtime)
+            api(libs.jb.compose.foundation)
+            api(libs.jb.compose.ui)
             implementation(libs.jb.compose.material3)
             implementation(libs.kotlinx.coroutines.core)
         }

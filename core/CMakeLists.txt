@@ -34,6 +34,7 @@ set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 add_subdirectory(${third_party}/manifold ${CMAKE_BINARY_DIR}/manifold EXCLUDE_FROM_ALL)
 
 add_library(pmcore STATIC
+        src/display/display_mesh.cpp
         src/mesh/mesh.cpp
         src/mesh/stl.cpp
         src/mesh/mesh_body.cpp
@@ -53,7 +54,7 @@ target_link_libraries(pmcore PUBLIC manifold
 
 if(PM_TESTS)
     add_subdirectory(${third_party}/catch2 ${CMAKE_BINARY_DIR}/catch2 EXCLUDE_FROM_ALL)
-    add_executable(pmcore_tests tests/stl_test.cpp tests/mesh_body_test.cpp tests/solid_test.cpp tests/exchange_test.cpp)
+    add_executable(pmcore_tests tests/stl_test.cpp tests/mesh_body_test.cpp tests/solid_test.cpp tests/exchange_test.cpp tests/display_test.cpp)
     target_link_libraries(pmcore_tests PRIVATE pmcore Catch2::Catch2WithMain)
     include(CTest)
     add_test(NAME pmcore_tests COMMAND pmcore_tests)

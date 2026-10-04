@@ -8,7 +8,9 @@
 #include <BRepPrimAPI_MakeBox.hxx>
 #include <BRep_Tool.hxx>
 #include <GProp_GProps.hxx>
+#include <Poly_PolygonOnTriangulation.hxx>
 #include <Poly_Triangulation.hxx>
+#include <TopTools_IndexedDataMapOfShapeListOfShape.hxx>
 #include <Standard_Failure.hxx>
 #include <TopExp.hxx>
 #include <TopExp_Explorer.hxx>
@@ -69,6 +71,65 @@ Mesh Solid::tessellate(const Tessellation& t) const {
         }
     }
     return builder.take();
+}
+
+DisplayMesh Solid::display(const Tessellation& t) const {
+    BRepMesh_IncrementalMesh(*shape_, t.chord, false, t.angle, false);
+    DisplayMesh d;
+    TopTools_IndexedMapOfShape faces;
+    TopExp::MapShapes(*shape_, TopAbs_FACE, faces);
+    d.faceCount = uint32_t(faces.Extent());
+    for (int f = 1; f <= faces.Extent(); ++f) {
+        const TopoDS_Face& face = TopoDS::Face(faces(f));
+        TopLoc_Location loc;
+        Handle(Poly_Triangulation) tri = BRep_Tool::Triangulation(face, loc);
+        if (tri.IsNull()) continue;
+        if (!tri->HasNormals()) tri->ComputeNormals();
+        const gp_Trsf& trsf = loc.Transformation();
+        bool reversed = face.Orientation() == TopAbs_REVERSED;
+        uint32_t base = uint32_t(d.vertexCount());
+        for (int i = 1; i <= tri->NbNodes(); ++i) {
+            gp_Pnt p = tri->Node(i).Transformed(trsf);
+            gp_Dir n = tri->Normal(i).Transformed(trsf);
+            if (reversed) n.Reverse();
+            d.positions.insert(d.positions.end(), {float(p.X()), float(p.Y()), float(p.Z())});
+            d.normals.insert(d.normals.end(), {float(n.X()), float(n.Y()), float(n.Z())});
+            d.faceOfVertex.push_back(uint32_t(f - 1));
+        }
+        for (int i = 1; i <= tri->NbTriangles(); ++i) {
+            int a, b, c;
+            tri->Triangle(i).Get(a, b, c);
+            if (reversed) std::swap(b, c);
+            d.indices.insert(d.indices.end(), {base + a - 1, base + b - 1, base + c - 1});
+        }
+    }
+
+    // Each edge's points, from its polygon on the triangulation of one of its faces.
+    TopTools_IndexedMapOfShape edges;
+    TopExp::MapShapes(*shape_, TopAbs_EDGE, edges);
+    TopTools_IndexedDataMapOfShapeListOfShape edgeFaces;
+    TopExp::MapShapesAndAncestors(*shape_, TopAbs_EDGE, TopAbs_FACE, edgeFaces);
+    d.edges.resize(size_t(edges.Extent()));
+    for (int e = 1; e <= edges.Extent(); ++e) {
+        const TopoDS_Edge& edge = TopoDS::Edge(edges(e));
+        const TopTools_ListOfShape& owners = edgeFaces.FindFromKey(edge);
+        // Seams (where a surface wraps round onto itself) and collapsed edges
+        // aren't edges anyone sees; they keep their number with no points.
+        if (owners.IsEmpty() || BRep_Tool::Degenerated(edge) || BRep_Tool::IsClosed(edge, TopoDS::Face(owners.First())))
+            continue;
+        TopLoc_Location loc;
+        Handle(Poly_Triangulation) tri = BRep_Tool::Triangulation(TopoDS::Face(owners.First()), loc);
+        if (tri.IsNull()) continue;
+        Handle(Poly_PolygonOnTriangulation) poly = BRep_Tool::PolygonOnTriangulation(edge, tri, loc);
+        if (poly.IsNull()) continue;
+        const gp_Trsf& trsf = loc.Transformation();
+        auto& points = d.edges[size_t(e - 1)].points;
+        for (int i = 1; i <= poly->NbNodes(); ++i) {
+            gp_Pnt p = tri->Node(poly->Node(i)).Transformed(trsf);
+            points.insert(points.end(), {float(p.X()), float(p.Y()), float(p.Z())});
+        }
+    }
+    return d;
 }
 
 double Solid::volume() const {

@@ -2,6 +2,7 @@
 
 #include <memory>
 
+#include "display/display_mesh.h"
 #include "mesh/mesh.h"
 
 class TopoDS_Shape;
@@ -25,6 +26,8 @@ public:
     Solid filletAllEdges(double radius) const;
 
     Mesh tessellate(const Tessellation& t = {}) const;
+    /** For the renderer: smooth normals on each face, and every edge. Numbered in OCCT map order. */
+    DisplayMesh display(const Tessellation& t = {}) const;
     double volume() const;
 
     const TopoDS_Shape& shape() const { return *shape_; }
