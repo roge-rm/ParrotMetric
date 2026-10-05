@@ -315,6 +315,9 @@ private fun LipSettings(editor: DesignEditor, d: DesignEditor.LipDraft) {
     if (d.lid != null) Field(editor, d, "gap", "Gap", d.gap, "mm", allowNegative = false) { d.gap = it; editor.draftChanged() }
 }
 
+/** A size to a tenth of a mm, as it's worth printing. */
+private fun tenths(v: Double): String = (kotlin.math.round(v * 10) / 10).toString()
+
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun ThreadSettings(editor: DesignEditor, d: DesignEditor.ThreadDraft) {
@@ -332,6 +335,11 @@ private fun ThreadSettings(editor: DesignEditor, d: DesignEditor.ThreadDraft) {
     }
     Field(editor, d, "pitch", "Pitch", d.pitch, "mm", allowNegative = false) { d.pitch = it; editor.draftChanged() }
     Field(editor, d, "clearance", "Clearance", d.clearance, "mm", allowNegative = false) { d.clearance = it; editor.draftChanged() }
+    // ISO: a nut's hole is made 1.0825 pitches smaller than its bolt.
+    if (d.across > 0) Text(
+        if (d.hole) "Takes a bolt ${tenths(d.across + 1.0825 * d.pitch)} across" else "Make its nut's hole ${tenths(d.across - 1.0825 * d.pitch)} across",
+        fontSize = 12.sp, color = Palette.muted,
+    )
 }
 
 @Composable

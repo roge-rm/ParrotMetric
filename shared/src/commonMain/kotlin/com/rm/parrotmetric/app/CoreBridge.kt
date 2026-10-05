@@ -155,7 +155,7 @@ class CoreKernel(private val core: NativeCore) : Kernel {
     override fun coil(id: Int, plane: SketchPlane, u: Double, v: Double, diameter: Double, pitch: Double, turns: Double, section: Double, square: Boolean) =
         call { core.coil(id, plane.numbers(), u, v, diameter, pitch, turns, section, square) }
 
-    override fun thread(id: Int, body: Long, face: String, pitch: Double) = call { core.thread(id, body, face, pitch) }
+    override fun thread(id: Int, body: Long, face: String, pitch: Double, clearance: Double) = call { core.thread(id, body, face, pitch, clearance) }
     override fun lipTool(id: Int, body: Long, face: String, inside: Double, outside: Double, height: Double, tag: String) =
         call { core.lipTool(id, body, face, inside, outside, height, tag) }
 

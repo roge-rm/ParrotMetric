@@ -37,7 +37,7 @@ JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_sweep(JNIEnv*, jobject, ji
 JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_pipe(JNIEnv*, jobject, jint, jdoubleArray, jintArray, jintArray, jdoubleArray, jlong, jobjectArray, jdouble, jdouble);
 JNIEXPORT jdoubleArray JNICALL Java_com_rm_parrotmetric_Core_pathPlaces(JNIEnv*, jobject, jdoubleArray, jintArray, jintArray, jdoubleArray, jlong, jobjectArray, jint, jdouble, jboolean, jboolean);
 JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_coil(JNIEnv*, jobject, jint, jdoubleArray, jdouble, jdouble, jdouble, jdouble, jdouble, jdouble, jboolean);
-JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_thread(JNIEnv*, jobject, jint, jlong, jstring, jdouble);
+JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_thread(JNIEnv*, jobject, jint, jlong, jstring, jdouble, jdouble);
 JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_lipTool(JNIEnv*, jobject, jint, jlong, jstring, jdouble, jdouble, jdouble, jstring);
 JNIEXPORT jdoubleArray JNICALL Java_com_rm_parrotmetric_Core_textOutline(JNIEnv*, jobject, jstring, jdouble, jboolean);
 JNIEXPORT jintArray JNICALL Java_com_rm_parrotmetric_Core_canvasImage(JNIEnv*, jobject, jint, jbyteArray);
@@ -440,7 +440,8 @@ void dispatch(int call, Reader& in, Writer& out, JNIEnv* env) {
             auto a1 = in.i64();
             auto a2 = in.string();
             auto a3 = in.f64();
-            auto r = Java_com_rm_parrotmetric_Core_thread(env, nullptr, a0, a1, a2, a3);
+            auto a4 = in.f64();
+            auto r = Java_com_rm_parrotmetric_Core_thread(env, nullptr, a0, a1, a2, a3, a4);
             if (!failed()) out.put(r);
             break;
         }

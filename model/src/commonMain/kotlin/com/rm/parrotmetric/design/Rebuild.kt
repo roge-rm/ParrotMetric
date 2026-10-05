@@ -314,14 +314,7 @@ class Rebuilder(private val kernel: Kernel) {
         is ThreadFeature -> {
             val face = ref(f, f.face, false, bodies)
             val body = bodyWithFace(face, bodies) ?: throw KernelException("The face it's on isn't there any more")
-            replace(f, bodies, planes, made, body) {
-                if (f.clearance <= 0) kernel.thread(f.id, body.handle, face, f.pitch)
-                else {
-                    // Faces point out of the solid, so going in shrinks a shaft and widens a hole.
-                    val eased = kernel.offsetFaces(f.id, body.handle, listOf(face), -f.clearance)
-                    try { kernel.thread(f.id, eased, face, f.pitch) } finally { kernel.release(eased) }
-                }
-            }
+            replace(f, bodies, planes, made, body) { kernel.thread(f.id, body.handle, face, f.pitch, f.clearance) }
         }
         is LoftFeature -> {
             if (f.sections.size < 2) throw KernelException("Pick areas in at least two sketches")

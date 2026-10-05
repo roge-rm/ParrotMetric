@@ -49,7 +49,7 @@ interface NativeCore {
     fun pipe(id: Int, pathPlane: DoubleArray, pathKinds: IntArray, pathIds: IntArray, pathNums: DoubleArray, pathBody: Long, pathEdges: Array<String>, diameter: Double, inner: Double): Long
     fun pathPlaces(pathPlane: DoubleArray, pathKinds: IntArray, pathIds: IntArray, pathNums: DoubleArray, pathBody: Long, pathEdges: Array<String>, count: Int, spacing: Double, turn: Boolean, reverse: Boolean): DoubleArray?
     fun coil(id: Int, plane: DoubleArray, u: Double, v: Double, diameter: Double, pitch: Double, turns: Double, section: Double, square: Boolean): Long
-    fun thread(id: Int, body: Long, face: String, pitch: Double): Long
+    fun thread(id: Int, body: Long, face: String, pitch: Double, clearance: Double): Long
     /** Rings round the openings in a rim face, [inside] to [outside] mm out from their edges, [height] tall. */
     fun lipTool(id: Int, body: Long, face: String, inside: Double, outside: Double, height: Double, tag: String): Long
     /** Text as outline curves, nine numbers each: kind (0 line, 3 Bézier), start, end, then the two controls. */

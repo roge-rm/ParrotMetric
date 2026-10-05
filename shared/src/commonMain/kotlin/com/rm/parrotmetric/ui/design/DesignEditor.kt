@@ -858,8 +858,15 @@ class DesignEditor(
     private fun threadPick(d: ThreadDraft) {
         val face = viewport.selectedFaces().map { it.second }.firstOrNull { it.isNotEmpty() && faceKind(it) == 2.0 } ?: return
         d.face = face
-        val r = shownBodies.firstNotNullOfOrNull { kernel.shapeOf(it.handle, face, false) }?.get(7) ?: return
-        d.pitch = ThreadSizes.fitting(2 * r).second
+        threadShape(d)
+        if (d.across > 0) d.pitch = ThreadSizes.fitting(d.across).second
+    }
+
+    /** How big the thread's face is across, and whether it's a hole. */
+    private fun threadShape(d: ThreadDraft) {
+        val shape = d.face?.let { f -> allBodies().firstNotNullOfOrNull { kernel.shapeOf(it.handle, f, false) } } ?: return
+        d.across = 2 * shape[7]
+        d.hole = shape.size > 8 && shape[8] == 1.0
     }
 
     /** Areas for a sweep, from the selection; kept as they were if none are picked, as when picking its path. */
@@ -1202,7 +1209,7 @@ class DesignEditor(
             is com.rm.parrotmetric.design.SweepFeature -> SweepDraft(f)
             is com.rm.parrotmetric.design.PipeFeature -> PipeDraft(f)
             is com.rm.parrotmetric.design.CoilFeature -> CoilDraft(f).also { it.planes = planeChoices() }
-            is com.rm.parrotmetric.design.ThreadFeature -> ThreadDraft(f)
+            is com.rm.parrotmetric.design.ThreadFeature -> ThreadDraft(f).also { threadShape(it) }
             is com.rm.parrotmetric.design.LipFeature -> LipDraft(f).also { it.base = baseOf(f.face) }
             is com.rm.parrotmetric.design.LoftFeature -> LoftDraft(f)
             is com.rm.parrotmetric.design.CanvasFeature -> CanvasDraft(f, f.image).also { it.planes = planeChoices() }
@@ -1541,6 +1548,9 @@ class DesignEditor(
         var face by mutableStateOf(editing?.face)
         var pitch by mutableStateOf(editing?.pitch ?: 1.0)
         var clearance by mutableStateOf(editing?.clearance ?: 0.0)
+        /** The face's size across before threading (0 if not known), and whether it's a hole. */
+        var across by mutableStateOf(0.0)
+        var hole by mutableStateOf(false)
         override fun feature(): Feature? = face?.let { com.rm.parrotmetric.design.ThreadFeature(id, name, it, pitch, clearance) }
         override fun missing() = "Tap the round face of a shaft or hole"
     }

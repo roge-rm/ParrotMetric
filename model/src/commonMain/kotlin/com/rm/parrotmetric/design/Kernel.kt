@@ -86,8 +86,8 @@ interface Kernel {
      * What shape a named edge or face is: kind, then a point, a direction
      * and a size. 0 a straight edge (start, along it, length); 1 a round edge
      * (centre, axis, radius); 2 a cylinder or cone (a point on its axis, the
-     * axis, radius); 3 a sphere (centre, -, radius); 4 a flat face (middle,
-     * normal, 0). Null if it's none of these or the body hasn't got it.
+     * axis, radius, then 1 if it's a hole); 3 a sphere (centre, -, radius); 4 a
+     * flat face (middle, normal, 0). Null if it's none of these or the body hasn't got it.
      */
     fun shapeOf(body: Long, name: String, edge: Boolean): DoubleArray? = null
     /** The point a fraction t along a named edge, then the edge's direction there; null if the body hasn't got it. */
@@ -98,7 +98,8 @@ interface Kernel {
     fun pipe(id: Int, path: KernelPath, diameter: Double, inner: Double): Long
     fun coil(id: Int, plane: SketchPlane, u: Double, v: Double, diameter: Double, pitch: Double, turns: Double, section: Double, square: Boolean): Long
     /** The body with an ISO metric thread cut into a round face. */
-    fun thread(id: Int, body: Long, face: String, pitch: Double): Long
+    /** [clearance] moves the face away from the mating part first: a hole wider, a shaft thinner. */
+    fun thread(id: Int, body: Long, face: String, pitch: Double, clearance: Double = 0.0): Long
     /**
      * Rings round the openings in a flat rim face, standing [height] out of it, from
      * [inside] to [outside] mm out from each opening's edge. Faces are F<id>.<tag><n>.

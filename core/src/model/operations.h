@@ -162,8 +162,10 @@ NamedShape coil(int id, const gp_Ax3& plane, double u, double v, double diameter
  * A body with a thread cut into one of its round faces: on the outside of
  * a shaft or the inside of a hole, as the face looks. ISO metric: a 60°
  * groove [pitch] mm a turn, as long as the face. The groove is named F<id>.t.
+ * With [clearance] (mm) the face moves away from the mating part first, a
+ * hole wider or a shaft thinner, and keeps its name.
  */
-NamedShape thread(int id, const NamedShape& body, const std::string& face, double pitch);
+NamedShape thread(int id, const NamedShape& body, const std::string& face, double pitch, double clearance = 0);
 
 /**
  * A rib or web from open sketch curves, grown until it meets the body and

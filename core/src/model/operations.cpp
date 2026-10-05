@@ -1694,8 +1694,9 @@ NamedShape thicken(int id, const NamedShape& surface, double thickness, bool bot
     }
 }
 
-NamedShape thread(int id, const NamedShape& body, const std::string& face, double pitch) {
+NamedShape thread(int id, const NamedShape& body, const std::string& face, double pitch, double clearance) {
     if (pitch <= 0) throw std::runtime_error("The pitch has to be more than 0");
+    if (clearance < 0) throw std::runtime_error("The clearance can't be less than 0");
     auto faces = body.findFaces(face);
     if (faces.empty()) throw std::runtime_error("The face isn't there any more");
     try {
@@ -1703,7 +1704,7 @@ NamedShape thread(int id, const NamedShape& body, const std::string& face, doubl
         BRepAdaptor_Surface surface(f);
         if (surface.GetType() != GeomAbs_Cylinder) throw std::runtime_error("Threads go on round faces");
         gp_Cylinder cyl = surface.Cylinder();
-        const double r = cyl.Radius();
+        const double r0 = cyl.Radius();
         double u0, u1, v0, v1;
         BRepTools::UVBounds(f, u0, u1, v0, v1);
         // A hole if the face looks in towards the axis.
@@ -1715,26 +1716,82 @@ NamedShape thread(int id, const NamedShape& body, const std::string& face, doubl
         gp_Vec radial(cyl.Axis().Location(), p);
         radial -= gp_Vec(cyl.Axis().Direction()) * radial.Dot(gp_Vec(cyl.Axis().Direction()));
         const bool hole = normal.Dot(radial) < 0;
-        // ISO metric: 60° flanks; the groove is a little over the basic depth, and starts outside the face so the cut is clean.
-        const double depth = 0.6134 * pitch;
+        const double r = r0;
+        if (clearance > 0) {
+            // The face moves away from the mating part first, a hole wider or a shaft thinner, keeping its name; then the thread goes on that.
+            const double moved = hole ? r0 + clearance : r0 - clearance;
+            if (moved <= 0) throw std::runtime_error("The clearance is more than the shaft");
+            gp_Ax3 at3(cyl.Axis().Location(), cyl.Axis().Direction(), cyl.XAxis().Direction());
+            gp_Ax2 axis(at3.Location().Translated(gp_Vec(at3.Direction()) * v0), at3.Direction(), at3.XDirection());
+            const double outer = r0 + 0.2 * pitch;
+            TopoDS_Shape ease = hole ? BRepPrimAPI_MakeCylinder(axis, moved, v1 - v0).Shape()
+                                     : BRepAlgoAPI_Cut(BRepPrimAPI_MakeCylinder(axis, outer, v1 - v0).Shape(),
+                                                       BRepPrimAPI_MakeCylinder(axis, moved, v1 - v0).Shape()).Shape();
+            BRepAlgoAPI_Cut cut(body.shape, ease);
+            if (!cut.IsDone()) throw std::runtime_error("The thread couldn't be cut");
+            NamedShape eased = carryNames({&body}, cut, cut.Shape(), prefix(id));
+            NamedShape renamed;
+            renamed.shape = eased.shape;
+            for (TopExp_Explorer e(eased.shape, TopAbs_FACE); e.More(); e.Next()) {
+                BRepAdaptor_Surface s(TopoDS::Face(e.Current()));
+                bool isMoved = s.GetType() == GeomAbs_Cylinder && std::abs(s.Cylinder().Radius() - moved) < 1e-6;
+                renamed.names.Bind(e.Current(), isMoved ? face : eased.faceName(e.Current()));
+            }
+            return thread(id, renamed, face, pitch, 0);
+        }
+        // ISO metric basic profile, H the 60° triangle's height. A shaft's groove is 7/8 of a pitch wide at the shaft
+        // and goes in 17H/24; a hole's (made at the nut size) is 3/4 of a pitch wide at the hole and goes out 5H/8
+        // to the bolt's size, so the two mesh exactly. Each starts a little outside the face so the cut is clean.
+        const double H = pitch * std::sqrt(3.0) / 2;
+        const double depth = hole ? 5 * H / 8 : 17 * H / 24;
         const double over = 0.1 * pitch;
-        const double half = (depth + over) * std::tan(M_PI / 6);
-        gp_Ax3 frame(cyl.Axis().Location(), cyl.Axis().Direction(), cyl.XAxis().Direction());
-        const double turns = (v1 - v0) / pitch;
+        const double flank = std::tan(M_PI / 6);
+        const double apex = hole ? r + 3 * H / 4 : r - 7 * H / 8;
+        auto halfAt = [&](double radius) { return flank * std::abs(apex - radius); };
+        // Laid out the same way for every face on the same axis, whichever way the face runs, so threads are all
+        // right-handed, and a hole's thread is half a turn round from a shaft's, its ridges in the shaft's grooves.
+        gp_Dir dir = cyl.Axis().Direction();
+        if (dir.XYZ().Dot(gp_XYZ(0.3, 0.5, 0.81)) < 0) dir.Reverse();
+        const gp_Pnt loc = cyl.Axis().Location();
+        const gp_Pnt origin = loc.Translated(gp_Vec(dir) * gp_Vec(loc, gp::Origin()).Dot(gp_Vec(dir)));
+        auto height = [&](double v) { return gp_Vec(origin, loc.Translated(gp_Vec(cyl.Axis().Direction()) * v)).Dot(gp_Vec(dir)); };
+        const double lo = std::min(height(v0), height(v1)), hi = std::max(height(v0), height(v1));
+        gp_Vec across = gp_Vec(gp::DX()) - gp_Vec(dir) * gp_Vec(gp::DX()).Dot(gp_Vec(dir));
+        if (across.Magnitude() < 0.1) across = gp_Vec(gp::DY()) - gp_Vec(dir) * gp_Vec(gp::DY()).Dot(gp_Vec(dir));
+        const double phase = 2 * M_PI * lo / pitch + (hole ? M_PI : 0);
+        gp_Ax3 frame(origin, dir, gp_Dir(across.Rotated(gp_Ax1(origin, dir), phase)));
+        const double turns = (hi - lo) / pitch;
         if (turns < 0.5) throw std::runtime_error("The face is too short for that pitch");
-        TopoDS_Wire path = helix(frame, r, pitch, turns, v0);
-        gp_Pnt base = frame.Location().Translated(gp_Vec(frame.Direction()) * v0);
+        // A pitch past each end, then trimmed to the face, so the groove runs the face's full height all round.
+        TopoDS_Wire path = helix(frame, r, pitch, turns + 2, lo - pitch);
+        gp_Pnt base = origin.Translated(gp_Vec(dir) * (lo - pitch));
         gp_Vec out(frame.XDirection()), up(frame.Direction());
         auto at = [&](double radius, double height) { return base.Translated(out * radius + up * height); };
         // Point in from the surface, or out for a hole; the wide end just outside the material.
-        TopoDS_Wire groove = hole
-            ? polygon({at(r - over, -half), at(r - over, half), at(r + depth, 0)})
-            : polygon({at(r + over, -half), at(r + over, half), at(r - depth, 0)});
-        TopoDS_Shape cutter = alongHelix(path, groove, frame.Direction());
+        const double rimR = hole ? r - over : r + over, rootR = hole ? r + depth : r - depth;
+        TopoDS_Wire groove = polygon({at(rimR, -halfAt(rimR)), at(rimR, halfAt(rimR)), at(rootR, halfAt(rootR)), at(rootR, -halfAt(rootR))});
+        TopoDS_Shape swept = alongHelix(path, groove, frame.Direction());
+        gp_Ax2 band(origin.Translated(gp_Vec(dir) * lo), dir);
+        TopoDS_Shape cutter = swept;
+        // Trimmed only where there's material just past an end, as a shoulder under a neck; a free end needs none.
+        bool next = false;
+        const double mid = hole ? r + depth / 2 : r - depth / 2;
+        for (double h : {lo - 0.05, hi + 0.05})
+            for (int i = 0; i < 8 && !next; ++i) {
+                gp_Pnt p = origin.Translated(gp_Vec(dir) * h + gp_Vec(across.Normalized()).Rotated(gp_Ax1(gp::Origin(), dir), i * M_PI / 4) * mid);
+                BRepClass3d_SolidClassifier inside(body.shape, p, 1e-6);
+                next = inside.State() == TopAbs_IN;
+            }
+        if (next) {
+            BRepAlgoAPI_Common trimmed(swept, BRepPrimAPI_MakeCylinder(band, r + depth + over + pitch, hi - lo).Shape());
+            if (!trimmed.IsDone()) throw std::runtime_error("The thread couldn't be cut");
+            cutter = trimmed.Shape();
+        }
         BRepAlgoAPI_Cut cut;
         TopTools_ListOfShape args, tools;
         args.Append(body.shape);
         tools.Append(cutter);
+
         cut.SetArguments(args);
         cut.SetTools(tools);
         cut.SetRunParallel(useCores());

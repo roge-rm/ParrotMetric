@@ -144,8 +144,8 @@ private class FakeKernel : Kernel {
         return make(Box(b.to, b.to + height, listOf("F$id.${tag}0")))
     }
 
-    override fun thread(id: Int, body: Long, face: String, pitch: Double): Long {
-        calls += "thread $id $face $pitch"
+    override fun thread(id: Int, body: Long, face: String, pitch: Double, clearance: Double): Long {
+        calls += "thread $id $face $pitch" + (if (clearance > 0) " $clearance" else "")
         return make(bodies.getValue(body).let { it.copy(faces = it.faces + "F$id.t0") })
     }
     override fun loft(id: Int, sections: List<Triple<SketchPlane, List<ProfileCurve>, RegionRef>>, ruled: Boolean): Long {
@@ -626,9 +626,7 @@ class RebuildTest {
         val box = extrude(d, sketchAt(d, 0.0, 10.0), Operation.NewBody)
         val thread = ThreadFeature(d.newId(), "Thread", "F${box.id}.end", 1.5, 0.3).also { d.add(it) }
         assertTrue(Rebuilder(k).rebuild(d.active).errors.isEmpty())
-        val i = k.calls.indexOf("offsetFaces ${thread.id} [F${box.id}.end] -0.3")
-        assertTrue(i >= 0, k.calls.toString())
-        assertTrue(k.calls.indexOf("thread ${thread.id} F${box.id}.end 1.5") > i)
+        assertTrue("thread ${thread.id} F${box.id}.end 1.5 0.3" in k.calls, k.calls.toString())
     }
 
     @Test

@@ -347,12 +347,13 @@ object WebCore : NativeCore {
         return call(32, args).long()
     }
 
-    override fun thread(id: Int, body: Long, face: String, pitch: Double): Long {
+    override fun thread(id: Int, body: Long, face: String, pitch: Double, clearance: Double): Long {
         val args = Args()
         args.int(id)
         args.long(body)
         args.string(face)
         args.double(pitch)
+        args.double(clearance)
         return call(33, args).long()
     }
 

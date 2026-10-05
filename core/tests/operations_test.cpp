@@ -527,6 +527,57 @@ TEST_CASE("a threaded shaft and an eased threaded hole round it don't overlap") 
     CHECK(overlapVolume(neck, lid) < 1e-6);
 }
 
+TEST_CASE("a jar's threaded neck and its eased threaded lid don't overlap") {
+    // The jar as the app makes it: a half profile revolved, shelled open at the neck.
+    gp_Ax3 front(gp_Pnt(0, 0, 0), gp_Dir(0, -1, 0), gp_Dir(1, 0, 0));
+    std::vector<SketchCurve> profile = {line(1, 0, 0, 30, 0), line(2, 30, 0, 30, 50), line(3, 30, 50, 27, 50),
+                                        line(4, 27, 50, 27, 62), line(5, 27, 62, 0, 62), line(6, 0, 62, 0, 0)};
+    NamedShape solid = revolve(1, front, profile, {{{1, 2, 3, 4, 5, 6}, 15, 31}}, 0, 0, 0, 1, 2 * M_PI);
+    // Faces by where they are.
+    auto find = [](const NamedShape& b, const std::function<bool(const BRepAdaptor_Surface&, const Bnd_Box&)>& is) {
+        for (const auto& n : b.faceNames())
+            for (const auto& f : b.findFaces(n)) {
+                BRepAdaptor_Surface s(f);
+                Bnd_Box box;
+                BRepBndLib::Add(f, box);
+                if (is(s, box)) return n;
+            }
+        return std::string();
+    };
+    auto zRange = [](const Bnd_Box& b, double lo, double hi) {
+        double x0, y0, z0, x1, y1, z1;
+        b.Get(x0, y0, z0, x1, y1, z1);
+        return std::abs(z0 - lo) < 0.01 && std::abs(z1 - hi) < 0.01;
+    };
+    std::string top = find(solid, [&](auto& s, auto& b) { return s.GetType() == GeomAbs_Plane && zRange(b, 62, 62); });
+    REQUIRE(!top.empty());
+    NamedShape jar = shell(2, solid, {top}, 2);
+    std::string neck = find(jar, [&](auto& s, auto& b) { return s.GetType() == GeomAbs_Cylinder && std::abs(s.Cylinder().Radius() - 27) < 1e-6 && zRange(b, 50, 62); });
+    REQUIRE(!neck.empty());
+    NamedShape threadedJar = thread(3, jar, neck, 3);
+    // The lid: a cylinder on the shoulder with a bore, eased, threaded.
+    gp_Ax3 shoulder(gp_Pnt(0, 0, 50), gp::DZ(), gp::DX());
+    NamedShape cap = primitive(4, shoulder, Primitive::Cylinder, 0, 0, 60, 14, 0);
+    NamedShape bored = combine(6, cap, primitive(5, shoulder, Primitive::Cylinder, 0, 0, 54, 12, 0), Combine::Cut);
+    NamedShape lid = thread(8, bored, "F5.side", 3, 0.3);
+    INFO("jar/lid " << overlapVolume(threadedJar, lid) << ", plain jar/lid " << overlapVolume(jar, lid));
+    CHECK(overlapVolume(threadedJar, lid) < 1e-3);
+    CHECK(overlapVolume(jar, lid) < 1e-3);
+    // Made at the size for a nut, the lid's ridges sit in the neck's grooves.
+    NamedShape nutBore = combine(12, cap, primitive(11, shoulder, Primitive::Cylinder, 0, 0, 54 - 1.0825 * 3, 12, 0), Combine::Cut);
+    NamedShape nut = thread(13, nutBore, "F11.side", 3, 0.2);
+    INFO("meshing " << overlapVolume(threadedJar, nut));
+    CHECK(overlapVolume(threadedJar, nut) < 1e-3);
+    CHECK(overlapVolume(threadedJar, thread(14, nutBore, "F11.side", 3)) < 1e-3);
+    // The eased bore keeps its name, now 0.3 wider.
+    BRepAdaptor_Surface bore(lid.findFaces("F5.side").at(0));
+    CHECK(bore.Cylinder().Radius() == Catch::Approx(27.3));
+    // A shaft with clearance gets thinner.
+    NamedShape rod = thread(11, primitive(9, gp_Ax3(gp::XOY()), Primitive::Cylinder, 0, 0, 10, 20, 0), "F9.side", 1.5, 0.2);
+    BRepAdaptor_Surface outside(rod.findFaces("F9.side").at(0));
+    CHECK(outside.Cylinder().Radius() == Catch::Approx(4.8));
+}
+
 TEST_CASE("a loft between two squares is a box") {
     gp_Ax3 up(gp_Pnt(0, 0, 20), gp::DZ(), gp::DX());
     LoftProfile low{top, rectangle(10, 10), {{1, 2, 3, 4}, 5, 5}};
