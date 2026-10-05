@@ -194,6 +194,7 @@ private fun ExtrudeSettings(editor: DesignEditor, d: DesignEditor.ExtrudeDraft) 
         d.operation = it
         editor.draftChanged()
     }
+    if (d.operation != Operation.NewBody) OnlyRow(editor, d)
 }
 
 @Composable
@@ -230,6 +231,7 @@ private fun PrimitiveSettings(editor: DesignEditor, d: DesignEditor.PrimitiveDra
         d.operation = it
         editor.draftChanged()
     }
+    if (d.operation != Operation.NewBody) OnlyRow(editor, d)
 }
 
 /** What a sweep or pipe follows: one of the other sketches, or edges picked in the view. */
@@ -359,6 +361,7 @@ private fun RevolveSettings(editor: DesignEditor, d: DesignEditor.RevolveDraft) 
         d.operation = it
         editor.draftChanged()
     }
+    if (d.operation != Operation.NewBody) OnlyRow(editor, d)
 }
 
 @Composable
@@ -406,6 +409,29 @@ private fun EdgeSettings(editor: DesignEditor, d: DesignEditor.EdgeDraft) {
 @Composable
 private fun OperationRow(op: Operation, onPick: (Operation) -> Unit) {
     Segmented(listOf("New body", "Join", "Cut", "Intersect"), op.ordinal) { onPick(Operation.entries[it]) }
+}
+
+/** Which bodies a join, cut or intersect changes: any it reaches, or the ones picked. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+internal fun OnlyRow(editor: DesignEditor, d: DesignEditor.FeatureDraft) {
+    val labels = (editor.allBodies().map { it.label } + d.only).distinct()
+    if (labels.isEmpty()) return
+    Text("Changes", fontSize = 13.sp, color = Palette.muted)
+    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        @Composable
+        fun pill(text: String, on: Boolean, onClick: () -> Unit) = Surface(
+            onClick = onClick,
+            shape = RoundedCornerShape(12.dp),
+            color = if (on) Palette.line else Palette.ground,
+            contentColor = Palette.text,
+        ) { Text(text, Modifier.padding(horizontal = 10.dp, vertical = 7.dp), fontSize = 13.sp) }
+        pill("Any it reaches", d.only.isEmpty()) { d.only = emptyList(); editor.draftChanged() }
+        for (l in labels) pill(editor.design.nameOf(l), l in d.only) {
+            d.only = if (l in d.only) d.only - l else d.only + l
+            editor.draftChanged()
+        }
+    }
 }
 
 /** A number field tied to a draft's field: what's typed with parameter names in it is kept as an expression. */
@@ -660,6 +686,7 @@ internal fun HoleSettings(editor: DesignEditor, d: DesignEditor.HoleDraft) {
     if (!d.through) Field(editor, d, "depth", "Depth", d.depth, "mm", allowNegative = false) { d.depth = it; editor.draftChanged() }
     if (d.kind != com.rm.parrotmetric.design.HoleKind.Simple) Field(editor, d, "topDiameter", "Top", d.topDiameter, "mm", allowNegative = false) { d.topDiameter = it; editor.draftChanged() }
     if (d.kind == com.rm.parrotmetric.design.HoleKind.Counterbore) Field(editor, d, "topDepth", "Top depth", d.topDepth, "mm", allowNegative = false) { d.topDepth = it; editor.draftChanged() }
+    OnlyRow(editor, d)
 }
 
 @Composable

@@ -232,6 +232,26 @@ class RebuildTest {
     }
 
     @Test
+    fun aCutSetToChangeOneBodyLeavesTheOthers() {
+        val k = FakeKernel()
+        val d = Design()
+        extrude(d, sketchAt(d, 0.0, 10.0), Operation.NewBody)
+        extrude(d, sketchAt(d, 10.0, 10.0), Operation.NewBody)
+        // Reaches into both, but only the second is to change.
+        val s = sketchAt(d, 5.0, 10.0)
+        d.add(ExtrudeFeature(d.newId(), "Extrude", s.id, listOf(RegionRef(listOf(1, 2, 3, 4), 0.0, 0.0)), 10.0, 0.0, Operation.Cut, only = listOf("Body 2")))
+        val built = Rebuilder(k).rebuild(d.active)
+        assertTrue(built.errors.isEmpty())
+        assertEquals(1, k.calls.count { it.startsWith("combine") })
+        assertEquals(10.0, k.bodies.getValue(built.bodies[0].handle).to)
+
+        // Set to change a body it doesn't reach, it says so.
+        val t = sketchAt(d, 50.0, 10.0)
+        d.add(ExtrudeFeature(d.newId(), "Extrude", t.id, listOf(RegionRef(listOf(1, 2, 3, 4), 0.0, 0.0)), 10.0, 0.0, Operation.Cut, only = listOf("Body 1")))
+        assertEquals("It doesn't reach the bodies it's set to change", Rebuilder(k).rebuild(d.active).errors.values.single())
+    }
+
+    @Test
     fun aJoinThatOnlyTouchesAFaceStillJoins() {
         val k = FakeKernel()
         val d = Design()

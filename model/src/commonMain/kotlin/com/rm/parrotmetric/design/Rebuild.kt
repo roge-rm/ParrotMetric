@@ -922,7 +922,10 @@ class Rebuilder(private val kernel: Kernel) {
      * [applyTool] without keeping the tool; takes over the tool's handle.
      * [home] is the face its sketch is on, if it's on one.
      */
-    private fun useTool(f: Feature, tool: Long, op: Operation, bodies: List<BodyState>, planes: Map<Int, SketchPlane>, made: Int, home: String? = null): Step {
+    private fun useTool(
+        f: Feature, tool: Long, op: Operation, bodies: List<BodyState>, planes: Map<Int, SketchPlane>, made: Int, home: String? = null,
+        only: List<String> = f.only,
+    ): Step {
         try {
             if (op == Operation.NewBody) {
                 keep(bodies)
@@ -930,9 +933,11 @@ class Rebuilder(private val kernel: Kernel) {
             }
             // A cut or intersect goes into the bodies it reaches into. A join takes those too; when it only
             // touches, as a post on a floor does, the body its sketch is on, or else all it touches.
-            val touched = bodies.filter { shares(it.handle, tool) }.ifEmpty {
+            // When it's set to change only some bodies, the others are left as they are.
+            val pool = if (only.isEmpty()) bodies else bodies.filter { it.label in only }
+            val touched = pool.filter { shares(it.handle, tool) }.ifEmpty {
                 if (op != Operation.Join) return@ifEmpty emptyList()
-                val near = bodies.filter { kernel.overlaps(it.handle, tool) }
+                val near = pool.filter { kernel.overlaps(it.handle, tool) }
                 near.filter { home != null && home in kernel.faceNames(it.handle) }.ifEmpty { near }
             }
             if (touched.isEmpty()) {
@@ -940,8 +945,11 @@ class Rebuilder(private val kernel: Kernel) {
                     keep(bodies)
                     return Step(f.key(), bodies + BodyState("Body ${made + 1}", tool), planes, null, made + 1)
                 }
-                kernel.release(tool)
-                throw KernelException(if (op == Operation.Cut) "It doesn't reach any body to cut" else "It doesn't overlap any body")
+                throw KernelException(when {
+                    only.isNotEmpty() -> "It doesn't reach the bodies it's set to change"
+                    op == Operation.Cut -> "It doesn't reach any body to cut"
+                    else -> "It doesn't overlap any body"
+                })
             }
             val out = mutableListOf<BodyState>()
             try {
@@ -996,10 +1004,11 @@ class Rebuilder(private val kernel: Kernel) {
             for ((k, src) in sources.withIndex()) for ((j, m) in mats.withIndex()) {
                 val copy = kernel.transform(f.id, src.tool, m, "f${ids[k]}.$j")
                 if (src.toolOp == Operation.Cut || src.toolOp == Operation.Intersect) {
-                    if (now.none { shares(it.handle, copy) }) { kernel.release(copy); continue }
+                    val only = all.firstOrNull { it.id == ids[k] }?.only.orEmpty()
+                    if (now.none { (only.isEmpty() || it.label in only) && shares(it.handle, copy) }) { kernel.release(copy); continue }
                 }
                 used++
-                val s = useTool(f, copy, src.toolOp, now, planes, count)
+                val s = useTool(f, copy, src.toolOp, now, planes, count, only = all.firstOrNull { it.id == ids[k] }?.only.orEmpty())
                 now.forEach { kernel.release(it.handle) }
                 now = s.bodies
                 count = s.bodyCount

@@ -1341,6 +1341,9 @@ class DesignEditor(
         /** Fields typed as expressions, by the names Parametrics.withValue uses. */
         val exprs = androidx.compose.runtime.mutableStateMapOf<String, String>()
 
+        /** The bodies a join, cut or intersect may change, or empty for any it reaches. */
+        var only by mutableStateOf<List<String>>(emptyList())
+
         /** The feature as set up so far, or null if something's missing. */
         abstract fun feature(): Feature?
         abstract fun missing(): String
@@ -1352,6 +1355,8 @@ class DesignEditor(
         var regions by mutableStateOf<List<RegionRef>>(emptyList())
         var operation by mutableStateOf(Operation.NewBody)
         override fun missing() = "Tap an area of a sketch"
+
+        init { only = editing?.only ?: emptyList() }
     }
 
     enum class Direction { OneSide, Symmetric, TwoSides }
@@ -1400,18 +1405,18 @@ class DesignEditor(
                     backwards -> -1.0 to 0.0
                     else -> 1.0 to 0.0
                 }
-                return ExtrudeFeature(id, name, s, regions, fwd, back, operation, taper, null, true, offset, wall)
+                return ExtrudeFeature(id, name, s, regions, fwd, back, operation, taper, null, true, offset, wall, only)
             }
             if (upToOn) {
                 val target = upTo ?: return null
-                return ExtrudeFeature(id, name, s, regions, 0.0, 0.0, operation, taper, target, false, offset, wall)
+                return ExtrudeFeature(id, name, s, regions, 0.0, 0.0, operation, taper, target, false, offset, wall, only)
             }
             val (fwd, back) = when (direction) {
                 Direction.OneSide -> distance to 0.0
                 Direction.Symmetric -> distance / 2 to distance / 2
                 Direction.TwoSides -> distance to other
             }
-            return ExtrudeFeature(id, name, s, regions, fwd, back, operation, taper, null, false, offset, wall)
+            return ExtrudeFeature(id, name, s, regions, fwd, back, operation, taper, null, false, offset, wall, only)
         }
 
         override fun missing() = if (regions.isEmpty()) "Tap an area of a sketch" else "Tap the face to go up to"
@@ -1514,7 +1519,7 @@ class DesignEditor(
         override fun feature(): Feature? {
             val s = sketchId ?: return null
             if (regions.isEmpty()) return null
-            return RevolveFeature(id, name, s, regions, axis, degrees * PI / 180, operation)
+            return RevolveFeature(id, name, s, regions, axis, degrees * PI / 180, operation, only)
         }
     }
 
@@ -1581,6 +1586,8 @@ class DesignEditor(
         var fit by mutableStateOf(matched?.first)
         var size by mutableStateOf(matched?.second ?: "M3")
 
+        init { only = editing?.only ?: emptyList() }
+
         /** Sets the size, and the depth for an insert, from what it's for. */
         fun usePreset(newFit: com.rm.parrotmetric.design.HoleFit?, newSize: String) {
             fit = newFit
@@ -1605,7 +1612,7 @@ class DesignEditor(
 
         override fun feature(): Feature? {
             val s = sketchId ?: return null
-            return HoleFeature(id, name, s, diameter, if (through) 0.0 else depth, kind, topDiameter, topDepth)
+            return HoleFeature(id, name, s, diameter, if (through) 0.0 else depth, kind, topDiameter, topDepth, only)
         }
 
         override fun missing() = "Draw points with the Point tool in a sketch first"
@@ -1909,7 +1916,9 @@ class DesignEditor(
         var c by mutableStateOf(editing?.c ?: 20.0)
         var operation by mutableStateOf(editing?.operation ?: Operation.NewBody)
         var flip by mutableStateOf(editing?.flip ?: false)
-        override fun feature() = com.rm.parrotmetric.design.PrimitiveFeature(id, name, kind, plane, u, v, a, b, c, operation, flip)
+
+        init { only = editing?.only ?: emptyList() }
+        override fun feature() = com.rm.parrotmetric.design.PrimitiveFeature(id, name, kind, plane, u, v, a, b, c, operation, flip, only)
         override fun missing() = ""
     }
 

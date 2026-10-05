@@ -274,7 +274,7 @@ object DesignFile {
             is ImportFeature -> mapOf("type" to "import", "format" to f.format, "data" to Base64.encode(f.data))
             else -> throw IllegalArgumentException("Can't save ${f.name}")
         }
-        return Json.of(base + extra)
+        return Json.of(base + extra + (if (f.only.isEmpty()) emptyMap() else mapOf("only" to f.only)))
     }
 
     private fun feature(o: Json.Obj): Feature {
@@ -288,6 +288,7 @@ object DesignFile {
             "draft" -> DraftFeature(id, name, strings(o.arr("faces")), o.str("neutral"), o.num("angle"))
             "hole" -> HoleFeature(
                 id, name, o.int("sketch"), o.num("diameter"), o.num("depth"), HoleKind.valueOf(o.str("kind")), o.num("topDiameter"), o.num("topDepth"),
+                strings(o.arr("only")),
             )
             "mirror" -> MirrorFeature(id, name, strings(o.arr("bodies")), plane(o.obj("plane")), o.bool("join"), ints(o["features"]))
             "offsetFace" -> OffsetFaceFeature(id, name, strings(o.arr("faces")), o.num("distance"))
@@ -351,11 +352,11 @@ object DesignFile {
             "extrude" -> ExtrudeFeature(
                 id, name, o.int("sketch"), readRegions(o.arr("regions")), o.num("forward"), o.num("back"), Operation.valueOf(o.str("operation")),
                 o.numOr("taper", 0.0), (o["upTo"] as? Json.Obj)?.let { plane(it) },
-                o.bool("throughAll"), o.numOr("offset", 0.0), o.numOr("thin", 0.0),
+                o.bool("throughAll"), o.numOr("offset", 0.0), o.numOr("thin", 0.0), strings(o.arr("only")),
             )
             "primitive" -> PrimitiveFeature(
                 id, name, PrimitiveKind.valueOf(o.str("kind")), plane(o["plane"] as Json.Obj), o.num("u"), o.num("v"),
-                o.num("a"), o.num("b"), o.num("c"), Operation.valueOf(o.str("operation")), o.bool("flip"),
+                o.num("a"), o.num("b"), o.num("c"), Operation.valueOf(o.str("operation")), o.bool("flip"), strings(o.arr("only")),
             )
             "revolve" -> {
                 val axis = when (val a = o.str("axis")) {
@@ -363,7 +364,7 @@ object DesignFile {
                     "y" -> AxisRef.SketchY
                     else -> AxisRef.SketchLine(a.removePrefix("line ").toInt())
                 }
-                RevolveFeature(id, name, o.int("sketch"), readRegions(o.arr("regions")), axis, o.num("angle"), Operation.valueOf(o.str("operation")))
+                RevolveFeature(id, name, o.int("sketch"), readRegions(o.arr("regions")), axis, o.num("angle"), Operation.valueOf(o.str("operation")), strings(o.arr("only")))
             }
             "fillet" -> FilletFeature(
                 id, name, o.arr("edges").map { (it as Json.Str).value }, o.num("radius"),

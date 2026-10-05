@@ -189,6 +189,8 @@ data class HoleFeature(
     val kind: HoleKind,
     val topDiameter: Double,
     val topDepth: Double,
+    /** The bodies it may change, by label, or empty for any it reaches. */
+    override val only: List<String> = emptyList(),
 ) : Feature() {
     override fun key() = this
 }

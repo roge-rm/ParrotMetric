@@ -39,4 +39,4 @@ A spring or a spiral, with no sketch needed. Set the plane it stands on, the **D
 
 ## New body, join, cut or intersect
 
-Each of these asks what to do with the shape: keep it as a **New body**, **Join** it to the bodies it touches, **Cut** it out of them, or **Intersect** to keep only where they overlap. A cut extrude is how you make most holes and pockets.
+Each of these asks what to do with the shape: keep it as a **New body**, **Join** it to the bodies it touches, **Cut** it out of them, or **Intersect** to keep only where they overlap. A cut extrude is how you make most holes and pockets. Under **Changes** you can pick which bodies it changes, so a port cut through the case wall leaves the board's socket alone. **Any it reaches** is the default.

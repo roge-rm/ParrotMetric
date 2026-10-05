@@ -65,7 +65,7 @@ class DesignFileTest {
         val features = listOf(
             com.rm.parrotmetric.design.ShellFeature(d.newId(), "Shell", listOf("F1.end"), 2.0),
             com.rm.parrotmetric.design.DraftFeature(d.newId(), "Draft", listOf("F1.s1"), "F1.start", 0.1),
-            com.rm.parrotmetric.design.HoleFeature(d.newId(), "Hole", 1, 4.0, 0.0, com.rm.parrotmetric.design.HoleKind.Countersink, 8.0, 0.0),
+            com.rm.parrotmetric.design.HoleFeature(d.newId(), "Hole", 1, 4.0, 0.0, com.rm.parrotmetric.design.HoleKind.Countersink, 8.0, 0.0, listOf("Body 2")),
             com.rm.parrotmetric.design.MirrorFeature(d.newId(), "Mirror", listOf("Body 1"), top, true),
             com.rm.parrotmetric.design.PatternFeature(d.newId(), "Pattern", emptyList(), false, com.rm.parrotmetric.design.Axis3.X, 3, 10.0, 0.0, com.rm.parrotmetric.design.Axis3.Y, 2, 5.0, false),
             com.rm.parrotmetric.design.CombineFeature(d.newId(), "Combine", "Body 1", listOf("Body 2"), Operation.Cut, true),

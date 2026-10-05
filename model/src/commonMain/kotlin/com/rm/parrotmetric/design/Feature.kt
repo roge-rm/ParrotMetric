@@ -15,6 +15,9 @@ sealed class Feature {
     abstract val id: Int
     abstract val name: String
     abstract fun key(): Any
+
+    /** The bodies a join, cut or intersect may change, by label, or empty for any it reaches. */
+    open val only: List<String> get() = emptyList()
 }
 
 /** Where a sketch lies: a fixed plane, or a flat face found by name when the history is rebuilt. */
@@ -66,6 +69,8 @@ data class ExtrudeFeature(
     val offset: Double = 0.0,
     /** A wall this thick (mm) inside the areas' edges, or 0 for solid. */
     val thin: Double = 0.0,
+    /** The bodies it may change, by label, or empty for any it reaches. */
+    override val only: List<String> = emptyList(),
 ) : Feature() {
     override fun key() = this
 }
@@ -91,6 +96,8 @@ data class PrimitiveFeature(
     val operation: Operation,
     /** Grown behind its plane instead of in front. */
     val flip: Boolean = false,
+    /** The bodies it may change, by label, or empty for any it reaches. */
+    override val only: List<String> = emptyList(),
 ) : Feature() {
     override fun key() = this
 }
@@ -111,6 +118,8 @@ data class RevolveFeature(
     val axis: AxisRef,
     val angle: Double,
     val operation: Operation,
+    /** The bodies it may change, by label, or empty for any it reaches. */
+    override val only: List<String> = emptyList(),
 ) : Feature() {
     override fun key() = this
 }
