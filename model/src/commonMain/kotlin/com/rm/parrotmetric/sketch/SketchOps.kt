@@ -278,11 +278,15 @@ object SketchOps {
             is Constraint.TangentJoin -> if (k.at in new.points()) {
                 if (k.c1 === old) add(Constraint.TangentJoin(new, k.c2, k.at)) else if (k.c2 === old) add(Constraint.TangentJoin(k.c1, new, k.at))
             }
-            is Constraint.PointLineDistance -> if (k.line === old) add(Constraint.PointLineDistance(k.p, new, k.value))
-            is Constraint.Angle -> if (k.l1 === old) add(Constraint.Angle(new, k.l2, k.value)) else if (k.l2 === old) add(Constraint.Angle(k.l1, new, k.value))
+            is Constraint.PointLineDistance -> if (k.line === old) add(Constraint.PointLineDistance(k.p, new, k.value).keeping(k))
+            is Constraint.Angle ->
+                if (k.l1 === old) add(Constraint.Angle(new, k.l2, k.value).keeping(k)) else if (k.l2 === old) add(Constraint.Angle(k.l1, new, k.value).keeping(k))
             else -> {}
         }
     }
+
+    /** This dimension with [old]'s parameter expression, if it had one. */
+    private fun <T : Constraint.Dimension> T.keeping(old: Constraint.Dimension): T = also { it.expression = old.expression }
 
     /**
      * After a corner at p is rounded or cut: p goes, unless something else
@@ -293,8 +297,10 @@ object SketchOps {
         val carried = carried(old1, new1) + carried(old2, new2)
         // A side's length becomes the distance from its far end to the corner.
         val lengths = constraints.filterIsInstance<Constraint.Length>().filter { it.line === old1 || it.line === old2 }
-            .map { Constraint.Distance(if (it.line.a === p) it.line.b else it.line.a, p, it.value) }
-        val held = p === origin || lengths.isNotEmpty() || constraints.any { k -> p in k.points() && k.curves().none { it === old1 || it === old2 } }
+            .map { Constraint.Distance(if (it.line.a === p) it.line.b else it.line.a, p, it.value).keeping(it) }
+        // Held also by a construction line ending there, such as a centre rectangle's diagonal.
+        val held = p === origin || lengths.isNotEmpty() || constraints.any { k -> p in k.points() && k.curves().none { it === old1 || it === old2 } } ||
+            curves.any { it !== old1 && it !== old2 && p in it.points() }
         removeCurveOnly(old1)
         removeCurveOnly(old2)
         if (held) {
@@ -478,11 +484,21 @@ object SketchOps {
      * Rounds the corner where two lines meet at p, with an arc of radius r
      * that touches both. The lines are shortened to meet it.
      */
+    /**
+     * The two lines that make a corner at p, or null if it isn't one. Construction
+     * lines ending there don't count when two drawn lines meet.
+     */
+    fun cornerLines(s: Sketch, p: Point): List<Line>? {
+        val at = s.curves.filter { p in it.points() }
+        val drawn = at.filter { !it.construction }
+        val two = if (at.size != 2 && drawn.size == 2) drawn else at
+        return two.takeIf { it.size == 2 && it.all { c -> c is Line } }?.map { it as Line }
+    }
+
     fun filletCorner(s: Sketch, p: Point, r: Double): String? {
         if (r <= 0) return "The radius has to be more than 0"
-        val lines = s.curves.filter { p in it.points() }
-        if (lines.size != 2 || lines.any { it !is Line }) return "Tap a corner where two lines meet"
-        val (l1, l2) = lines.map { it as Line }
+        val lines = cornerLines(s, p) ?: return "Tap a corner where two lines meet"
+        val (l1, l2) = lines
         val far1 = if (l1.a === p) l1.b else l1.a
         val far2 = if (l2.a === p) l2.b else l2.a
         val px = s.x(p); val py = s.y(p)
@@ -519,9 +535,8 @@ object SketchOps {
     /** Cuts the corner where two lines meet at p with a straight line, d back along each. */
     fun chamferCorner(s: Sketch, p: Point, d: Double): String? {
         if (d <= 0) return "The distance has to be more than 0"
-        val lines = s.curves.filter { p in it.points() }
-        if (lines.size != 2 || lines.any { it !is Line }) return "Tap a corner where two lines meet"
-        val (l1, l2) = lines.map { it as Line }
+        val lines = cornerLines(s, p) ?: return "Tap a corner where two lines meet"
+        val (l1, l2) = lines
         val far1 = if (l1.a === p) l1.b else l1.a
         val far2 = if (l2.a === p) l2.b else l2.a
         if (d >= s.distance(p, far1) || d >= s.distance(p, far2)) return "The distance is too big for those lines"

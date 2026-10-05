@@ -154,6 +154,27 @@ class SketchOpsTest {
     }
 
     @Test
+    fun aCentreRectanglesCornersAllRoundAndKeepTheirParameters() {
+        // A centre rectangle: its construction diagonal ends at two of the corners.
+        val s = Sketch()
+        val bl = s.addPoint(-40.0, -30.0); val br = s.addPoint(40.0, -30.0); val tr = s.addPoint(40.0, 30.0); val tl = s.addPoint(-40.0, 30.0)
+        val bottom = s.addLine(bl, br); val right = s.addLine(br, tr); val top = s.addLine(tr, tl); val left = s.addLine(tl, bl)
+        val diagonal = s.addLine(tl, br, construction = true)
+        s.add(Constraint.Horizontal(bottom)); s.add(Constraint.Horizontal(top))
+        s.add(Constraint.Vertical(right)); s.add(Constraint.Vertical(left))
+        s.add(Constraint.Length(top, 80.0).also { it.expression = "w" })
+        s.add(Constraint.Length(right, 60.0).also { it.expression = "d" })
+        s.solve()
+        for (p in listOf(bl, br, tr, tl)) assertNotNull(SketchOps.cornerLines(s, p))
+        for (p in listOf(bl, br, tr, tl)) assertNull(SketchOps.filletCorner(s, p, 6.0))
+        assertEquals(4, s.curves.count { it is Arc })
+        assertTrue(diagonal in s.curves)
+        assertTrue(tl in s.points && br in s.points)
+        val exprs = s.constraints.filterIsInstance<Constraint.Dimension>().mapNotNull { it.expression }.sorted()
+        assertEquals(listOf("d", "w"), exprs)
+    }
+
+    @Test
     fun aWholeOutlineIsFoundFromOneOfItsPieces() {
         val s = Sketch()
         val a = s.addPoint(0.0, 0.0); val b = s.addPoint(20.0, 0.0); val c = s.addPoint(20.0, 10.0); val d = s.addPoint(0.0, 10.0)

@@ -1417,7 +1417,7 @@ class SketchEditor(
      */
     val selectedCorners: List<Point>
         get() {
-            fun corner(p: Point) = sketch.curves.filter { p in it.points() }.let { it.size == 2 && it.all { c -> c is Line } }
+            fun corner(p: Point) = SketchOps.cornerLines(sketch, p) != null
             val points = selection.filterIsInstance<SketchItem.P>().map { it.point }
             if (points.isNotEmpty()) return if (points.size == selection.size) points.filter(::corner) else emptyList()
             val lines = selectedCurves.filterIsInstance<Line>()
