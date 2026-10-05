@@ -840,6 +840,11 @@ class DesignEditor(
     }
 
     /** Sketches to sweep along, by name, leaving out [except]. */
+    /** Sketches with drawn lines that don't close round an area, for ribs and webs. */
+    fun lineSketches(): List<Pair<String, Int>> = design.active.filterIsInstance<SketchFeature>()
+        .filter { f -> f.sketch.curves.any { !it.construction } && finder.find(f.sketch.profileCurves()).isEmpty() }
+        .map { it.name to it.id }
+
     fun sketchChoices(except: Int?): List<Pair<String, Int>> =
         design.active.filterIsInstance<SketchFeature>().filter { it.id != except }.map { it.name to it.id }
 
@@ -1401,6 +1406,9 @@ class DesignEditor(
         rebuild()
     }
 
+    /** Why the panel's feature didn't build, if it didn't. */
+    fun panelProblem(): String? = panel?.feature()?.id?.let { built?.errors?.get(it) }
+
     /** Puts the panel's feature into the history. False, with a message, if it isn't ready. */
     fun confirmPanel(): Boolean {
         val d = panel ?: return false
@@ -1936,7 +1944,7 @@ class DesignEditor(
     inner class RibDraft(editing: com.rm.parrotmetric.design.RibFeature?, web: Boolean) : FeatureDraft() {
         val id = editing?.id ?: newId()
         private val name = editing?.name ?: nextName(if (web) "Web" else "Rib", design.features.count { it is com.rm.parrotmetric.design.RibFeature && it.web == web })
-        var sketchId by mutableStateOf(editing?.sketchId ?: sketchChoices(null).lastOrNull()?.second)
+        var sketchId by mutableStateOf(editing?.sketchId ?: lineSketches().lastOrNull()?.second)
         var thickness by mutableStateOf(editing?.thickness ?: 2.0)
         var flip by mutableStateOf(editing?.flip ?: false)
         var web by mutableStateOf(web)

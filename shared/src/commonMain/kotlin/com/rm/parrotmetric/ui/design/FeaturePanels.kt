@@ -120,6 +120,7 @@ fun FeaturePanel(editor: DesignEditor, maxHeight: androidx.compose.ui.unit.Dp = 
                 else -> {}
             }
             }
+            editor.panelProblem()?.let { Text(it, fontSize = 14.sp, color = Palette.orange) }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button("Cancel", Palette.raised, Palette.text, Modifier.weight(1f)) { editor.cancelPanel() }
                 Button("Done", Palette.mint, Palette.ink, Modifier.weight(1f)) { editor.confirmPanel() }
@@ -706,7 +707,7 @@ private fun JointSettings(editor: DesignEditor, d: DesignEditor.JointDraft) {
 private fun RibSettings(editor: DesignEditor, d: DesignEditor.RibDraft) {
     Header(if (d.web) "Web" else "Rib", Icons.rib, Palette.modify, null)
     Segmented(listOf("Rib", "Web"), if (d.web) 1 else 0) { d.web = it == 1; editor.draftChanged() }
-    val sketches = editor.sketchChoices(null)
+    val sketches = editor.lineSketches()
     if (sketches.size > 1) Segmented(sketches.takeLast(4).map { it.first }, sketches.takeLast(4).indexOfFirst { it.second == d.sketchId }.coerceAtLeast(0)) {
         d.sketchId = sketches.takeLast(4)[it].second
         editor.draftChanged()

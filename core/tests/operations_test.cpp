@@ -670,7 +670,8 @@ TEST_CASE("a rib grows down to the body and a web out of its plane") {
     NamedShape ribbed = rib(2, box, across, above, 2, false, false);
     CHECK(volume(ribbed) == Catch::Approx(16000 + 2 * 30 * 20).epsilon(1e-6));
     CHECK(has(ribbed.faceNames(), "F2.w0"));
-    CHECK_THROWS_WITH(rib(2, box, across, above, 2, true, false), "It doesn't meet the body that way");
+    // Flipped away from the body, it grows the other way instead.
+    CHECK(volume(rib(2, box, across, above, 2, true, false)) == Catch::Approx(volume(ribbed)).epsilon(1e-6));
     // A web from a plane 30 up, facing down, grows to the top face.
     gp_Ax3 high(gp_Pnt(0, 0, 30), gp_Dir(0, 0, -1), gp_Dir(1, 0, 0));
     NamedShape webbed = rib(3, box, high, {line(1, 5, -20, 35, -20)}, 2, false, true);

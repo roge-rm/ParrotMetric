@@ -1413,7 +1413,7 @@ NamedShape coil(int id, const gp_Ax3& plane, double u, double v, double diameter
     }
 }
 
-NamedShape rib(int id, const NamedShape& body, const gp_Ax3& plane, const std::vector<SketchCurve>& curves, double thickness, bool flip, bool web) {
+NamedShape rib(int id, const NamedShape& body, const gp_Ax3& plane, const std::vector<SketchCurve>& curves, double thickness, bool flip, bool web, bool retried) {
     if (thickness <= 0) throw std::runtime_error("The thickness has to be more than 0");
     TopoDS_Wire wire = pathFromSketch(plane, curves);
     if (wire.Closed()) throw std::runtime_error("Draw an open line, not a closed shape");
@@ -1500,6 +1500,8 @@ NamedShape rib(int id, const NamedShape& body, const gp_Ax3& plane, const std::v
             if (reach > far * 0.9) tooFar = true;
             else kept.push_back(s.Current());
         }
+        // Grown away from the body, it tries the other side.
+        if (kept.empty() && tooFar && !retried) return rib(id, body, plane, curves, thickness, !flip, web, true);
         if (kept.empty()) throw std::runtime_error(tooFar ? "It doesn't meet the body that way" : "It doesn't touch the body");
         NamedShape out = body;
         for (size_t i = 0; i < kept.size(); ++i)

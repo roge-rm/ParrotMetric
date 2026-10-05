@@ -174,7 +174,7 @@ NamedShape thread(int id, const NamedShape& body, const std::string& face, doubl
  * [flip]). A web is [thickness] wide in the plane and grows along the
  * plane's normal (against it with [flip]). New faces are F<id>.w<n>.
  */
-NamedShape rib(int id, const NamedShape& body, const gp_Ax3& plane, const std::vector<SketchCurve>& curves, double thickness, bool flip, bool web);
+NamedShape rib(int id, const NamedShape& body, const gp_Ax3& plane, const std::vector<SketchCurve>& curves, double thickness, bool flip, bool web, bool retried = false);
 
 /**
  * Sketch areas projected along the sketch's normal onto a face of the body,
