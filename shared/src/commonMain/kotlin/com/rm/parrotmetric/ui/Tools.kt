@@ -126,6 +126,11 @@ object Tools {
 
     fun byId(id: String) = all.firstOrNull { it.id == id }
 
+    /** Sketching on each construction plane the design has, next to Top, Front and Right. */
+    fun planes(design: DesignEditor): List<ToolDef> = design.planes().map { (id, name) ->
+        ToolDef("sketch.plane.$id", name, Icons.plane, ToolGroup.Sketch, cluster = "Sketch on a plane") { it.actions.startSketchOnPlane(id) }
+    }
+
     /** A group's tools; for Modify, those for solids or for meshes. */
     fun inGroup(group: ToolGroup, mesh: Boolean = false) =
         all.filter { it.group == group && (group != ToolGroup.Modify || (if (mesh) it.mesh else it.solid)) }

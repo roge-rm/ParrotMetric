@@ -79,7 +79,7 @@ object Manual {
             ManualBlock(ManualKind.Para, "A sketch is a flat drawing on a plane. The closed areas in it are what Extrude, Revolve and the other tools turn into solids."),
             ManualBlock(ManualKind.Heading, "Starting a sketch"),
             ManualBlock(ManualKind.Bullet, "**Sketch** then **Top**, **Front** or **Right** draws on one of the three main planes."),
-            ManualBlock(ManualKind.Bullet, "To draw on a flat face of a body, pick the face and tap **On selected** (the pencil). It works the same on a construction plane, and on a flat area of a mesh."),
+            ManualBlock(ManualKind.Bullet, "To draw on a flat face of a body, pick the face and tap **On selected** (the pencil). It works the same on a construction plane, and on a flat area of a mesh. Construction planes are also listed under Sketch, after Top, Front and Right."),
             ManualBlock(ManualKind.Para, "The view turns to look straight at the plane. The fit button at the top brings the whole sketch into view, and undo and redo there work inside the sketch. **Finish** ends the sketch."),
             ManualBlock(ManualKind.Heading, "Drawing"),
             ManualBlock(ManualKind.Para, "The tools are along the bottom: **Select**, **Line**, **Rectangle**, **Circle** and **Arc**, and **More** has **Point**, **Spline**, **Polygon**, **Slot**, **Ellipse**, **Conic** and **Text**. On a large screen they're all in one row."),

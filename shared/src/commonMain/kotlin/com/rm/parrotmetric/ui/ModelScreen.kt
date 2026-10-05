@@ -153,6 +153,8 @@ interface ModelActions {
     fun zoomAt(factor: Float, x: Float, y: Float)
     /** Starts a sketch on a plane, or on the selected flat face when plane is null. */
     fun startSketch(plane: SketchPlane?)
+    /** Starts a sketch on a construction plane, by its feature's id. */
+    fun startSketchOnPlane(id: Int) {}
     fun finishSketch()
     /** Opens a step of the history to change it. */
     fun openHistory(id: Int)
@@ -680,7 +682,7 @@ private fun GroupBar(open: ToolGroup?, onGroup: (ToolGroup) -> Unit) {
 private fun ToolSheet(group: ToolGroup, state: ModelState, design: DesignEditor, actions: ModelActions, onSheet: (String) -> Unit, close: () -> Unit) {
     var meshTools by remember(group) { mutableStateOf(false) }
     val context = ToolContext(state, design, actions, onSheet)
-    val tools = Tools.inGroup(group, meshTools)
+    val tools = Tools.inGroup(group, meshTools) + if (group == ToolGroup.Sketch) Tools.planes(design) else emptyList()
     Surface(color = Palette.surface, shape = RoundedCornerShape(26.dp)) {
         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -813,7 +815,7 @@ private fun Toolbar(context: ToolContext) {
                     Text(group.label, Modifier.padding(start = 8.dp, bottom = 2.dp), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = group.colour)
                     Row {
                         // Clustered tools share a button where the first of them is.
-                        val tools = Tools.all.filter { it.group == group }
+                        val tools = Tools.all.filter { it.group == group } + if (group == ToolGroup.Sketch) Tools.planes(context.design) else emptyList()
                         for ((i, t) in tools.withIndex()) {
                             val cluster = t.cluster
                             if (cluster == null) ToolbarButton(t, context)

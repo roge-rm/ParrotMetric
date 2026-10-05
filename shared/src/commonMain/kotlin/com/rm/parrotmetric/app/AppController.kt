@@ -668,6 +668,16 @@ class AppController(
         override fun zoom(factor: Float) = gl { core.zoom(factor) }
         override fun zoomAt(factor: Float, x: Float, y: Float) = gl { core.zoomAt(factor, x, y) }
 
+        override fun startSketchOnPlane(id: Int) {
+            val p = design.built?.sketchPlanes?.get(id) ?: return
+            val f = design.design.active.firstOrNull { it.id == id } ?: return
+            val name = design.nextSketchName()
+            val ref = PlaneRef.Construction(id)
+            val plane = p.copy(name = f.name)
+            newSketch = ref to name
+            openSketch(SketchEditor(plane, name, Sketch(), regionFinder, outlineFor(ref, plane), design::names, design::constructionPoints, files::open, ::textOutline))
+        }
+
         override fun startSketch(plane: SketchPlane?) {
             val name = design.nextSketchName()
             val (ref, p) = if (plane != null) PlaneRef.Fixed(plane) to plane else design.sketchPlaneUnderSelection(state.yaw, name) ?: return
