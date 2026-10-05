@@ -61,6 +61,7 @@ fun Modifier.viewGestures(controls: ViewControls, onBox: (Rect?) -> Unit = {}): 
         var dragging = false
         var lastTap = 0L
         var lastClick = 0L
+        var downAt = 0L
         var lastClickAt = Offset.Zero
         var lastMiddle = 0L
         // The mouse button held (1 left, 2 right, 3 middle) and what its drag does.
@@ -79,6 +80,7 @@ fun Modifier.viewGestures(controls: ViewControls, onBox: (Rect?) -> Unit = {}): 
                     val change = event.changes.first()
                     if (first) {
                         start = change.position
+                        downAt = change.uptimeMillis
                         dragging = false
                         mouse = change.type == PointerType.Mouse
                         button = when {
@@ -124,9 +126,14 @@ fun Modifier.viewGestures(controls: ViewControls, onBox: (Rect?) -> Unit = {}): 
                         val now = change.uptimeMillis
                         when {
                             !mouse -> if (!dragging) {
-                                val double = now - lastTap < 350
-                                lastTap = if (double) 0 else now
-                                controls.tap(at.x, at.y, double)
+                                if (now - downAt >= 400) {
+                                    // Held: an edge and those running on smoothly from it.
+                                    controls.clickChain(at.x, at.y, true)
+                                } else {
+                                    val double = now - lastTap < 350
+                                    lastTap = if (double) 0 else now
+                                    controls.tap(at.x, at.y, double)
+                                }
                             }
                             button == 1 -> if (dragging) {
                                 onBox(null)

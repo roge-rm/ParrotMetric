@@ -136,6 +136,11 @@ class ModelView(
             }
             MotionEvent.ACTION_UP -> {
                 if (!dragging && event.eventTime - downTime < 400) tapped(event.x, event.y, event.eventTime)
+                // A long press on an edge adds it and the edges running on smoothly from it.
+                else if (!dragging && !multi) gl {
+                    val counts = Core.clickChain(event.x, event.y, true)
+                    post { onSelection(counts) }
+                }
             }
         }
         return true
