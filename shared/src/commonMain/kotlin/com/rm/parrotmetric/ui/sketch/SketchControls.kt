@@ -618,6 +618,9 @@ private fun TransformEntry(editor: SketchEditor, t: SketchTransform) {
                     com.rm.parrotmetric.ui.design.NumberRow("Y apart", t.dy, "mm", true) { t.dy = it }
                     com.rm.parrotmetric.ui.design.NumberRow("Rows", t.rows, "", false) { t.rows = it }
                     if (t.rows >= 1.5) com.rm.parrotmetric.ui.design.NumberRow("Rows apart", t.rowGap, "mm", true) { t.rowGap = it }
+                    if (editor.selectedCurves.any { it is com.rm.parrotmetric.sketch.Circle }) {
+                        com.rm.parrotmetric.ui.design.NumberRow("Circles grow by", t.grow, "mm", true) { t.grow = it }
+                    }
                 }
                 SketchTransform.Kind.Round -> {
                     com.rm.parrotmetric.ui.design.NumberRow("Count", t.count, "", false) { t.count = it }

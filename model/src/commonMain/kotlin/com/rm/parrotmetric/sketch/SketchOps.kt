@@ -404,6 +404,12 @@ object SketchOps {
         return null
     }
 
+    /** A number without a needless ".0" or float noise. */
+    private fun trimmed(v: Double): String {
+        val r = kotlin.math.round(v * 1e6) / 1e6
+        return if (r == kotlin.math.floor(r)) r.toLong().toString() else r.toString()
+    }
+
     /** An expression for the opposite of [e], as simple as it can be: "-wall" gives "wall". */
     fun negated(e: String): String {
         val t = e.trim()
@@ -621,9 +627,11 @@ object SketchOps {
      * to the row. The copies stay tied to the originals: the first copy's
      * step across is dimensioned, and so is the first row's, and every other
      * copy repeats those steps, so moving the originals or changing a step
-     * moves them all. Circles keep the originals' size.
+     * moves them all. Circles keep the originals' size, or with [grow] each
+     * copy's is that much more across than the one before it, along the rows
+     * and then on to the next row, tied to the original's parameter if it has one.
      */
-    fun pattern(s: Sketch, curves: List<Curve>, count: Int, dx: Double, dy: Double, rows: Int = 1, rowGap: Double = 0.0): String? {
+    fun pattern(s: Sketch, curves: List<Curve>, count: Int, dx: Double, dy: Double, rows: Int = 1, rowGap: Double = 0.0, grow: Double = 0.0): String? {
         if (curves.isEmpty()) return "Select the curves first"
         if (count < 1 || rows < 1 || count * rows < 2) return "Make at least two"
         if (count > 1 && hypot(dx, dy) < 1e-9) return "The copies would sit on top of each other"
@@ -641,7 +649,23 @@ object SketchOps {
             val made = copy(s, curves, 1.0, false) { x, y -> x + i * dx + j * rx to y + i * dy + j * ry }
             copies[i to j] = made
             val fresh = s.curves.filter { it !in before }
-            for ((old, new) in curves.zip(fresh)) if (old is Circle && new is Circle) s.add(Constraint.Equal(new, old))
+            val step = (j * count + i) * grow
+            for ((old, new) in curves.zip(fresh)) if (old is Circle && new is Circle) {
+                if (grow == 0.0) {
+                    s.add(Constraint.Equal(new, old))
+                    continue
+                }
+                // Its own size, the original's and the steps so far; written on the original's parameter if it's set by one.
+                val size = s.constraints.filterIsInstance<Constraint.Radius>().firstOrNull { it.curve === old }
+                val diameter = size?.diameter ?: true
+                val more = if (diameter) step else step / 2
+                val value = (size?.value ?: if (diameter) 2 * s.radius(old) else s.radius(old)) + more
+                if (value <= 0) return "The copies would shrink to nothing"
+                s.setRadius(new, if (diameter) value / 2 else value)
+                s.add(Constraint.Radius(new, diameter, value).also { r ->
+                    r.expression = size?.expression?.let { e -> "$e${if (more < 0) "-" else "+"}${trimmed(kotlin.math.abs(more))}" }
+                })
+            }
         }
         // A step held by two sizes: across and up, or one of them level or upright when it's 0.
         fun dimension(from: Point, to: Point, sx: Double, sy: Double) {

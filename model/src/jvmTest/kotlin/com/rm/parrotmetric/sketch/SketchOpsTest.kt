@@ -196,6 +196,18 @@ class SketchOpsTest {
     }
 
     @Test
+    fun aPatternCanGrowItsCirclesStepByStep() {
+        val s = Sketch()
+        val hole = s.addCircle(s.addPoint(7.5, 7.5), 2.55)
+        s.add(Constraint.Radius(hole, true, 5.1).also { it.expression = "d+0.1" })
+        assertNull(SketchOps.pattern(s, listOf(hole), 5, 11.0, 0.0, grow = 0.1))
+        val sizes = s.constraints.filterIsInstance<Constraint.Radius>().filter { it.curve !== hole }
+        assertEquals(listOf("d+0.1+0.1", "d+0.1+0.2", "d+0.1+0.3", "d+0.1+0.4"), sizes.map { it.expression })
+        near(5.5, sizes.last().value)
+        assertTrue(s.constraints.none { it is Constraint.Equal })
+    }
+
+    @Test
     fun aWholeOutlineIsFoundFromOneOfItsPieces() {
         val s = Sketch()
         val a = s.addPoint(0.0, 0.0); val b = s.addPoint(20.0, 0.0); val c = s.addPoint(20.0, 10.0); val d = s.addPoint(0.0, 10.0)
