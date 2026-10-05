@@ -5,7 +5,7 @@
 
 A component is a group of bodies that belong together, like the lid of a box. In the parts list, the menu beside a body has **Into a new component…** and **Into** each component there is already, and **Out of** to take it out again. The parts list shows bodies under their component, and Export can pick a whole component.
 
-The eye beside a component's name shows or hides all its bodies at once. Its menu has **Put new bodies here**: until you turn it off again, every body a step makes goes into that component. It lasts until you close the design.
+The eye beside a component's name shows or hides all its bodies at once. Its menu has **Put new bodies here**: until you turn it off again, every body a step makes goes into that component. It lasts until you close the design. To start one before it has any bodies, tap **New component…** under the list and name it: new bodies go into it from then on.
 
 ## Joints
 

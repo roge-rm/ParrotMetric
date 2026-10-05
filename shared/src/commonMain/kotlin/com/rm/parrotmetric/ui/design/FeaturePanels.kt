@@ -310,7 +310,7 @@ private fun LipSettings(editor: DesignEditor, d: DesignEditor.LipDraft) {
             shape = RoundedCornerShape(12.dp),
             color = if (d.lid == l) Palette.line else Palette.ground,
             contentColor = Palette.text,
-        ) { Text(l?.let { editor.design.nameOf(it) } ?: "Nothing", Modifier.padding(horizontal = 10.dp, vertical = 7.dp), fontSize = 13.sp) }
+        ) { Text(l?.let { editor.bodyTitle(it) } ?: "Nothing", Modifier.padding(horizontal = 10.dp, vertical = 7.dp), fontSize = 13.sp) }
     }
     if (d.lid != null) Field(editor, d, "gap", "Gap", d.gap, "mm", allowNegative = false) { d.gap = it; editor.draftChanged() }
 }
@@ -449,7 +449,7 @@ internal fun OnlyRow(editor: DesignEditor, d: DesignEditor.FeatureDraft) {
             contentColor = Palette.text,
         ) { Text(text, Modifier.padding(horizontal = 10.dp, vertical = 7.dp), fontSize = 13.sp) }
         pill("Any it reaches", d.only.isEmpty()) { d.only = emptyList(); editor.draftChanged() }
-        for (l in labels) pill(editor.design.nameOf(l), l in d.only) {
+        for (l in labels) pill(editor.bodyTitle(l), l in d.only) {
             d.only = if (l in d.only) d.only - l else d.only + l
             editor.draftChanged()
         }

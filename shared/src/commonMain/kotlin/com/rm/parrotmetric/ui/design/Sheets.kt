@@ -131,12 +131,16 @@ fun PartsSheet(editor: DesignEditor, close: () -> Unit) {
     val bodies = editor.allBodies()
     var renaming by remember { mutableStateOf<String?>(null) }
     var newComponentFor by remember { mutableStateOf<String?>(null) }
+    var newEmpty by remember { mutableStateOf(false) }
     SheetFrame("Parts", close) {
         if (bodies.isEmpty() && editor.planes().isEmpty()) Text("No bodies yet", fontSize = 14.sp, color = Palette.muted)
         Column(Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState())) {
-            for ((component, list) in bodies.groupBy { editor.design.info(it.label).component }) {
+            // The component new bodies go into shows even before it has any.
+            val groups = bodies.groupBy { editor.design.info(it.label).component }.toMutableMap()
+            editor.activeComponent?.let { if (it !in groups) groups[it] = emptyList() }
+            for ((component, list) in groups) {
                 if (component != null) {
-                    val allHidden = list.all { editor.design.info(it.label).hidden }
+                    val allHidden = list.isNotEmpty() && list.all { editor.design.info(it.label).hidden }
                     val taking = editor.activeComponent == component
                     var menu by remember(component) { mutableStateOf(false) }
                     Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -186,6 +190,7 @@ fun PartsSheet(editor: DesignEditor, close: () -> Unit) {
                     }
                 }
             }
+            TextButton(onClick = { newEmpty = true }) { Text("New component…", color = Palette.mint, fontSize = 14.sp) }
             // Construction planes, which can be hidden once they've been drawn on.
             val planes = editor.planes()
             if (planes.isNotEmpty()) Text("Planes", Modifier.padding(start = 6.dp, top = 8.dp, bottom = 2.dp), fontSize = 13.sp, color = Palette.muted, fontWeight = FontWeight.SemiBold)
@@ -202,6 +207,11 @@ fun PartsSheet(editor: DesignEditor, close: () -> Unit) {
     }
     renaming?.let { label ->
         NameDialog("Rename", editor.design.nameOf(label), { renaming = null }) { editor.rename(label, it); renaming = null }
+    }
+    if (newEmpty) NameDialog("New component", "Component ${editor.components().size + 1}", { newEmpty = false }) {
+        // Empty until a step makes a body, which goes into it.
+        if (it.isNotBlank()) editor.activeComponent = it.trim()
+        newEmpty = false
     }
     newComponentFor?.let { label ->
         NameDialog("New component", "Component ${editor.components().size + 1}", { newComponentFor = null }) {

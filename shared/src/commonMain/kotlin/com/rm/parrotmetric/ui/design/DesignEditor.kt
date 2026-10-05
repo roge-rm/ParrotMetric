@@ -355,7 +355,10 @@ class DesignEditor(
     fun setComponent(label: String, component: String?) = setInfo(label) { it.copy(component = component) }
 
     /** Components in use, in the order their first body comes. */
-    fun components(): List<String> = allBodies().mapNotNull { design.info(it.label).component }.distinct()
+    fun components(): List<String> = (allBodies().mapNotNull { design.info(it.label).component } + listOfNotNull(activeComponent)).distinct()
+
+    /** A body's name, with its component when it's in one, for lists of bodies to pick from. */
+    fun bodyTitle(label: String): String = design.nameOf(label) + (design.info(label).component?.let { " ($it)" } ?: "")
 
     // Changing the history.
 
@@ -1153,7 +1156,8 @@ class DesignEditor(
     /** Sketches with lone points, for holes, newest first. */
     fun holeSketches(): List<SketchFeature> = design.active.filterIsInstance<SketchFeature>().filter { f ->
         val s = f.sketch
-        s.holePoints().isNotEmpty()
+        // Lone points, or construction on its own: a sketch with drawn outlines is for something else.
+        s.points.any { p -> p !== s.origin && s.curves.none { p in it.points() } } || (s.holePoints().isNotEmpty() && s.curves.all { it.construction })
     }.reversed()
 
     /** Opens a feature's panel to change it. */
