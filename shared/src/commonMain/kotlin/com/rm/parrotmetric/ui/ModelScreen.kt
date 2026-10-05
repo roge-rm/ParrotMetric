@@ -208,6 +208,8 @@ fun ModelScreen(
     val chain = remember { FieldChain() }
     // A digit that started a field: the desktop sends it again as typed text, which the field mustn't get twice.
     var started by remember { mutableStateOf<Char?>(null) }
+    // A number typed in a sketch when nothing takes one: the Enter after it isn't meant to finish the sketch.
+    var strayNumber by remember { mutableStateOf(false) }
     // The screen itself has the keys, not a field in it.
     var screenFocused by remember { mutableStateOf(false) }
     val sketch = state.sketch
@@ -287,6 +289,7 @@ fun ModelScreen(
                     sketch.placed != null && !screenFocused -> false
                     sketch.applyTyped() -> true
                     sketch.pending.isNotEmpty() -> { sketch.endDrawing(); true }
+                    strayNumber -> { strayNumber = false; true }
                     else -> { actions.finishSketch(); true }
                 }
                 name == "Enter" && design.panel != null -> {
@@ -312,6 +315,10 @@ fun ModelScreen(
             val c = typedChar(e)
             if (sketch != null && sketch.editing == null && sketch.textEdit == null) {
                 if (c != null && sketch.typeKey(c)) return@onKeyEvent true
+                if (c != null && startsNumber(c)) {
+                    strayNumber = true
+                    return@onKeyEvent true
+                }
                 if (name == "Backspace") return@onKeyEvent when {
                     sketch.typedBackspace() -> true
                     sketch.selection.isNotEmpty() && sketch.tool == SketchTool.Select -> { sketch.deleteSelection(); true }
@@ -341,7 +348,10 @@ fun ModelScreen(
         awaitPointerEventScope {
             while (true) {
                 val e = awaitPointerEvent(PointerEventPass.Initial)
-                if (e.type == PointerEventType.Press) focus.requestFocus()
+                if (e.type == PointerEventType.Press) {
+                    focus.requestFocus()
+                    strayNumber = false
+                }
             }
         }
     }

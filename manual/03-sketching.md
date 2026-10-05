@@ -66,7 +66,7 @@ With **Select** in hand, drag points or curves to move them. Tap a curve twice q
 - **Extend** stretches the line end you tap to the next curve it would meet.
 - **Break** cuts a curve in two where you tap.
 - **Offset** makes a copy of the picked curves a set distance away.
-- **Round corner** and **Cut corner** round off or cut a corner, with the corner's point picked.
+- **Round corner** and **Cut corner** round off or cut corners: pick the corner points, or the lines that meet there, or tap an outline twice to do all its corners. Sizes measured to a corner still measure to where the lines would meet.
 - **Mirror** copies the picked curves across a line. Pick the line last. They stay mirrored when you change them.
 - **Move** and **Scale** move or resize the picked curves.
 - **Pattern** and **Pattern round** copy them in a row or round a point.

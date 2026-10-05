@@ -101,7 +101,7 @@ fun SketchStatus(editor: SketchEditor, modifier: Modifier = Modifier) {
         }
         LaunchedEffect(message) {
             if (message != null) {
-                delay(2500)
+                delay(4000)
                 editor.message = null
             }
         }

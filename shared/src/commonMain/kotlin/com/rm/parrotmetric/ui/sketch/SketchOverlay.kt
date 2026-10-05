@@ -472,11 +472,6 @@ private fun annotations(editor: SketchEditor, proj: PlaneProjection, dp: Float):
         val m = (a + b) / 2f - middle
         return if (n.x * m.x + n.y * m.y < 0) -n else n
     }
-    fun normal(a: Offset, b: Offset): Offset {
-        val d = b - a
-        val len = d.getDistance().coerceAtLeast(1e-3f)
-        return Offset(-d.y / len, d.x / len)
-    }
     fun along(a: Offset, b: Offset): Offset {
         val d = b - a
         val len = d.getDistance().coerceAtLeast(1e-3f)
@@ -490,13 +485,21 @@ private fun annotations(editor: SketchEditor, proj: PlaneProjection, dp: Float):
         val item = SketchItem.K(c)
         when (c) {
             is Constraint.ArcRadius, is Constraint.EllipseAxes -> {}
+            // What a rounded corner holds by itself: its smooth joins, and the sharp corner kept on both lines.
+            is Constraint.TangentJoin -> {}
+            is Constraint.OnLine -> if (s.curves.any { c.p in it.points() }) {
+                val a = screen(c.line.a, editor, proj); val b = screen(c.line.b, editor, proj)
+                val n = stacked.getOrElse(c.line) { 0 }
+                stacked[c.line] = n + 1
+                out += Annotation(item, (a + b) / 2f - outward(a, b) * (16 * dp) + along(a, b) * (n * 24 * dp), null, c)
+            }
             is Constraint.Length -> {
                 val a = screen(c.line.a, editor, proj); val b = screen(c.line.b, editor, proj)
                 out += Annotation(item, (a + b) / 2f + outward(a, b) * (22 * dp), c.expression ?: format(c.value), c)
             }
             is Constraint.Distance -> {
                 val a = screen(c.p, editor, proj); val b = screen(c.q, editor, proj)
-                out += Annotation(item, (a + b) / 2f + normal(a, b) * (22 * dp), format(c.value), c)
+                out += Annotation(item, (a + b) / 2f + outward(a, b) * (22 * dp), c.expression ?: format(c.value), c)
             }
             is Constraint.AxisDistance -> {
                 val a = screen(c.p, editor, proj); val b = screen(c.q, editor, proj)

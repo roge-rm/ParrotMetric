@@ -1400,7 +1400,31 @@ class SketchEditor(
     /** Curves selected, for offset. */
     val selectedCurves get() = selection.filterIsInstance<SketchItem.C>().map { it.curve }
     /** The one point selected, for a corner fillet. */
-    val selectedCorner get() = selection.singleOrNull()?.let { it as? SketchItem.P }?.point
+    val selectedCorner get() = selectedCorners.firstOrNull()
+
+    /**
+     * Corners to round or cut: the picked points where two lines meet, or
+     * with only curves picked, where two of the picked lines meet.
+     */
+    val selectedCorners: List<Point>
+        get() {
+            fun corner(p: Point) = sketch.curves.filter { p in it.points() }.let { it.size == 2 && it.all { c -> c is Line } }
+            val points = selection.filterIsInstance<SketchItem.P>().map { it.point }
+            if (points.isNotEmpty()) return if (points.size == selection.size) points.filter(::corner) else emptyList()
+            val lines = selectedCurves.filterIsInstance<Line>()
+            return lines.flatMap { it.points() }.groupingBy { it }.eachCount().filter { it.value == 2 }.keys.filter(::corner)
+        }
+
+    /** Rounds or cuts every corner in [corners] with [op]; all or none, with the first reason one fails. */
+    private fun eachCorner(corners: List<Point>, op: (Point) -> String?): String? {
+        val before = sketch.snapshot()
+        for (p in corners) op(p)?.let { why ->
+            sketch.restore(before)
+            return why
+        }
+        selection.clear()
+        return null
+    }
 
     fun startOffset() {
         val curves = selectedCurves
@@ -1409,8 +1433,8 @@ class SketchEditor(
     }
 
     fun startCornerChamfer() {
-        val p = selectedCorner ?: return
-        editing = DimensionEdit(null, null, 1.0, false, "Distance", action = { d -> SketchOps.chamferCorner(sketch, p, d).also { if (it == null) selection.clear() } })
+        val corners = selectedCorners.ifEmpty { return }
+        editing = DimensionEdit(null, null, 1.0, false, "Distance", action = { d -> eachCorner(corners) { SketchOps.chamferCorner(sketch, it, d) } })
     }
 
     /** Mirrors the selected curves across the line selected last. */
@@ -1511,8 +1535,8 @@ class SketchEditor(
     }
 
     fun startCornerFillet() {
-        val p = selectedCorner ?: return
-        editing = DimensionEdit(null, null, 2.0, false, "Radius", action = { r -> SketchOps.filletCorner(sketch, p, r).also { if (it == null) selection.clear() } })
+        val corners = selectedCorners.ifEmpty { return }
+        editing = DimensionEdit(null, null, 2.0, false, "Radius", action = { r -> eachCorner(corners) { SketchOps.filletCorner(sketch, it, r) } })
     }
 
     // Constraints and the selection.
