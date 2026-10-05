@@ -231,9 +231,12 @@ class Sketch {
 
     /**
      * Where holes go: points that aren't part of a drawn curve, so lone points
-     * and the corners and centres of construction curves. Not the origin.
+     * and the corners and centres of construction curves. The origin only when
+     * construction uses it, as a construction circle round it does.
      */
-    fun holePoints(): List<Point> = points.filter { p -> p !== origin && curves.none { !it.construction && p in it.points() } }
+    fun holePoints(): List<Point> = points.filter { p ->
+        (p !== origin || curves.any { it.construction && p in it.points() }) && curves.none { !it.construction && p in it.points() }
+    }
 
     /**
      * Removes a curve and every constraint on it, and its points if nothing

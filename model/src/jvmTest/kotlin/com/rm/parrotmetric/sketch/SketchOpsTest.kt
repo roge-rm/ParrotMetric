@@ -183,6 +183,9 @@ class SketchOpsTest {
         val lone = s.addPoint(30.0, 30.0)
         s.addLine(s.addPoint(60.0, 0.0), s.addPoint(70.0, 0.0))
         assertEquals(setOf(a, b, c, lone), s.holePoints().toSet())
+        // The origin, once a construction circle is round it.
+        s.addCircle(s.origin, 5.0, construction = true)
+        assertEquals(setOf(a, b, c, lone, s.origin), s.holePoints().toSet())
     }
 
     @Test
