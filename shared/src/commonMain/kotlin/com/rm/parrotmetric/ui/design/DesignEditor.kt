@@ -705,8 +705,9 @@ class DesignEditor(
                 else -> emptyList()
             }
         }.toSet()
-        val keep = (draft as? AreaDraft)?.sketchId
-        return features.filterIsInstance<SketchFeature>().filter { it.id !in used || it.id == keep }
+        // The open panel's own sketches stay, so their picks can be shown and added to.
+        val keep = setOfNotNull((draft as? AreaDraft)?.sketchId) + ((draft as? LoftDraft)?.sections?.map { it.sketchId } ?: emptyList())
+        return features.filterIsInstance<SketchFeature>().filter { it.id !in used || it.id in keep }
     }
 
     // Panels.
