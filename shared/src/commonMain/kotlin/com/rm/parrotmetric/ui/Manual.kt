@@ -177,7 +177,7 @@ object Manual {
             ManualBlock(ManualKind.Para, "Both work on **Bodies**, or on **Features**: the steps that made something, like a hole and its fillet, which are done again at each copy. A mirror or pattern of features can itself be picked, so a groove mirrored the other way round can be patterned round a knob for a diamond knurl. Copies of bodies can be joined to the original with **Join to the original**."),
             ManualBlock(ManualKind.Para, "Along a path, the copies are spread evenly along it or **Spaced** a set distance apart. **Turn with the path** turns each one to follow the path, and **Start from the other end** starts from the path's other end."),
             ManualBlock(ManualKind.Heading, "Bodies"),
-            ManualBlock(ManualKind.Bullet, "**Combine** joins, cuts or intersects bodies with each other. Pick the body to keep first. **Keep the others** keeps the bodies used as tools."),
+            ManualBlock(ManualKind.Bullet, "**Combine** joins, cuts or intersects bodies with each other. Tap the body to keep first, then each body to use on it (with a mouse, Shift-click those). **Keep the others** keeps the bodies used as tools."),
             ManualBlock(ManualKind.Bullet, "**Split** cuts a body in two **By a plane** or **By a body**, keeping both pieces as bodies or only the side you want. It also trims surfaces."),
             ManualBlock(ManualKind.Bullet, "**Move** moves and turns bodies by set distances and an angle. **Move a copy** leaves the original where it was."),
             ManualBlock(ManualKind.Bullet, "**Scale** makes bodies bigger or smaller, the same every way or by a different amount along each axis."),

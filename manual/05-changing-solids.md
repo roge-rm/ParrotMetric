@@ -40,7 +40,7 @@ Along a path, the copies are spread evenly along it or **Spaced** a set distance
 
 ## Bodies
 
-- **Combine** joins, cuts or intersects bodies with each other. Pick the body to keep first. **Keep the others** keeps the bodies used as tools.
+- **Combine** joins, cuts or intersects bodies with each other. Tap the body to keep first, then each body to use on it (with a mouse, Shift-click those). **Keep the others** keeps the bodies used as tools.
 - **Split** cuts a body in two **By a plane** or **By a body**, keeping both pieces as bodies or only the side you want. It also trims surfaces.
 - **Move** moves and turns bodies by set distances and an angle. **Move a copy** leaves the original where it was.
 - **Scale** makes bodies bigger or smaller, the same every way or by a different amount along each axis.

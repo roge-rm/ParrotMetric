@@ -1361,7 +1361,8 @@ class DesignEditor(
                 if ((d as? PatternDraft)?.byFeatures == true || (d as? MirrorDraft)?.byFeatures == true) return
                 val picked = pickedBodies()
                 if (picked.isNotEmpty() || viewport.selectedFaces().isEmpty()) {
-                    d.bodies = picked
+                    // In the order tapped: Combine keeps the first.
+                    d.bodies = d.bodies.filter { it in picked } + picked.filter { it !in d.bodies }
                     rebuild()
                 }
             }
@@ -1396,6 +1397,11 @@ class DesignEditor(
             is PlaneDraft -> showPicks(d.points, d.edges, listOfNotNull(d.face))
             is AxisDraft -> showPicks(d.points, listOfNotNull(d.edge), listOfNotNull(d.face))
             is PointDraft -> showPicks(listOfNotNull(d.ref), emptyList(), d.planes.mapNotNull { (it as? PlaneRef.OnFace)?.face })
+            is BodyDraft -> if ((d as? PatternDraft)?.byFeatures != true && (d as? MirrorDraft)?.byFeatures != true) {
+                // A face of each picked body stays selected, so the next tap with Shift adds to them.
+                val faces = d.bodies.mapNotNull { l -> shownBodies.firstOrNull { it.label == l }?.let { kernel.faceNames(it.handle).firstOrNull() } }
+                viewport.select(emptyList(), emptyList(), faces)
+            }
         }
     }
 
