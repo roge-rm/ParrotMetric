@@ -27,3 +27,4 @@ Press **?** for the list of every key, **S** to find a tool by typing its name a
 - **D** dimension, **T** trim, **E** extend, **B** break, **O** offset, **F** round corner, **Shift+F** cut corner, **M** move, **Shift+M** mirror and **X** construction. **H** and **V** make what's picked horizontal or vertical. **Delete** takes away what's picked.
 - While drawing, type a size and it's used for the next point. **Tab** moves between sizes, such as the width and height of a rectangle, and **Enter** or a click places the shape that way.
 - **Ctrl+Enter** finishes the sketch.
+- With **Select**, dragging on empty space picks what's in a box, the same as on the model: to the right what's wholly inside, to the left anything it touches. Hold **Shift** to add to what's picked. Double-click a curve to pick its whole outline.

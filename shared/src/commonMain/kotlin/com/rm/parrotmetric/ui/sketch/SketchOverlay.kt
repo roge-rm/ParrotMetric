@@ -19,6 +19,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.input.pointer.isShiftPressed
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -85,6 +86,8 @@ fun SketchOverlay(
     val reach = 16 * density
     // A finger is down, hiding what's under it, so the magnifier shows; not for a mouse.
     var touching by remember { mutableStateOf(false) }
+    // A box being dragged with the mouse to select, corner to corner on screen.
+    var box by remember { mutableStateOf<Pair<Offset, Offset>?>(null) }
 
     Canvas(
         Modifier.fillMaxSize().pointerInput(editor) {
@@ -119,6 +122,8 @@ fun SketchOverlay(
                 // The middle (or right) mouse button pans; only the left draws and picks.
                 val panButton = down.type == PointerType.Mouse && (currentEvent.buttons.isTertiaryPressed || currentEvent.buttons.isSecondaryPressed)
                 val grabbed = !panButton && start != null && editor.press(start.first, start.second, tol())
+                // With a mouse, dragging from empty space while selecting draws a box; a finger pans instead.
+                val boxing = !grabbed && !panButton && down.type == PointerType.Mouse && editor.tool == SketchTool.Select
                 down.consume()
                 while (true) {
                     val event = awaitPointerEvent()
@@ -139,15 +144,24 @@ fun SketchOverlay(
                         val p = pressed[0].position
                         if (!moved && (p - down.position).getDistance() > slop) moved = true
                         if (grabbed) plane(p)?.let { editor.move(it.first, it.second, tol()) }
+                        else if (boxing) { if (moved) box = down.position to p }
                         else if (moved) onPan(p.x - last.x, p.y - last.y)
                         last = p
                     }
                     event.changes.forEach { it.consume() }
                     if (pressed.isEmpty()) {
                         touching = false
-                        if (!multi && !panButton) {
+                        val dragged = box
+                        box = null
+                        if (dragged != null && !multi) {
+                            val a = plane(dragged.first)
+                            val b = plane(dragged.second)
+                            if (a != null && b != null) editor.boxSelect(a.first, a.second, b.first, b.second, dragged.second.x < dragged.first.x, event.keyboardModifiers.isShiftPressed)
+                        } else if (!multi && !panButton) {
                             val up = event.changes.firstOrNull()?.position ?: last
-                            val tappedNote = if (!moved && editor.tool in setOf(SketchTool.Select, SketchTool.Dimension)) {
+                            // A label or glyph takes the tap, unless a point or curve is right under it.
+                            val onGeometry = plane(up)?.let { editor.hitTest(it.first, it.second, 6 * density * proj.mmPerPixel()) } != null
+                            val tappedNote = if (!moved && !onGeometry && editor.tool in setOf(SketchTool.Select, SketchTool.Dimension)) {
                                 annotations(editor, proj, density).minByOrNull { (it.centre - up).getDistance() }
                                     ?.takeIf { (it.centre - up).getDistance() < 18 * density }
                             } else null
@@ -166,6 +180,14 @@ fun SketchOverlay(
     ) {
         editor.version // Redraw on every change.
         drawSketch(editor, proj, density, measurer)
+        box?.let { (a, b) ->
+            // Left to right takes what's wholly inside, drawn solid; right to left anything it crosses, dashed.
+            val tl = Offset(minOf(a.x, b.x), minOf(a.y, b.y))
+            val size = androidx.compose.ui.geometry.Size(kotlin.math.abs(b.x - a.x), kotlin.math.abs(b.y - a.y))
+            val dashed = b.x < a.x
+            drawRect(Palette.mint.copy(alpha = 0.08f), tl, size)
+            drawRect(Palette.mint, tl, size, style = Stroke(1.2f * density, pathEffect = if (dashed) PathEffect.dashPathEffect(floatArrayOf(6 * density, 4 * density)) else null))
+        }
         if (touching) editor.preview?.let { snap ->
             val finger = proj.toScreen(snap.u, snap.v)
             val r = 52 * density

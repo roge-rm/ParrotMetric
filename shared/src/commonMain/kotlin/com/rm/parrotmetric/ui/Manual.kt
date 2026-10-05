@@ -113,7 +113,7 @@ object Manual {
             ManualBlock(ManualKind.Para, "The count at the top shows how much in the sketch can still move. When it says **Fully set**, everything is held by a dimension or a constraint, and the curves change colour to show it."),
             ManualBlock(ManualKind.Para, "Constraints show as small marks beside what they hold. Tap one to pick it, and **Delete** takes it off. If a new one can't fit with the rest, the sketch says so and leaves it out."),
             ManualBlock(ManualKind.Heading, "Changing what's drawn"),
-            ManualBlock(ManualKind.Para, "With **Select** in hand, drag points or curves to move them. The row above the tools has these, some only once the right things are picked:"),
+            ManualBlock(ManualKind.Para, "With **Select** in hand, drag points or curves to move them. Tap a curve twice quickly to pick the whole outline it's part of. The row above the tools has these, some only once the right things are picked:"),
             ManualBlock(ManualKind.Bullet, "**Trim** takes away the piece of a curve you tap, up to where it crosses other curves."),
             ManualBlock(ManualKind.Bullet, "**Extend** stretches the line end you tap to the next curve it would meet."),
             ManualBlock(ManualKind.Bullet, "**Break** cuts a curve in two where you tap."),
@@ -311,6 +311,7 @@ object Manual {
             ManualBlock(ManualKind.Bullet, "**D** dimension, **T** trim, **E** extend, **B** break, **O** offset, **F** round corner, **Shift+F** cut corner, **M** move, **Shift+M** mirror and **X** construction. **H** and **V** make what's picked horizontal or vertical. **Delete** takes away what's picked."),
             ManualBlock(ManualKind.Bullet, "While drawing, type a size and it's used for the next point. **Tab** moves between sizes, such as the width and height of a rectangle, and **Enter** or a click places the shape that way."),
             ManualBlock(ManualKind.Bullet, "**Ctrl+Enter** finishes the sketch."),
+            ManualBlock(ManualKind.Bullet, "With **Select**, dragging on empty space picks what's in a box, the same as on the model: to the right what's wholly inside, to the left anything it touches. Hold **Shift** to add to what's picked. Double-click a curve to pick its whole outline."),
         )),
         ManualSection("Settings", "The layout, how much detail the view shows, and the projects folder.", listOf(
             ManualBlock(ManualKind.Para, "Settings is on the start screen and in the menu under the parrot."),

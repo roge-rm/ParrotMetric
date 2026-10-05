@@ -60,7 +60,7 @@ Constraints show as small marks beside what they hold. Tap one to pick it, and *
 
 ## Changing what's drawn
 
-With **Select** in hand, drag points or curves to move them. The row above the tools has these, some only once the right things are picked:
+With **Select** in hand, drag points or curves to move them. Tap a curve twice quickly to pick the whole outline it's part of. The row above the tools has these, some only once the right things are picked:
 
 - **Trim** takes away the piece of a curve you tap, up to where it crosses other curves.
 - **Extend** stretches the line end you tap to the next curve it would meet.

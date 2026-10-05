@@ -321,11 +321,54 @@ class SketchEditor(
             editing = DimensionEdit(d, null, shownValue(d), d is Constraint.Angle, labelOf(d))
             return
         }
+        // A second click on a curve straight after the first takes the whole outline it's part of.
+        val now = kotlin.time.TimeSource.Monotonic.markNow()
+        val again = item is SketchItem.C && lastTap?.let { (was, at) -> was == item && at.elapsedNow().inWholeMilliseconds < 450 } == true
+        lastTap = item?.let { it to now }
+        if (again) {
+            for (c in SketchOps.connected(sketch, (item as SketchItem.C).curve)) SketchItem.C(c).let { if (it !in selection) selection += it }
+            lastTap = null
+            version++
+            return
+        }
         when {
             item == null -> selection.clear()
             item in selection -> selection.remove(item)
             else -> selection += item
         }
+        version++
+    }
+
+    private var lastTap: Pair<SketchItem, kotlin.time.TimeSource.Monotonic.ValueTimeMark>? = null
+
+    /**
+     * Selects what a box dragged with the mouse takes, from corner (u0, v0)
+     * to (u1, v1): what's wholly inside, or with [crossing] (dragged from
+     * right to left) anything it touches. [add] keeps what was selected.
+     */
+    fun boxSelect(u0: Double, v0: Double, u1: Double, v1: Double, crossing: Boolean, add: Boolean) {
+        val xa = minOf(u0, u1); val xb = maxOf(u0, u1)
+        val ya = minOf(v0, v1); val yb = maxOf(v0, v1)
+        fun inside(p: Pair<Double, Double>) = p.first in xa..xb && p.second in ya..yb
+        fun crosses(a: Pair<Double, Double>, b: Pair<Double, Double>): Boolean {
+            // Clipped against the box: some part of the segment is left.
+            var t0 = 0.0; var t1 = 1.0
+            val dx = b.first - a.first; val dy = b.second - a.second
+            for ((pp, q) in listOf(-dx to a.first - xa, dx to xb - a.first, -dy to a.second - ya, dy to yb - a.second)) {
+                if (pp == 0.0) { if (q < 0) return false; continue }
+                val t = q / pp
+                if (pp < 0) t0 = maxOf(t0, t) else t1 = minOf(t1, t)
+                if (t0 > t1) return false
+            }
+            return true
+        }
+        val curves = sketch.curves.filter { c ->
+            val along = SketchOps.samples(sketch, c)
+            if (crossing) along.any(::inside) || along.zipWithNext().any { (a, b) -> crosses(a, b) } else along.all(::inside)
+        }
+        val lone = sketch.points.filter { p -> p !== sketch.origin && sketch.curves.none { p in it.points() } && inside(sketch.x(p) to sketch.y(p)) }
+        if (!add) selection.clear()
+        for (item in curves.map { SketchItem.C(it) } + lone.map { SketchItem.P(it) }) if (item !in selection) selection += item
         version++
     }
 
@@ -1133,13 +1176,14 @@ class SketchEditor(
 
     /** What's under (u, v) within tol: points before curves. */
     fun hitTest(u: Double, v: Double, tol: Double): SketchItem? {
-        sketch.points.minByOrNull { hypot(sketch.x(it) - u, sketch.y(it) - v) }
-            ?.takeIf { hypot(sketch.x(it) - u, sketch.y(it) - v) < tol }
-            ?.let { return SketchItem.P(it) }
-        sketch.curves.mapNotNull { c -> nearestOn(c, u, v)?.let { c to hypot(it.first - u, it.second - v) } }
+        val point = sketch.points.map { it to hypot(sketch.x(it) - u, sketch.y(it) - v) }.minByOrNull { it.second }?.takeIf { it.second < tol }
+        val curve = sketch.curves.mapNotNull { c -> nearestOn(c, u, v)?.let { c to hypot(it.first - u, it.second - v) } }
             .minByOrNull { it.second }
             ?.takeIf { it.second < tol }
-            ?.let { return SketchItem.C(it.first) }
+        // A point wins when it's about as near as the curve, so ends are easy to take; on a small
+        // circle's rim, well away from its centre, the circle wins.
+        if (point != null && (curve == null || point.second <= curve.second + tol * 0.4)) return SketchItem.P(point.first)
+        curve?.let { return SketchItem.C(it.first) }
         // Text anywhere in the box round it.
         return sketch.texts.lastOrNull { t ->
             val o = sketch.placedOutline(t)

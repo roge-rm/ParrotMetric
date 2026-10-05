@@ -153,6 +153,23 @@ class SketchOpsTest {
         assertTrue(tr in s.points)
     }
 
+    @Test
+    fun aWholeOutlineIsFoundFromOneOfItsPieces() {
+        val s = Sketch()
+        val a = s.addPoint(0.0, 0.0); val b = s.addPoint(20.0, 0.0); val c = s.addPoint(20.0, 10.0); val d = s.addPoint(0.0, 10.0)
+        val bottom = s.addLine(a, b); s.addLine(b, c); s.addLine(c, d); s.addLine(d, a)
+        assertNull(SketchOps.filletCorner(s, c, 2.0))
+        // Apart from it: a circle and a line whose end is only held on by a constraint.
+        s.addCircle(s.addPoint(10.0, 5.0), 2.0)
+        val e = s.addPoint(30.0, 0.0)
+        val stray = s.addLine(e, s.addPoint(40.0, 0.0))
+        val outline = SketchOps.connected(s, bottom)
+        assertEquals(5, outline.size)
+        assertTrue(stray !in outline)
+        s.add(Constraint.Coincident(e, b))
+        assertTrue(stray in SketchOps.connected(s, bottom))
+    }
+
     /** A square corner at the origin: one line along x and one up y, 10 long. */
     private fun corner(s: Sketch): Point {
         val p = s.addPoint(0.0, 0.0)

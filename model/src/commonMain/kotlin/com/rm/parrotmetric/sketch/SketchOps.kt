@@ -40,6 +40,46 @@ object SketchOps {
         return s
     }
 
+    /** Where a curve meets others: a line's or arc's ends, an open spline's first and last points; none for closed shapes. */
+    private fun ends(c: Curve): List<Point> = when (c) {
+        is Line -> listOf(c.a, c.b)
+        is Arc -> listOf(c.start, c.end)
+        is Circle -> emptyList()
+        is Spline -> if (c.shape == Spline.Shape.Ellipse || c.through.first() === c.through.last()) emptyList() else listOf(c.through.first(), c.through.last())
+    }
+
+    /**
+     * The curves joined end to end with [start], itself first: a whole
+     * outline from one of its pieces. Ends held together by a coincident
+     * constraint count as joined. Construction curves only join their own kind.
+     */
+    fun connected(s: Sketch, start: Curve): List<Curve> {
+        val same = HashMap<Point, MutableSet<Point>>()
+        for (k in s.constraints) if (k is Constraint.Coincident) {
+            same.getOrPut(k.p) { mutableSetOf(k.p) } += k.q
+            same.getOrPut(k.q) { mutableSetOf(k.q) } += k.p
+        }
+        fun joined(p: Point): Set<Point> = same[p] ?: setOf(p)
+        val atPoint = HashMap<Point, MutableList<Curve>>()
+        for (c in s.curves) if (c.construction == start.construction) for (p in ends(c)) atPoint.getOrPut(p) { mutableListOf() } += c
+        val out = LinkedHashSet<Curve>()
+        val todo = ArrayDeque(listOf(start))
+        while (todo.isNotEmpty()) {
+            val c = todo.removeFirst()
+            if (!out.add(c)) continue
+            for (p in ends(c)) for (q in joined(p)) atPoint[q]?.forEach { if (it !in out) todo += it }
+        }
+        return out.toList()
+    }
+
+    /** Points along a curve close enough together to stand in for it, as when checking it against a box. */
+    fun samples(s: Sketch, c: Curve): List<Pair<Double, Double>> = when (c) {
+        is Line -> listOf(s.pointAt(c, 0.0), s.pointAt(c, 1.0))
+        is Circle -> (0..32).map { s.pointAt(c, 2 * PI * it / 32) }
+        is Arc -> { val span = s.span(c); (0..16).map { s.pointAt(c, span * it / 16) } }
+        is Spline -> s.sampleSpline(c)
+    }
+
     /** The place along c nearest (u, v). */
     private fun Sketch.placeOf(c: Curve, u: Double, v: Double): Double = when (c) {
         is Line -> {
