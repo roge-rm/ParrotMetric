@@ -60,7 +60,7 @@ object Manual {
             ManualBlock(ManualKind.Bullet, "The menu beside it has **Rename…** and puts the body into a component or takes it out (see Components and joints)."),
             ManualBlock(ManualKind.Para, "Under **Planes** are the construction planes, each with an eye to hide it once you've drawn on it."),
             ManualBlock(ManualKind.Heading, "The history"),
-            ManualBlock(ManualKind.Para, "The chips along the bottom are the steps that make the design, oldest on the left. The orange bar is where the history ends right now. When their names don't all fit, the chips show just their icons, over up to three rows; hover or long press to see a step's name."),
+            ManualBlock(ManualKind.Para, "The chips along the bottom are the steps that make the design, oldest on the left. The orange bar is where the history ends right now. When their names don't all fit, the chips show just their icons, over up to three rows on a large screen and in one row that scrolls on a phone; hover or long press to see a step's name."),
             ManualBlock(ManualKind.Bullet, "Tap a chip to open that step's settings again."),
             ManualBlock(ManualKind.Bullet, "A long press on a chip (or a right-click) gives **Edit**, **Roll back to here**, **Turn off** and **Delete**. A sketch's also has **Move to picked face**: pick a plane or a flat face first, and the sketch moves onto it with what's drawn in it."),
             ManualBlock(ManualKind.Para, "**Roll back to here** moves the end of the history back to that step, so the steps after it stop for now. Anything you add then goes in at that point. **Roll forward to here** brings them back."),

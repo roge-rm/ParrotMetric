@@ -37,7 +37,7 @@ Under **Planes** are the construction planes, each with an eye to hide it once y
 
 ## The history
 
-The chips along the bottom are the steps that make the design, oldest on the left. The orange bar is where the history ends right now. When their names don't all fit, the chips show just their icons, over up to three rows; hover or long press to see a step's name.
+The chips along the bottom are the steps that make the design, oldest on the left. The orange bar is where the history ends right now. When their names don't all fit, the chips show just their icons, over up to three rows on a large screen and in one row that scrolls on a phone; hover or long press to see a step's name.
 
 - Tap a chip to open that step's settings again.
 - A long press on a chip (or a right-click) gives **Edit**, **Roll back to here**, **Turn off** and **Delete**. A sketch's also has **Move to picked face**: pick a plane or a flat face first, and the sketch moves onto it with what's drawn in it.

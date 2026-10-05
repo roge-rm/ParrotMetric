@@ -447,7 +447,7 @@ fun ModelScreen(
                         ) {
                             openGroup?.let { ToolSheet(it, state, design, actions, onSheet = { name -> sheet = name }) { openGroup = null } }
                         }
-                        if (openGroup == null) HistoryBar(design, actions)
+                        if (openGroup == null) HistoryBar(design, actions, rows = false)
                         GroupBar(openGroup) { openGroup = if (openGroup == it) null else it }
                     }
                 }
@@ -568,12 +568,13 @@ private fun SelectionChip(state: ModelState, actions: ModelActions) {
 
 /**
  * The history: each step as a chip with its name when they all fit across;
- * when they don't, just their icons, wrapping onto up to three rows, the
- * name in a tooltip and at the top of the menu; past that, one row that scrolls.
+ * when they don't, just their icons, the name in a tooltip and at the top of
+ * the menu. With [rows] they wrap onto up to three rows before the bar
+ * scrolls; on a phone they stay in one row that scrolls.
  */
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-private fun HistoryBar(design: DesignEditor, actions: ModelActions) {
+private fun HistoryBar(design: DesignEditor, actions: ModelActions, rows: Boolean) {
     design.version
     design.built
     val history = design.history()
@@ -585,7 +586,7 @@ private fun HistoryBar(design: DesignEditor, actions: ModelActions) {
         val icon = 42.0
         val perRow = ((room - 24) / icon).toInt().coerceAtLeast(1)
         val showNames = named <= room
-        val wrap = !showNames && history.size <= perRow * 3
+        val wrap = rows && !showNames && history.size <= perRow * 3
         // New steps come in at the end, so keep the end in view as the history grows.
         LaunchedEffect(history.size, wrap) { if (!wrap) scroll.animateScrollTo(scroll.maxValue) }
         val chips: @Composable () -> Unit = {
@@ -839,7 +840,7 @@ private fun ExpandedModel(
                 }
             }
         }
-        Box(Modifier.padding(start = 10.dp, end = 10.dp, bottom = 10.dp)) { HistoryBar(design, actions) }
+        Box(Modifier.padding(start = 10.dp, end = 10.dp, bottom = 10.dp)) { HistoryBar(design, actions, rows = true) }
     }
 }
 
