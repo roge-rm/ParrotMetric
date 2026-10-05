@@ -3,6 +3,8 @@
 
 #include <BRepAdaptor_Curve.hxx>
 #include <BRepExtrema_DistShapeShape.hxx>
+#include <BOPAlgo_Options.hxx>
+#include <BRepOffset_Analyse.hxx>
 #include <BRepOffsetAPI_MakeFilling.hxx>
 #include <GeomAPI_ProjectPointOnSurf.hxx>
 #include <GCPnts_AbscissaPoint.hxx>
@@ -566,9 +568,23 @@ NamedShape shell(int id, const NamedShape& body, const std::vector<std::string>&
         NCollection_List<TopoDS_Shape> faces;
         for (const auto& n : open)
             for (const auto& f : body.findFaces(n)) faces.Append(f);
+        // Where the body has no concave edges, rounded joins give the same walls as
+        // sharp ones, and work out about twice as fast on curved bodies. With a
+        // concave edge they'd round the inside of the wall there, so not then.
+        bool concave = false;
+        {
+            BRepOffset_Analyse edges(body.shape, 0.01);
+            TopTools_IndexedMapOfShape all;
+            TopExp::MapShapes(body.shape, TopAbs_EDGE, all);
+            for (int i = 1; i <= all.Extent() && !concave; ++i)
+                for (const auto& kind : edges.Type(TopoDS::Edge(all(i))))
+                    if (kind.Type() == ChFiDS_Concave) concave = true;
+        }
+        // OCCT's booleans inside the offset follow the cores setting.
+        BOPAlgo_Options::SetParallelMode(useCores());
         BRepOffsetAPI_MakeThickSolid op;
         // Negative grows inwards, keeping the outside where it was.
-        op.MakeThickSolidByJoin(body.shape, faces, -thickness, 1e-4, BRepOffset_Skin, true, false, GeomAbs_Intersection);
+        op.MakeThickSolidByJoin(body.shape, faces, -thickness, 1e-4, BRepOffset_Skin, true, false, concave ? GeomAbs_Intersection : GeomAbs_Arc);
         if (!op.IsDone() || !BRepCheck_Analyzer(op.Shape()).IsValid()) throw std::runtime_error("The walls are too thick for this shape");
         return carryNames({&body}, op, op.Shape(), prefix(id));
     } catch (const Standard_Failure&) {

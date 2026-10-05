@@ -124,6 +124,16 @@ TEST_CASE("a shell leaves walls round an open top") {
     CHECK(has(cup.faceNames(), "F1.s1"));
 }
 
+TEST_CASE("a shell keeps the inside corner of an L sharp") {
+    // An L, 40 by 30 with arms 15 wide, 20 high and open at the top.
+    std::vector<SketchCurve> l = {line(1, 0, 0, 40, 0), line(2, 40, 0, 40, 15), line(3, 40, 15, 15, 15),
+                                  line(4, 15, 15, 15, 30), line(5, 15, 30, 0, 30), line(6, 0, 30, 0, 0)};
+    NamedShape block = extrude(1, top, l, {{{1, 2, 3, 4, 5, 6}, 5, 5}}, 20, 0);
+    NamedShape cup = shell(2, block, {"F1.end"}, 2);
+    // The inside is the L 2 in from each side, 18 deep, with a square corner: 36 x 11 + 11 x 15 = 561 mm2.
+    CHECK(volume(cup) == Catch::Approx(volume(block) - 561 * 18).epsilon(1e-4));
+}
+
 TEST_CASE("a draft tilts the sides") {
     NamedShape box = extrude(1, top, rectangle(40, 20), {{{1, 2, 3, 4}, 5, 5}}, 10, 0);
     NamedShape tilted = draft(2, box, {"F1.s1", "F1.s2", "F1.s3", "F1.s4"}, "F1.start", 5 * M_PI / 180);
