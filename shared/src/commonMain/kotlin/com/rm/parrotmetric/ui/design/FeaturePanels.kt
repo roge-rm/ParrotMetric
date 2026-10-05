@@ -62,15 +62,15 @@ import kotlinx.coroutines.delay
 import kotlin.math.floor
 import kotlin.math.round
 
-/** The open feature's panel: its settings, and Cancel and Done. */
+/** The open feature's panel: its settings, and Cancel and Done. Settings past [maxHeight] scroll. */
 @Composable
-fun FeaturePanel(editor: DesignEditor) {
+fun FeaturePanel(editor: DesignEditor, maxHeight: androidx.compose.ui.unit.Dp = 400.dp) {
     val d = editor.panel ?: return
     Surface(color = Palette.surface, shape = RoundedCornerShape(26.dp)) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             // Long panels scroll, so the model stays in view above them.
             Column(
-                Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState()),
+                Modifier.heightIn(max = maxHeight).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
             when (d) {
@@ -568,6 +568,21 @@ private fun JointSettings(editor: DesignEditor, d: DesignEditor.JointDraft) {
         d.exprs.remove("value")
         editor.draftChanged()
     }
+    // How far it's moved first, as that's what's changed most.
+    if (d.kind != com.rm.parrotmetric.design.JointKind.Rigid) {
+        val turnLabel = if (d.turns) "Turned" else "Slid"
+        Field(editor, d, "value", turnLabel, d.value, if (d.turns) "°" else "mm", allowNegative = true) { d.value = it; editor.draftChanged() }
+        // Drag to move it.
+        androidx.compose.material3.Slider(
+            value = d.value.toFloat().coerceIn(if (d.turns) -180f else -100f, if (d.turns) 180f else 100f),
+            onValueChange = { d.value = kotlin.math.round(it).toDouble(); d.exprs.remove("value"); editor.draftChanged() },
+            valueRange = if (d.turns) -180f..180f else -100f..100f,
+            colors = androidx.compose.material3.SliderDefaults.colors(thumbColor = Palette.mint, activeTrackColor = Palette.mint),
+        )
+        if (d.kind == com.rm.parrotmetric.design.JointKind.TurnSlide) {
+            Field(editor, d, "value2", "Slid", d.value2, "mm", allowNegative = true) { d.value2 = it; editor.draftChanged() }
+        }
+    }
     val comps = editor.components()
     Text("Moving", fontSize = 13.sp, color = Palette.muted)
     Segmented(comps, comps.indexOf(d.moving).coerceAtLeast(0)) { d.moving = comps[it]; editor.draftChanged() }
@@ -581,18 +596,6 @@ private fun JointSettings(editor: DesignEditor, d: DesignEditor.JointDraft) {
             androidx.compose.material3.TextButton(onClick = { d.edge = null; d.face = null; editor.draftChanged() }) { Text("Use an axis", color = Palette.mint) }
         }
     } else AxisRow("Round", d.axis, false) { d.axis = it!!; editor.draftChanged() }
-    val turnLabel = if (d.turns) "Turned" else "Slid"
-    Field(editor, d, "value", turnLabel, d.value, if (d.turns) "°" else "mm", allowNegative = true) { d.value = it; editor.draftChanged() }
-    // Drag to move it.
-    androidx.compose.material3.Slider(
-        value = d.value.toFloat().coerceIn(if (d.turns) -180f else -100f, if (d.turns) 180f else 100f),
-        onValueChange = { d.value = kotlin.math.round(it).toDouble(); d.exprs.remove("value"); editor.draftChanged() },
-        valueRange = if (d.turns) -180f..180f else -100f..100f,
-        colors = androidx.compose.material3.SliderDefaults.colors(thumbColor = Palette.mint, activeTrackColor = Palette.mint),
-    )
-    if (d.kind == com.rm.parrotmetric.design.JointKind.TurnSlide) {
-        Field(editor, d, "value2", "Slid", d.value2, "mm", allowNegative = true) { d.value2 = it; editor.draftChanged() }
-    }
 }
 
 @Composable

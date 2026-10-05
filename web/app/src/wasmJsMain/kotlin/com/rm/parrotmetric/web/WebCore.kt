@@ -683,15 +683,24 @@ object WebCore : NativeCore {
         call(78, args)
     }
 
+    override fun setCovered(left: Float, top: Float, right: Float, bottom: Float) {
+        val args = Args()
+        args.float(left)
+        args.float(top)
+        args.float(right)
+        args.float(bottom)
+        call(79, args)
+    }
+
     override fun viewFrom(yaw: Float, pitch: Float) {
         val args = Args()
         args.float(yaw)
         args.float(pitch)
-        call(79, args)
+        call(80, args)
     }
 
     override fun cameraState(): FloatArray {
         val args = Args()
-        return call(80, args).floats()!!
+        return call(81, args).floats()!!
     }
 }

@@ -1798,6 +1798,11 @@ JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_fit(JNIEnv*, jobject) {
     renderer.fit();
 }
 
+JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_setCovered(JNIEnv*, jobject, jfloat left, jfloat top, jfloat right, jfloat bottom) {
+    std::lock_guard<std::mutex> g(lock);
+    renderer.setCovered(left, top, right, bottom);
+}
+
 JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_viewFrom(JNIEnv*, jobject, jfloat yaw, jfloat pitch) {
     std::lock_guard<std::mutex> g(lock);
     renderer.viewFrom(yaw, pitch);

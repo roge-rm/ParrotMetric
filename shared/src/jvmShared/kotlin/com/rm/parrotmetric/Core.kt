@@ -113,6 +113,7 @@ object Core : NativeCore {
     /** Zooms towards the point under (x, y), which stays put. */
     override external fun zoomAt(factor: Float, x: Float, y: Float)
     override external fun fit()
+    override external fun setCovered(left: Float, top: Float, right: Float, bottom: Float)
     /** Turns to look from a direction: yaw round Z from +X and pitch up, in radians. */
     override external fun viewFrom(yaw: Float, pitch: Float)
     /** Yaw, pitch, viewport width and height, then the last frame's view-projection matrix. */

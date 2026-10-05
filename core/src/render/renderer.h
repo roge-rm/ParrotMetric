@@ -62,6 +62,15 @@ public:
         limit_ = limit;
     }
 
+    /**
+     * How much of each edge of the view panels cover, in pixels: left, top,
+     * right, bottom. The model is centred and fitted in what's left, and the
+     * view eases there over a few frames.
+     */
+    void setCovered(float left, float top, float right, float bottom) {
+        coveredGoal_[0] = left; coveredGoal_[1] = top; coveredGoal_[2] = right; coveredGoal_[3] = bottom;
+    }
+
     /** Screen pixels per density-independent pixel, for line widths. */
     void setDensity(float density) { density_ = density; }
 
@@ -125,6 +134,10 @@ private:
     void drawIds();
     /** Millimetres per screen pixel at the target's distance. */
     float perPixel() const;
+    /** How far back the camera is to fit the model in the uncovered part of the view. */
+    float distance() const;
+    /** Moves the covered edges a step towards their goal. True while they're still moving. */
+    bool easeCovered();
     static Pick fromId(uint32_t v);
     void animate();
 
@@ -145,6 +158,8 @@ private:
     float clip_[4] = {0, 0, 1, 0};
     bool clipping_ = false;
     int analysis_ = 0;
+    float covered_[4] = {0, 0, 0, 0};      // Left, top, right, bottom, pixels, as drawn now.
+    float coveredGoal_[4] = {0, 0, 0, 0};  // Where they're heading.
     float limit_ = 0;
     float bedZ_ = 0;  // The lowest point of the bodies, where the bed is.
     float density_ = 1;

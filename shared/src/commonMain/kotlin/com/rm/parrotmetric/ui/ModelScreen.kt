@@ -42,6 +42,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.findRootCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.ui.geometry.Offset
@@ -123,6 +126,8 @@ interface ModelActions {
     fun export(request: com.rm.parrotmetric.ui.design.ExportRequest)
     fun clearSelection()
     fun fit()
+    /** The part of the view not under panels, so the model is centred and fitted there: pixels covered at each edge. */
+    fun setCovered(left: Float, top: Float, right: Float, bottom: Float) {}
     fun viewFrom(yaw: Float, pitch: Float)
     fun pan(dx: Float, dy: Float)
     fun zoom(factor: Float)
@@ -303,6 +308,7 @@ fun ModelScreen(
     MaterialTheme(colorScheme = Palette.scheme) {
         // The view stays put while the controls over it change, so it keeps its GL context.
         BoxWithConstraints((if (seeThrough) Modifier.fillMaxSize() else Modifier.fillMaxSize().background(Palette.ground)).then(keys)) {
+            val screenHeight = maxHeight
             val expanded = when (state.layout) {
                 LayoutMode.Automatic -> maxWidth >= 840.dp
                 LayoutMode.Phone -> false
@@ -327,7 +333,7 @@ fun ModelScreen(
                 }
                 Column(Modifier.fillMaxSize().safeDrawingPadding()) {
                     SketchTopBar(sketch, actions::finishSketch)
-                    Box(Modifier.weight(1f).fillMaxWidth()) {
+                    Box(Modifier.weight(1f).fillMaxWidth().openArea(actions)) {
                         SketchStatus(sketch, Modifier.align(Alignment.TopCenter).padding(top = 6.dp))
                     }
                     SketchBottom(sketch, expanded)
@@ -336,7 +342,7 @@ fun ModelScreen(
                 ExpandedModel(logo, state, design, actions, sheet) { sheet = it }
             } else Column(Modifier.fillMaxSize().safeDrawingPadding()) {
                 TopBar(logo, state, design, actions, onParts = { sheet = if (sheet == "parts") null else "parts" }, onExport = { sheet = "export" })
-                Box(Modifier.weight(1f).fillMaxWidth()) {
+                Box(Modifier.weight(1f).fillMaxWidth().openArea(actions)) {
                     Column(
                         Modifier.align(Alignment.TopEnd).padding(top = 6.dp, end = 12.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -356,7 +362,8 @@ fun ModelScreen(
                 }
                 Column(Modifier.imePadding().padding(start = 10.dp, end = 10.dp, bottom = 10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     if (design.panel != null) {
-                        FeaturePanel(design)
+                        // Kept to under a third of the screen, so the model stays in view above it.
+                        FeaturePanel(design, maxHeight = (screenHeight * 0.3f).coerceIn(160.dp, 400.dp))
                     } else if (sheet == "parts") {
                         com.rm.parrotmetric.ui.design.PartsSheet(design) { sheet = null }
                     } else if (sheet == "measure") {
@@ -391,6 +398,13 @@ fun ModelScreen(
             }
         }
     }
+}
+
+/** Tells the view which part of it isn't under panels, so the model is centred and fitted there. */
+private fun Modifier.openArea(actions: ModelActions) = onGloballyPositioned { c ->
+    val root = c.findRootCoordinates().size
+    val b = c.boundsInRoot()
+    actions.setCovered(b.left, b.top, root.width - b.right, root.height - b.bottom)
 }
 
 /** Keys a text field handles itself when it has focus. */
@@ -667,7 +681,7 @@ private fun ExpandedModel(
         Toolbar(context)
         Row(Modifier.weight(1f).fillMaxWidth().padding(10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             if (partsOpen) Box(Modifier.width(300.dp)) { com.rm.parrotmetric.ui.design.PartsSheet(design) { partsOpen = false } }
-            Box(Modifier.weight(1f).fillMaxHeight()) {
+            Box(Modifier.weight(1f).fillMaxHeight().openArea(actions)) {
                 Column(
                     Modifier.align(Alignment.TopEnd),
                     horizontalAlignment = Alignment.CenterHorizontally,

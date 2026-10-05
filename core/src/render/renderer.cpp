@@ -482,9 +482,32 @@ void Renderer::orbit(float dx, float dy) {
     pitch_ = std::clamp(pitch_ + dy * 0.008f, -1.55f, 1.55f);
 }
 
+float Renderer::distance() const {
+    // Far enough back that the model's bounding sphere fits the narrower of the
+    // two fields of view of the uncovered part, with a little margin.
+    float t = std::tan(kHalfFov);
+    float w = std::max(float(width_) - covered_[0] - covered_[2], float(width_) * 0.2f);
+    float h = std::max(float(height_) - covered_[1] - covered_[3], float(height_) * 0.2f);
+    float across = t * w / float(height_);
+    float up = t * h / float(height_);
+    return radius_ * 1.1f / std::sin(std::atan(std::min(across, up))) / zoom_;
+}
+
 float Renderer::perPixel() const {
-    float distance = radius_ * 1.1f / std::sin(std::atan(std::tan(kHalfFov) * std::min(float(width_) / float(height_), 1.0f))) / zoom_;
-    return 2 * distance * std::tan(kHalfFov) / float(height_);
+    return 2 * distance() * std::tan(kHalfFov) / float(height_);
+}
+
+bool Renderer::easeCovered() {
+    bool moving = false;
+    for (int k = 0; k < 4; ++k) {
+        float gap = coveredGoal_[k] - covered_[k];
+        if (std::abs(gap) < 0.5f) covered_[k] = coveredGoal_[k];
+        else {
+            covered_[k] += gap * 0.3f;
+            moving = true;
+        }
+    }
+    return moving;
 }
 
 void Renderer::pan(float dx, float dy) {
@@ -507,7 +530,9 @@ void Renderer::zoomAt(float factor, float x, float y) {
     // The point under (x, y), on the plane through the target facing the
     // view, keeps its place: the target moves towards it as the scale shrinks.
     float shrink = before - perPixel();
-    float ox = x - float(width_) / 2, oy = y - float(height_) / 2;
+    // From the middle of the uncovered part, which is where the target shows.
+    float ox = x - (covered_[0] + (float(width_) - covered_[0] - covered_[2]) / 2);
+    float oy = y - (covered_[1] + (float(height_) - covered_[1] - covered_[3]) / 2);
     float cy = std::cos(yaw_), sy = std::sin(yaw_), cp = std::cos(pitch_), sp = std::sin(pitch_);
     float right[3] = {-sy, cy, 0};
     float up[3] = {-sp * cy, -sp * sy, cp};
@@ -542,11 +567,9 @@ void Renderer::animate() {
 }
 
 void Renderer::camera(float* vp, float* normal) const {
-    // Far enough back that the model's bounding sphere fits the narrower of
-    // the two fields of view, with a little margin.
     float t = std::tan(kHalfFov);
     float aspect = float(width_) / float(height_);
-    float distance = radius_ * 1.1f / std::sin(std::atan(t * std::min(aspect, 1.0f))) / zoom_;
+    float distance = this->distance();
 
     float cy = std::cos(yaw_), sy = std::sin(yaw_), cp = std::cos(pitch_), sp = std::sin(pitch_);
     float eye[3] = {target_[0] + distance * cp * cy, target_[1] + distance * cp * sy, target_[2] + distance * sp};
@@ -565,6 +588,9 @@ void Renderer::camera(float* vp, float* normal) const {
     float near = std::max(distance - reach, distance * 0.01f), far = distance + reach;
     float proj[16] = {1 / (t * aspect), 0, 0, 0, 0, 1 / t, 0, 0, 0, 0, -(far + near) / (far - near), -1,
                       0, 0, -2 * far * near / (far - near), 0};
+    // Shifted so the target shows in the middle of the uncovered part.
+    proj[8] = -(covered_[0] - covered_[2]) / float(width_);
+    proj[9] = -(covered_[3] - covered_[1]) / float(height_);
     multiply(proj, view, vp);
     float n[9] = {view[0], view[1], view[2], view[4], view[5], view[6], view[8], view[9], view[10]};
     std::copy(n, n + 9, normal);
@@ -701,6 +727,7 @@ bool Renderer::draw() {
     if (bodiesDirty_) upload();
     if (selectionDirty_) uploadSelection();
     animate();
+    bool easing = easeCovered();
     glBindFramebuffer(GL_FRAMEBUFFER, targetFramebuffer);
     glViewport(0, 0, width_, height_);
     glClearColor(0.102f, 0.125f, 0.122f, 1);
@@ -709,7 +736,7 @@ bool Renderer::draw() {
     camera(vp, normal);
     std::copy(vp, vp + 16, lastViewProjection_);
     drawScene(false, vp, normal);
-    return moving_;
+    return moving_ || easing;
 }
 
 void Renderer::ensurePickTarget() {

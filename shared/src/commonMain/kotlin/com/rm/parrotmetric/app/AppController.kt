@@ -283,6 +283,9 @@ class AppController(
         }
     }
 
+    /** The view's covered edges as last sent, so layout passes that don't change them send nothing. */
+    private var covered = listOf(0f, 0f, 0f, 0f)
+
     val actions = object : ModelActions {
         override fun newDesign() {
             design.newDesign()
@@ -349,6 +352,12 @@ class AppController(
         }
 
         override fun fit() = gl { core.fit() }
+        override fun setCovered(left: Float, top: Float, right: Float, bottom: Float) {
+            val now = listOf(left, top, right, bottom)
+            if (now == covered) return
+            covered = now
+            gl { core.setCovered(left, top, right, bottom) }
+        }
         override fun viewFrom(yaw: Float, pitch: Float) = gl { core.viewFrom(yaw, pitch) }
         override fun pan(dx: Float, dy: Float) = gl { core.pan(dx, dy) }
         override fun zoom(factor: Float) = gl { core.zoom(factor) }

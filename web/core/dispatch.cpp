@@ -83,6 +83,7 @@ JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_pan(JNIEnv*, jobject, jfloa
 JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_zoom(JNIEnv*, jobject, jfloat);
 JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_zoomAt(JNIEnv*, jobject, jfloat, jfloat, jfloat);
 JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_fit(JNIEnv*, jobject);
+JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_setCovered(JNIEnv*, jobject, jfloat, jfloat, jfloat, jfloat);
 JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_viewFrom(JNIEnv*, jobject, jfloat, jfloat);
 JNIEXPORT jfloatArray JNICALL Java_com_rm_parrotmetric_Core_cameraState(JNIEnv*, jobject);
 }
@@ -752,13 +753,21 @@ void dispatch(int call, Reader& in, Writer& out, JNIEnv* env) {
             Java_com_rm_parrotmetric_Core_fit(env, nullptr);
             break;
         }
-        case 79: {  // viewFrom
+        case 79: {  // setCovered
+            auto a0 = in.f32();
+            auto a1 = in.f32();
+            auto a2 = in.f32();
+            auto a3 = in.f32();
+            Java_com_rm_parrotmetric_Core_setCovered(env, nullptr, a0, a1, a2, a3);
+            break;
+        }
+        case 80: {  // viewFrom
             auto a0 = in.f32();
             auto a1 = in.f32();
             Java_com_rm_parrotmetric_Core_viewFrom(env, nullptr, a0, a1);
             break;
         }
-        case 80: {  // cameraState
+        case 81: {  // cameraState
             auto r = Java_com_rm_parrotmetric_Core_cameraState(env, nullptr);
             if (!failed()) out.put(r);
             break;

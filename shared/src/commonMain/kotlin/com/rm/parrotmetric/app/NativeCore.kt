@@ -128,6 +128,8 @@ interface NativeCore {
     /** Zooms towards the point under (x, y), which stays put. */
     fun zoomAt(factor: Float, x: Float, y: Float)
     fun fit()
+    /** How much of each edge of the view panels cover, pixels: left, top, right, bottom. */
+    fun setCovered(left: Float, top: Float, right: Float, bottom: Float)
     /** Turns to look from a direction: yaw round Z from +X and pitch up, in radians. */
     fun viewFrom(yaw: Float, pitch: Float)
     /** Yaw, pitch, viewport width and height, then the last frame's view-projection matrix. */
