@@ -614,7 +614,15 @@ class DesignEditor(
     /** Opens Extrude or Revolve, starting from any sketch areas already selected. */
     fun startExtrude() = openArea(ExtrudeDraft(null).also { it.planes = planeChoices() })
     fun startRevolve() = openArea(RevolveDraft(null))
-    fun startSweep() = openArea(SweepDraft(null))
+    fun startSweep() {
+        val d = SweepDraft(null)
+        openArea(d)
+        // The path is most often the newest other sketch.
+        if (!d.pathByEdges && d.pathSketch == null) {
+            d.pathSketch = sketchChoices(d.sketchId).lastOrNull()?.second
+            if (d.pathSketch != null) rebuild()
+        }
+    }
 
     fun startPatch() {
         val d = PatchDraft(null)

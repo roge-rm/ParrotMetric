@@ -322,14 +322,19 @@ void Renderer::setBodies(std::vector<DisplayMesh> bodies, bool refit) {
             for (size_t i = 2; i < b.positions.size(); i += 3) bedZ_ = std::min(bedZ_, b.positions[i]);
     float lo[3] = {1e30f, 1e30f, 1e30f}, hi[3] = {-1e30f, -1e30f, -1e30f};
     bool any = false;
-    for (const auto& b : bodies_) {
-        for (size_t i = 0; i < b.positions.size(); i += 3) {
+    auto take = [&](const std::vector<float>& xyz) {
+        for (size_t i = 0; i + 2 < xyz.size(); i += 3) {
             any = true;
             for (int k = 0; k < 3; ++k) {
-                lo[k] = std::min(lo[k], b.positions[i + k]);
-                hi[k] = std::max(hi[k], b.positions[i + k]);
+                lo[k] = std::min(lo[k], xyz[i + k]);
+                hi[k] = std::max(hi[k], xyz[i + k]);
             }
         }
+    };
+    // Faces, and edges too, so a sketch of open lines with no area is framed as well.
+    for (const auto& b : bodies_) {
+        take(b.positions);
+        for (const auto& e : b.edges) take(e.points);
     }
     if (any) {
         float d2 = 0;
