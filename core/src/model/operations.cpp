@@ -586,7 +586,24 @@ NamedShape shell(int id, const NamedShape& body, const std::vector<std::string>&
         // Negative grows inwards, keeping the outside where it was.
         op.MakeThickSolidByJoin(body.shape, faces, -thickness, 1e-4, BRepOffset_Skin, true, false, concave ? GeomAbs_Intersection : GeomAbs_Arc);
         if (!op.IsDone() || !BRepCheck_Analyzer(op.Shape()).IsValid()) throw std::runtime_error("The walls are too thick for this shape");
-        return carryNames({&body}, op, op.Shape(), prefix(id));
+        NamedShape out = carryNames({&body}, op, op.Shape(), prefix(id));
+        // Each inside face is named after the outside face it lines, F<id>.in(<that name>):
+        // the order the offset makes them in changes from run to run, so numbers wouldn't hold.
+        TopTools_IndexedMapOfShape present;
+        TopExp::MapShapes(out.shape, TopAbs_FACE, present);
+        const std::string made = prefix(id) + ".n";
+        for (TopExp_Explorer f(body.shape, TopAbs_FACE); f.More(); f.Next()) {
+            std::string name = body.faceName(f.Current());
+            if (name.empty()) continue;
+            for (const auto& g : op.Generated(f.Current())) {
+                if (!present.Contains(g)) continue;
+                std::string inside = prefix(id) + ".in(" + name + ")";
+                std::string* bound = out.names.ChangeSeek(g);
+                if (!bound) out.names.Bind(g, inside);
+                else if (bound->rfind(made, 0) == 0) *bound = inside;
+            }
+        }
+        return out;
     } catch (const Standard_Failure&) {
         throw std::runtime_error("The walls are too thick for this shape");
     }
@@ -1172,8 +1189,20 @@ gp_Ax3 facePlane(const NamedShape& body, const std::string& name) {
 
 bool overlaps(const NamedShape& a, const NamedShape& b) {
     try {
+        Bnd_Box ba, bb;
+        BRepBndLib::Add(a.shape, ba);
+        BRepBndLib::Add(b.shape, bb);
+        if (ba.IsOut(bb)) return false;
         BRepAlgoAPI_Common common(a.shape, b.shape);
-        return common.IsDone() && volume(common.Shape()) > 1e-9;
+        if (common.IsDone() && volume(common.Shape()) > 1e-9) return true;
+        // Touching: a post standing on a floor. Joined over a face they make one solid; over an edge or a corner, two.
+        BRepExtrema_DistShapeShape gap(a.shape, b.shape);
+        if (!gap.IsDone() || gap.Value() > 1e-6) return false;
+        BRepAlgoAPI_Fuse fuse(a.shape, b.shape);
+        if (!fuse.IsDone()) return false;
+        int solids = 0;
+        for (TopExp_Explorer e(fuse.Shape(), TopAbs_SOLID); e.More(); e.Next()) solids++;
+        return solids == 1;
     } catch (const Standard_Failure&) {
         return false;
     }

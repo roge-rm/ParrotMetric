@@ -644,7 +644,13 @@ internal fun HoleSettings(editor: DesignEditor, d: DesignEditor.HoleDraft) {
         editor.draftChanged()
     }
     Segmented(listOf("Simple", "Counterbore", "Countersink"), d.kind.ordinal) { d.kind = com.rm.parrotmetric.design.HoleKind.entries[it]; editor.draftChanged() }
-    Field(editor, d, "diameter", "Diameter", d.diameter, "mm", allowNegative = false) { d.diameter = it; editor.draftChanged() }
+    val fits = listOf(null, com.rm.parrotmetric.design.HoleFit.Insert, com.rm.parrotmetric.design.HoleFit.SelfTap)
+    Segmented(listOf("Any size", "Insert", "Self-tap"), fits.indexOf(d.fit)) { d.usePreset(fits[it], d.size); editor.draftChanged() }
+    if (d.fit != null) {
+        val sizes = com.rm.parrotmetric.design.HolePresets.sizes
+        Segmented(sizes, sizes.indexOf(d.size).coerceAtLeast(0)) { d.usePreset(d.fit, sizes[it]); editor.draftChanged() }
+    }
+    Field(editor, d, "diameter", "Diameter", d.diameter, "mm", allowNegative = false) { d.diameter = it; d.fit = null; editor.draftChanged() }
     Toggle("All the way through", d.through) { d.through = it; editor.draftChanged() }
     if (!d.through) Field(editor, d, "depth", "Depth", d.depth, "mm", allowNegative = false) { d.depth = it; editor.draftChanged() }
     if (d.kind != com.rm.parrotmetric.design.HoleKind.Simple) Field(editor, d, "topDiameter", "Top", d.topDiameter, "mm", allowNegative = false) { d.topDiameter = it; editor.draftChanged() }

@@ -289,7 +289,7 @@ class DesignEditor(
             d?.let {
                 val n = Vec3(it[3], it[4], it[5])
                 val x = if (kotlin.math.abs(n.z) < 0.9) Vec3(0.0, 0.0, 1.0).cross(n) else Vec3(1.0, 0.0, 0.0).cross(n)
-                SketchPlane("Face", Vec3(it[0], it[1], it[2]), x, n.cross(x))
+                SketchPlane("Face", ref.origin(Vec3(it[0], it[1], it[2]), n), x, n.cross(x))
             }
         }
     }
@@ -482,7 +482,7 @@ class DesignEditor(
         var x = ref.x - n * ref.x.dot(n)
         if (x.dot(x) < 1e-12) x = if (kotlin.math.abs(n.z) < 0.9) Vec3(0.0, 0.0, 1.0).cross(n) else Vec3(1.0, 0.0, 0.0).cross(n)
         x = x * (1 / kotlin.math.sqrt(x.dot(x)))
-        return ref to SketchPlane("On a face", Vec3(d[0], d[1], d[2]), x, n.cross(x))
+        return ref to SketchPlane("On a face", ref.origin(Vec3(d[0], d[1], d[2]), n), x, n.cross(x))
     }
 
     /** For projecting into a sketch on a plane: where the shown bodies cross it. */
@@ -1511,6 +1511,24 @@ class DesignEditor(
         var kind by mutableStateOf(editing?.kind ?: HoleKind.Simple)
         var topDiameter by mutableStateOf(editing?.topDiameter ?: 6.0)
         var topDepth by mutableStateOf(editing?.topDepth ?: 3.0)
+        private val matched = editing?.let { com.rm.parrotmetric.design.HolePresets.match(it.diameter) }
+        /** What the hole is for, or null for a size typed in. */
+        var fit by mutableStateOf(matched?.first)
+        var size by mutableStateOf(matched?.second ?: "M3")
+
+        /** Sets the size, and the depth for an insert, from what it's for. */
+        fun usePreset(newFit: com.rm.parrotmetric.design.HoleFit?, newSize: String) {
+            fit = newFit
+            size = newSize
+            if (newFit == null) return
+            diameter = com.rm.parrotmetric.design.HolePresets.diameter(newFit, newSize)
+            exprs.remove("diameter")
+            com.rm.parrotmetric.design.HolePresets.depth(newFit, newSize)?.let {
+                depth = it
+                through = false
+                exprs.remove("depth")
+            }
+        }
 
         override fun feature(): Feature? {
             val s = sketchId ?: return null

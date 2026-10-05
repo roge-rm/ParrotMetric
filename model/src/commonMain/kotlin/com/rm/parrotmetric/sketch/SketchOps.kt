@@ -127,17 +127,59 @@ object SketchOps {
         return p
     }
 
-    /** Level, upright, parallel, perpendicular and collinear constraints of an old line, put on its replacement. */
-    private fun Sketch.carry(old: Line, new: Line) {
-        for (k in constraints.toList()) when (k) {
+    /**
+     * What held an old line's direction and place, put on its replacement,
+     * which lies along the same infinite line: level, upright, parallel,
+     * square, in line, points on it or mirrored across it, tangents, smooth
+     * joins at a point it still ends at, and distances and angles to it.
+     * The new line runs the same way as the old. Add them once the old line
+     * is gone, or they'd look already set.
+     */
+    private fun Sketch.carried(old: Line, new: Line): List<Constraint> = buildList {
+        for (k in constraints) when (k) {
             is Constraint.Horizontal -> if (k.line === old) add(Constraint.Horizontal(new))
             is Constraint.Vertical -> if (k.line === old) add(Constraint.Vertical(new))
             is Constraint.Parallel -> if (k.l1 === old) add(Constraint.Parallel(new, k.l2)) else if (k.l2 === old) add(Constraint.Parallel(k.l1, new))
             is Constraint.Perpendicular -> if (k.l1 === old) add(Constraint.Perpendicular(new, k.l2)) else if (k.l2 === old) add(Constraint.Perpendicular(k.l1, new))
             is Constraint.Collinear -> if (k.l1 === old) add(Constraint.Collinear(new, k.l2)) else if (k.l2 === old) add(Constraint.Collinear(k.l1, new))
+            is Constraint.OnLine -> if (k.line === old && k.p !in new.points()) add(Constraint.OnLine(k.p, new))
+            is Constraint.Symmetric -> if (k.line === old) add(Constraint.Symmetric(k.p, k.q, new))
+            is Constraint.TangentLine -> if (k.line === old) add(Constraint.TangentLine(new, k.curve))
+            is Constraint.TangentJoin -> if (k.at in new.points()) {
+                if (k.c1 === old) add(Constraint.TangentJoin(new, k.c2, k.at)) else if (k.c2 === old) add(Constraint.TangentJoin(k.c1, new, k.at))
+            }
+            is Constraint.PointLineDistance -> if (k.line === old) add(Constraint.PointLineDistance(k.p, new, k.value))
+            is Constraint.Angle -> if (k.l1 === old) add(Constraint.Angle(new, k.l2, k.value)) else if (k.l2 === old) add(Constraint.Angle(k.l1, new, k.value))
             else -> {}
         }
     }
+
+    /**
+     * After a corner at p is rounded or cut: p goes, unless something else
+     * holds on to it (a dimension, the origin), when it stays where the
+     * lines would meet, so what was measured to the corner still is.
+     */
+    private fun Sketch.leaveCorner(p: Point, old1: Line, old2: Line, new1: Line, new2: Line) {
+        val carried = carried(old1, new1) + carried(old2, new2)
+        // A side's length becomes the distance from its far end to the corner.
+        val lengths = constraints.filterIsInstance<Constraint.Length>().filter { it.line === old1 || it.line === old2 }
+            .map { Constraint.Distance(if (it.line.a === p) it.line.b else it.line.a, p, it.value) }
+        val held = p === origin || lengths.isNotEmpty() || constraints.any { k -> p in k.points() && k.curves().none { it === old1 || it === old2 } }
+        removeCurveOnly(old1)
+        removeCurveOnly(old2)
+        if (held) {
+            add(Constraint.OnLine(p, new1))
+            add(Constraint.OnLine(p, new2))
+            lengths.forEach { add(it) }
+        } else {
+            removePoint(p)
+        }
+        carried.forEach { add(it) }
+    }
+
+    /** A line from q to the far end of [old] from p, running the same way as old. */
+    private fun Sketch.shortened(old: Line, p: Point, far: Point, q: Point): Line =
+        if (old.a === p) addLine(q, far, old.construction) else addLine(far, q, old.construction)
 
     /**
      * Removes the piece of c between the crossings either side of (u, v).
@@ -161,11 +203,13 @@ object SketchOps {
                 val (startPoint, endPoint) = if (c is Line) c.a to c.b else (c as Arc).start to c.end
                 if (before != null) pieces += startPoint to s.pointOn(before.u, before.v, before.other)
                 if (after != null) pieces += s.pointOn(after.u, after.v, after.other) to endPoint
+                val carried = mutableListOf<Constraint>()
                 for ((p, q) in pieces) {
-                    if (c is Line) s.carry(c, s.addLine(p, q, c.construction))
+                    if (c is Line) carried += s.carried(c, s.addLine(p, q, c.construction))
                     else s.addArc((c as Arc).centre, p, q, c.construction)
                 }
                 removeKeeping(s, c, pieces.flatMap { listOf(it.first, it.second) })
+                carried.forEach { s.add(it) }
             }
             is Circle -> {
                 if (cross.size < 2) {
@@ -318,13 +362,9 @@ object SketchOps {
         // The arc goes anticlockwise, so it starts at whichever end that makes it the short way round.
         val cross = ux * vy - uy * vx
         val arc = if (cross > 0) s.addArc(centre, t2, t1) else s.addArc(centre, t1, t2)
-        val n1 = s.addLine(far1, t1, l1.construction)
-        val n2 = s.addLine(far2, t2, l2.construction)
-        s.carry(l1, n1)
-        s.carry(l2, n2)
-        s.removeCurveOnly(l1)
-        s.removeCurveOnly(l2)
-        s.removePoint(p)
+        val n1 = s.shortened(l1, p, far1, t1)
+        val n2 = s.shortened(l2, p, far2, t2)
+        s.leaveCorner(p, l1, l2, n1, n2)
         s.add(Constraint.TangentJoin(n1, arc, t1))
         s.add(Constraint.TangentJoin(n2, arc, t2))
         s.add(Constraint.Radius(arc, false, r))
@@ -348,14 +388,10 @@ object SketchOps {
         }
         val t1 = back(far1)
         val t2 = back(far2)
-        val n1 = s.addLine(far1, t1, l1.construction)
-        val n2 = s.addLine(far2, t2, l2.construction)
+        val n1 = s.shortened(l1, p, far1, t1)
+        val n2 = s.shortened(l2, p, far2, t2)
         s.addLine(t1, t2, l1.construction && l2.construction)
-        s.carry(l1, n1)
-        s.carry(l2, n2)
-        s.removeCurveOnly(l1)
-        s.removeCurveOnly(l2)
-        s.removePoint(p)
+        s.leaveCorner(p, l1, l2, n1, n2)
         s.solve()
         return null
     }
@@ -370,10 +406,10 @@ object SketchOps {
                 val m = s.addPoint(mx, my)
                 val first = s.addLine(c.a, m, c.construction)
                 val second = s.addLine(m, c.b, c.construction)
-                s.carry(c, first)
-                s.carry(c, second)
-                s.add(Constraint.Collinear(first, second))
+                val carried = s.carried(c, first) + s.carried(c, second)
                 removeKeeping(s, c, listOf(c.a, c.b, m))
+                s.add(Constraint.Collinear(first, second))
+                carried.forEach { s.add(it) }
             }
             is Arc -> {
                 val t = s.placeOf(c, u, v)

@@ -5,7 +5,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -54,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rm.parrotmetric.sketch.Constraint
 import com.rm.parrotmetric.ui.Icons
+import com.rm.parrotmetric.ui.sideways
 import com.rm.parrotmetric.ui.Palette
 import kotlinx.coroutines.delay
 import kotlin.math.round
@@ -137,7 +137,7 @@ fun SketchBottom(editor: SketchEditor, expanded: Boolean = false) {
 private fun ChipRow(editor: SketchEditor, expanded: Boolean, onConstrain: () -> Unit) {
     val hasSelection = editor.selection.isNotEmpty()
     val choices = editor.constraintChoices()
-    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    Row(Modifier.fillMaxWidth().sideways(rememberScrollState()).padding(horizontal = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         Chip("Dimension", Icons.dimension, active = editor.tool == SketchTool.Dimension) {
             editor.selectTool(if (editor.tool == SketchTool.Dimension) SketchTool.Select else SketchTool.Dimension)
         }

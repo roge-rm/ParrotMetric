@@ -126,6 +126,38 @@ data class MeshEditFeature(
 
 enum class HoleKind { Simple, Counterbore, Countersink }
 
+/** What a hole is for, when it's for a metric screw in a printed part. */
+enum class HoleFit { Insert, SelfTap }
+
+/**
+ * Hole sizes for metric screws in printed parts: a pocket for a standard
+ * heat-set insert, or a pilot hole the screw cuts its own thread in.
+ */
+object HolePresets {
+    val sizes = listOf("M2", "M2.5", "M3", "M4", "M5")
+
+    // Pocket diameter, and depth: the insert's length (mm) and 1 more for the plastic it pushes down.
+    private val insert = mapOf("M2" to (3.2 to 5.0), "M2.5" to (3.6 to 5.0), "M3" to (4.0 to 6.7), "M4" to (5.6 to 9.1), "M5" to (6.4 to 10.5))
+
+    // A little under the screw's core diameter, so the thread bites into the plastic.
+    private val selfTap = mapOf("M2" to 1.7, "M2.5" to 2.2, "M3" to 2.6, "M4" to 3.5, "M5" to 4.4)
+
+    fun diameter(fit: HoleFit, size: String): Double = when (fit) {
+        HoleFit.Insert -> insert.getValue(size).first
+        HoleFit.SelfTap -> selfTap.getValue(size)
+    }
+
+    /** How deep the hole has to be, or null when it's up to the screw's length. */
+    fun depth(fit: HoleFit, size: String): Double? = if (fit == HoleFit.Insert) insert.getValue(size).second else null
+
+    /** The preset a hole of this diameter matches, if any. */
+    fun match(diameter: Double): Pair<HoleFit, String>? {
+        insert.entries.firstOrNull { kotlin.math.abs(it.value.first - diameter) < 1e-6 }?.let { return HoleFit.Insert to it.key }
+        selfTap.entries.firstOrNull { kotlin.math.abs(it.value - diameter) < 1e-6 }?.let { return HoleFit.SelfTap to it.key }
+        return null
+    }
+}
+
 /**
  * Holes at a sketch's lone points, going in against the sketch's normal.
  * [depth] 0 goes right through. The top's size is for counterbores and

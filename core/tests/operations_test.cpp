@@ -124,6 +124,20 @@ TEST_CASE("a shell leaves walls round an open top") {
     CHECK(has(cup.faceNames(), "F1.s1"));
 }
 
+TEST_CASE("a shell names each inside face after the face it lines") {
+    NamedShape box = extrude(1, top, rectangle(40, 20), {{{1, 2, 3, 4}, 5, 5}}, 10, 0);
+    NamedShape cup = shell(2, box, {"F1.end"}, 2);
+    auto names = cup.faceNames();
+    std::string all;
+    for (const auto& n : names) all += n + " ";
+    INFO(all);
+    CHECK(has(names, "F2.in(F1.start)"));
+    CHECK(has(names, "F2.in(F1.s1)"));
+    // The floor inside is flat and 2 up from the bottom.
+    gp_Ax3 floor = facePlane(cup, "F2.in(F1.start)");
+    CHECK(std::abs(floor.Location().Z()) == Catch::Approx(2));
+}
+
 TEST_CASE("a shell keeps the inside corner of an L sharp") {
     // An L, 40 by 30 with arms 15 wide, 20 high and open at the top.
     std::vector<SketchCurve> l = {line(1, 0, 0, 40, 0), line(2, 40, 0, 40, 15), line(3, 40, 15, 15, 15),
@@ -326,6 +340,16 @@ TEST_CASE("a body split by another comes apart where they cross") {
     CHECK(inside == Catch::Approx(pi * 25 * 10).epsilon(1e-4));
     CHECK(overlapVolume(block, rod) == Catch::Approx(pi * 25 * 10).epsilon(1e-4));
     CHECK(overlapVolume(block, primitive(4, top, Primitive::Box, 100, 0, 5, 5, 5)) == 0);
+}
+
+TEST_CASE("solids overlap when they share volume or a face, not just an edge") {
+    NamedShape block = primitive(1, top, Primitive::Box, 0, 0, 20, 20, 10);
+    CHECK(overlaps(block, primitive(2, top, Primitive::Box, 10, 0, 20, 20, 10)));
+    // Side by side, sharing a face: a join makes one solid.
+    CHECK(overlaps(block, primitive(3, top, Primitive::Box, 20, 0, 20, 20, 10)));
+    // Only an edge in common, or a gap.
+    CHECK_FALSE(overlaps(block, primitive(4, top, Primitive::Box, 20, 20, 20, 20, 10)));
+    CHECK_FALSE(overlaps(block, primitive(5, top, Primitive::Box, 21, 0, 20, 20, 10)));
 }
 
 TEST_CASE("each corner of a box has a name it can be found by") {

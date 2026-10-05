@@ -120,6 +120,39 @@ class SketchOpsTest {
         assertNotNull(SketchOps.filletCorner(s, s.addPoint(100.0, 100.0), 1.0))
     }
 
+    @Test
+    fun roundingADimensionedCornerKeepsItsDimensions() {
+        // A 65 x 30 rectangle from the origin with its sides measured, and a hole 3.5 in from the left side.
+        val s = Sketch()
+        val o = s.origin
+        val br = s.addPoint(65.0, 0.0); val tr = s.addPoint(65.0, 30.0); val tl = s.addPoint(0.0, 30.0)
+        val bottom = s.addLine(o, br); val right = s.addLine(br, tr); val top = s.addLine(tr, tl); val left = s.addLine(tl, o)
+        s.add(Constraint.Horizontal(bottom)); s.add(Constraint.Horizontal(top))
+        s.add(Constraint.Vertical(right)); s.add(Constraint.Vertical(left))
+        s.add(Constraint.Length(bottom, 65.0)); s.add(Constraint.Length(right, 30.0))
+        val hole = s.addCircle(s.addPoint(3.5, 3.5), 1.375)
+        s.add(Constraint.Radius(hole, true, 2.75))
+        s.add(Constraint.PointLineDistance(hole.centre, left, 3.5))
+        s.add(Constraint.PointLineDistance(hole.centre, bottom, 3.5))
+        s.solve()
+        assertEquals(0, s.freedom().count, "before")
+        assertNull(SketchOps.filletCorner(s, tr, 3.0))
+        assertEquals(0, s.freedom().count, "after one")
+        assertNull(SketchOps.filletCorner(s, tl, 3.0))
+        assertEquals(0, s.freedom().count, "after two")
+        assertNull(SketchOps.filletCorner(s, o, 3.0))
+        assertEquals(0, s.freedom().count, "after three")
+        // The kept corners still measure the sides: changing the width moves the right side.
+        val width = s.constraints.filterIsInstance<Constraint.Distance>().first { abs(it.value - 65.0) < 1e-9 }
+        width.value = 70.0
+        s.solve()
+        near(70.0, s.x(br))
+        near(3.5, s.x(hole.centre)); near(3.5, s.y(hole.centre))
+        // The top left corner had nothing measured to it, so it went.
+        assertTrue(tl !in s.points)
+        assertTrue(tr in s.points)
+    }
+
     /** A square corner at the origin: one line along x and one up y, 10 long. */
     private fun corner(s: Sketch): Point {
         val p = s.addPoint(0.0, 0.0)

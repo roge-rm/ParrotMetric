@@ -120,6 +120,21 @@ class DesignFileTest {
     }
 
     @Test
+    fun aSketchOnAFaceFromAnOlderFileKeepsTheMiddleOfTheFace() {
+        val d = Design()
+        d.add(SketchFeature(d.newId(), "Sketch 1", PlaneRef.OnFace("F2.end", Vec3(1.0, 0.0, 0.0)), Sketch()))
+        val text = DesignFile.write(d, "x")
+        val older = Regex(",\\s*\"fromOrigin\"\\s*:\\s*true").replace(text, "")
+        assertTrue(older != text)
+        val back = Design()
+        DesignFile.read(older, back)
+        assertEquals(false, ((back.features[0] as SketchFeature).plane as PlaneRef.OnFace).fromOrigin)
+        val again = Design()
+        DesignFile.read(text, again)
+        assertEquals(true, ((again.features[0] as SketchFeature).plane as PlaneRef.OnFace).fromOrigin)
+    }
+
+    @Test
     fun otherFilesAreTurnedAway() {
         assertFailsWith<IllegalArgumentException> { DesignFile.read("{\"format\":\"something\"}", Design()) }
         assertFailsWith<IllegalArgumentException> { DesignFile.read("not json", Design()) }

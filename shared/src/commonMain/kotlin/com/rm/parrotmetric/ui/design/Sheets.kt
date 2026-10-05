@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -43,6 +42,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rm.parrotmetric.ui.Icons
+import com.rm.parrotmetric.ui.sideways
 import com.rm.parrotmetric.ui.Palette
 
 /** What to export: a format by name, how fine, and which bodies by label. */
@@ -227,7 +227,7 @@ fun ParametersSheet(editor: DesignEditor, close: () -> Unit) {
         // Configurations: each a set of these values and features turned off.
         val configs = editor.design.configurations.map { it.name }
         val current = editor.design.configuration
-        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().sideways(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
             for (c in configs) Surface(
                 onClick = { editor.useConfiguration(c) },
                 shape = RoundedCornerShape(14.dp),

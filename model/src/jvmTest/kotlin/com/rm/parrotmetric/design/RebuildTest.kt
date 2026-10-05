@@ -94,7 +94,12 @@ private class FakeKernel : Kernel {
 
     override fun overlaps(a: Long, b: Long): Boolean {
         val x = bodies.getValue(a); val y = bodies.getValue(b)
-        return x.from < y.to && y.from < x.to
+        return x.from <= y.to && y.from <= x.to
+    }
+
+    override fun overlapVolume(a: Long, b: Long): Double {
+        val x = bodies.getValue(a); val y = bodies.getValue(b)
+        return maxOf(0.0, minOf(x.to, y.to) - maxOf(x.from, y.from))
     }
 
     override fun facePlane(body: Long, face: String) = doubleArrayOf(0.0, 0.0, 10.0, 0.0, 0.0, 1.0)
@@ -224,6 +229,34 @@ class RebuildTest {
         extrude(d, sketchAt(d, 200.0, 10.0), Operation.Join)
         val again = Rebuilder(k).rebuild(d.active)
         assertEquals(3, again.bodies.size)
+    }
+
+    @Test
+    fun aJoinThatOnlyTouchesAFaceStillJoins() {
+        val k = FakeKernel()
+        val d = Design()
+        extrude(d, sketchAt(d, 0.0, 10.0), Operation.NewBody)
+        // Starts where the first ends, like a post on a floor.
+        extrude(d, sketchAt(d, 10.0, 10.0), Operation.Join)
+        assertEquals(1, Rebuilder(k).rebuild(d.active).bodies.size)
+        // A cut that only touches takes nothing away, and doesn't touch the body.
+        extrude(d, sketchAt(d, 20.0, 5.0), Operation.Cut)
+        assertEquals(1, k.calls.count { it.startsWith("combine") })
+    }
+
+    @Test
+    fun aJoinThatTouchesTwoBodiesTakesTheOneItsSketchIsOn() {
+        val k = FakeKernel()
+        val d = Design()
+        val floor = extrude(d, sketchAt(d, 0.0, 10.0), Operation.NewBody)
+        extrude(d, sketchAt(d, 20.0, 10.0), Operation.NewBody)
+        // Between the two, touching both, sketched on the first one's end.
+        val onFloor = SketchFeature(d.newId(), "Sketch", PlaneRef.OnFace("F${floor.id}.end", Vec3(1.0, 0.0, 0.0)), sketchAt(Design(), 10.0, 10.0).sketch)
+        d.add(onFloor)
+        d.add(ExtrudeFeature(d.newId(), "Extrude", onFloor.id, listOf(RegionRef(onFloor.sketch.curves.map { it.id }, 15.0, 1.0)), 10.0, 0.0, Operation.Join))
+        val built = Rebuilder(k).rebuild(d.active)
+        assertEquals(2, built.bodies.size)
+        assertEquals(20.0, k.bodies.getValue(built.bodies[0].handle).to)
     }
 
     @Test

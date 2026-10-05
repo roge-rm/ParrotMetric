@@ -21,8 +21,16 @@ sealed class Feature {
 sealed class PlaneRef {
     data class Fixed(val plane: SketchPlane) : PlaneRef()
 
-    /** On a face, with its x along [x] as far as the face allows. */
-    data class OnFace(val face: String, val x: Vec3) : PlaneRef()
+    /**
+     * On a face, with its x along [x] as far as the face allows. Its origin is
+     * where the design's origin falls on the face's plane, so it stays put as
+     * the face grows; with [fromOrigin] false, as in files from before, the
+     * middle of the face.
+     */
+    data class OnFace(val face: String, val x: Vec3, val fromOrigin: Boolean = true) : PlaneRef() {
+        /** The origin, given the face's [middle] and its unit [normal]. */
+        fun origin(middle: Vec3, normal: Vec3): Vec3 = if (fromOrigin) normal * middle.dot(normal) else middle
+    }
 
     /** A construction plane made earlier in the history. */
     data class Construction(val featureId: Int) : PlaneRef()

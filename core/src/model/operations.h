@@ -234,7 +234,7 @@ NamedShape meshToSolid(int id, const Mesh& mesh);
 /** The plane of a named flat face, facing out, with x as given if it lies in the plane. Throws if the face isn't flat. */
 gp_Ax3 facePlane(const NamedShape& body, const std::string& face);
 
-/** Whether two solids share any volume. */
+/** Whether two solids share any volume or meet over a face, so that joining them makes one solid. */
 bool overlaps(const NamedShape& a, const NamedShape& b);
 
 }  // namespace pm

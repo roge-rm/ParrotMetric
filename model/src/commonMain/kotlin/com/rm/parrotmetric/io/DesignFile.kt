@@ -384,13 +384,13 @@ object DesignFile {
 
     private fun plane(p: PlaneRef): Map<String, Any?> = when (p) {
         is PlaneRef.Fixed -> mapOf("name" to p.plane.name, "origin" to vec(p.plane.origin), "x" to vec(p.plane.x), "y" to vec(p.plane.y))
-        is PlaneRef.OnFace -> mapOf("face" to p.face, "x" to vec(p.x))
+        is PlaneRef.OnFace -> mapOf("face" to p.face, "x" to vec(p.x), "fromOrigin" to p.fromOrigin)
         is PlaneRef.Construction -> mapOf("construction" to p.featureId)
     }
 
     private fun plane(p: Json.Obj): PlaneRef = when {
         p["construction"] != null -> PlaneRef.Construction(p.int("construction"))
-        p["face"] != null -> PlaneRef.OnFace(p.str("face"), vec(p["x"]))
+        p["face"] != null -> PlaneRef.OnFace(p.str("face"), vec(p["x"]), p.bool("fromOrigin"))
         else -> PlaneRef.Fixed(SketchPlane(p.str("name"), vec(p["origin"]), vec(p["x"]), vec(p["y"])))
     }
 

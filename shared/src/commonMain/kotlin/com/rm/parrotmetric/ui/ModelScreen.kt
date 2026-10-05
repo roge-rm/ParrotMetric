@@ -10,7 +10,6 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -548,7 +547,7 @@ private fun HistoryBar(design: DesignEditor, actions: ModelActions) {
     // New steps come in at the end, so keep the end in view as the history grows.
     LaunchedEffect(history.size) { scroll.animateScrollTo(scroll.maxValue) }
     Row(
-        Modifier.fillMaxWidth().horizontalScroll(scroll).padding(horizontal = 4.dp),
+        Modifier.fillMaxWidth().sideways(scroll).padding(horizontal = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

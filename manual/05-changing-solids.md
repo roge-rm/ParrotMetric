@@ -19,7 +19,7 @@ Edges that join smoothly are taken together, so one tap can pick the whole way r
 
 ## Holes and threads
 
-- **Hole** puts a hole at each point in a sketch on a face. It's **Simple**, **Counterbore** (a wider, flat bottomed hole at the top for a bolt head) or **Countersink** (a cone at the top for a flat head screw). Set the **Diameter**, and the **Depth** or **All the way through**.
+- **Hole** puts a hole at each point in a sketch on a face. It's **Simple**, **Counterbore** (a wider, flat bottomed hole at the top for a bolt head) or **Countersink** (a cone at the top for a flat head screw). Set the **Diameter**, and the **Depth** or **All the way through**. For a screw in a printed part, pick **Insert** for a pocket that takes a heat-set insert, or **Self-tap** for a hole the screw cuts its own thread in, then the screw size, M2 to M5. Insert also sets the depth to fit a standard insert. Typing a diameter goes back to **Any size**.
 - **Thread** cuts a modelled ISO metric thread into a round face, a hole or a shaft, with the **Pitch** you give.
 
 ## Ribs and emboss

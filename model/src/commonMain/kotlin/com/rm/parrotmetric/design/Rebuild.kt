@@ -252,13 +252,13 @@ class Rebuilder(private val kernel: Kernel) {
                     val out = kernel.extrude(f.id, plane, sketch.curves(), f.regions, f.forward, f.back, f.taper, f.thin)
                     // A one-sided cut from a sketch on a face goes into the body, whichever way the face looks.
                     val oneSide = f.back == 0.0 && f.forward > 0
-                    if (oneSide && f.operation != Operation.NewBody && f.operation != Operation.Join && bodies.none { kernel.overlaps(it.handle, out) }) {
+                    if (oneSide && f.operation != Operation.NewBody && f.operation != Operation.Join && bodies.none { shares(it.handle, out) }) {
                         kernel.release(out)
                         kernel.extrude(f.id, plane, sketch.curves(), f.regions, 0.0, f.forward, f.taper, f.thin)
                     } else out
                 }
             }
-            applyTool(f, tool, f.operation, bodies, planes, made)
+            applyTool(f, tool, f.operation, bodies, planes, made, (sketch.plane as? PlaneRef.OnFace)?.face)
         }
         is SweepFeature -> {
             val sketch = sketchOf(f.sketchId, all)
@@ -773,8 +773,8 @@ class Rebuilder(private val kernel: Kernel) {
             val body = bodies.firstOrNull { face in kernel.faceNames(it.handle) }
                 ?: throw KernelException("The face it's on isn't there any more")
             val d = kernel.facePlane(body.handle, face) ?: throw KernelException("The face it's on isn't there any more")
-            val origin = Vec3(d[0], d[1], d[2])
             val n = Vec3(d[3], d[4], d[5])
+            val origin = p.origin(Vec3(d[0], d[1], d[2]), n)
             // x as it was, flattened onto the face; any direction across the face if that's gone.
             var x = p.x - n * p.x.dot(n)
             if (x.dot(x) < 1e-12) x = if (abs(n.z) < 0.9) Vec3(0.0, 0.0, 1.0).cross(n) else Vec3(1.0, 0.0, 0.0).cross(n)
@@ -865,10 +865,10 @@ class Rebuilder(private val kernel: Kernel) {
      * A new solid from an extrude or revolve, used as asked: a new body, or
      * joined to, cut from or intersected with the bodies it overlaps.
      */
-    private fun applyTool(f: Feature, tool: Long, op: Operation, bodies: List<BodyState>, planes: Map<Int, SketchPlane>, made: Int): Step {
+    private fun applyTool(f: Feature, tool: Long, op: Operation, bodies: List<BodyState>, planes: Map<Int, SketchPlane>, made: Int, home: String? = null): Step {
         kernel.retain(tool)
         val step = try {
-            useTool(f, tool, op, bodies, planes, made)
+            useTool(f, tool, op, bodies, planes, made, home)
         } catch (e: KernelException) {
             kernel.release(tool)
             throw e
@@ -878,14 +878,26 @@ class Rebuilder(private val kernel: Kernel) {
         return step
     }
 
-    /** [applyTool] without keeping the tool; takes over the tool's handle. */
-    private fun useTool(f: Feature, tool: Long, op: Operation, bodies: List<BodyState>, planes: Map<Int, SketchPlane>, made: Int): Step {
+    /** Whether two solids share some volume, not just a face. */
+    private fun shares(a: Long, b: Long) = kernel.overlapVolume(a, b) > 1e-9
+
+    /**
+     * [applyTool] without keeping the tool; takes over the tool's handle.
+     * [home] is the face its sketch is on, if it's on one.
+     */
+    private fun useTool(f: Feature, tool: Long, op: Operation, bodies: List<BodyState>, planes: Map<Int, SketchPlane>, made: Int, home: String? = null): Step {
         try {
             if (op == Operation.NewBody) {
                 keep(bodies)
                 return Step(f.key(), bodies + BodyState("Body ${made + 1}", tool), planes, null, made + 1)
             }
-            val touched = bodies.filter { kernel.overlaps(it.handle, tool) }
+            // A cut or intersect goes into the bodies it reaches into. A join takes those too; when it only
+            // touches, as a post on a floor does, the body its sketch is on, or else all it touches.
+            val touched = bodies.filter { shares(it.handle, tool) }.ifEmpty {
+                if (op != Operation.Join) return@ifEmpty emptyList()
+                val near = bodies.filter { kernel.overlaps(it.handle, tool) }
+                near.filter { home != null && home in kernel.faceNames(it.handle) }.ifEmpty { near }
+            }
             if (touched.isEmpty()) {
                 if (op == Operation.Join) {
                     keep(bodies)
@@ -947,7 +959,7 @@ class Rebuilder(private val kernel: Kernel) {
             for ((k, src) in sources.withIndex()) for ((j, m) in mats.withIndex()) {
                 val copy = kernel.transform(f.id, src.tool, m, "f${ids[k]}.$j")
                 if (src.toolOp == Operation.Cut || src.toolOp == Operation.Intersect) {
-                    if (now.none { kernel.overlaps(it.handle, copy) }) { kernel.release(copy); continue }
+                    if (now.none { shares(it.handle, copy) }) { kernel.release(copy); continue }
                 }
                 used++
                 val s = useTool(f, copy, src.toolOp, now, planes, count)
