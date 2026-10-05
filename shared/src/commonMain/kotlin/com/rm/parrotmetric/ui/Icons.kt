@@ -38,6 +38,8 @@ object Icons {
     val fit = stroke("fit", "M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5")
     val close = stroke("close", "M6 6l12 12M18 6L6 18", width = 2.4f)
     val more = stroke("more", "M6 9l6 6 6-6", width = 2f)
+    val back = stroke("back", "M15 5l-7 7 7 7", width = 2.2f)
+    val help = stroke("help", "M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17.5v.1", circle(12f, 12f, 9f))
     val cylinder = stroke("cylinder", "M6 6.5v11a6 2.5 0 0 0 12 0v-11", "M6 6.5a6 2.5 0 1 0 12 0a6 2.5 0 1 0-12 0")
     val sphere = stroke("sphere", circle(12f, 12f, 8.5f), "M3.5 12a8.5 3 0 0 0 17 0")
     val torus = stroke("torus", "M2 12a10 6 0 1 0 20 0a10 6 0 1 0-20 0", "M8 11.5a4 1.8 0 0 0 8 0", "M9 11a3 1.3 0 0 1 6 0")

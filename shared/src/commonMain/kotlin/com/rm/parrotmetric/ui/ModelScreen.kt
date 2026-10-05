@@ -42,6 +42,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.findRootCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -60,6 +61,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.focusable
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.KeyEventType
@@ -223,6 +225,7 @@ fun ModelScreen(
         when {
             finder -> finder = false
             keyList -> keyList = false
+            state.screen == AppScreen.Help -> if (!Help.back()) actions.closeSettings()
             state.screen == AppScreen.Settings -> actions.closeSettings()
             state.screen != AppScreen.Model -> return false
             sketch != null -> when {
@@ -265,6 +268,10 @@ fun ModelScreen(
             keyboard = true
             val name = keyName(e) ?: return@onPreviewKeyEvent false
             if (name == "Esc") return@onPreviewKeyEvent escape()
+            if (name == "F1" && !finder && !keyList) {
+                actions.showScreen(AppScreen.Help)
+                return@onPreviewKeyEvent true
+            }
             if (finder || keyList || state.screen != AppScreen.Model) return@onPreviewKeyEvent false
             when {
                 name == "Ctrl+Enter" && sketch != null -> { actions.finishSketch(); true }
@@ -313,6 +320,8 @@ fun ModelScreen(
         .onFocusChanged { screenFocused = it.isFocused }
         .focusRequester(focus)
         .focusable()
+    // Moving between pages drops the button that had focus, so keys come back here.
+    LaunchedEffect(state.screen, Help.reading) { if (state.screen != AppScreen.Model) focus.requestFocus() }
     // A press on the model takes keys back from any field.
     val refocus = Modifier.pointerInput(Unit) {
         awaitPointerEventScope {
@@ -336,8 +345,13 @@ fun ModelScreen(
                 StartScreen(startIcon, state, actions)
                 return@BoxWithConstraints
             }
+            // A press anywhere on these takes keys back, so Esc still works after a button goes away.
             if (state.screen == AppScreen.Settings) {
-                SettingsScreen(state, actions, actions::closeSettings)
+                Box(Modifier.fillMaxSize().then(refocus)) { SettingsScreen(state, actions, actions::closeSettings) }
+                return@BoxWithConstraints
+            }
+            if (state.screen == AppScreen.Help) {
+                Box(Modifier.fillMaxSize().then(refocus)) { HelpScreen(actions::closeSettings) }
                 return@BoxWithConstraints
             }
             androidx.compose.runtime.CompositionLocalProvider(LocalFieldChain provides chain, LocalKeyboard provides keyboard) {
@@ -349,7 +363,7 @@ fun ModelScreen(
                     }
                 }
                 Column(Modifier.fillMaxSize().safeDrawingPadding()) {
-                    SketchTopBar(sketch, actions::finishSketch)
+                    SketchTopBar(sketch, actions::fit, actions::finishSketch)
                     Box(Modifier.weight(1f).fillMaxWidth().openArea(actions)) {
                         SketchStatus(sketch, Modifier.align(Alignment.TopCenter).padding(top = 6.dp))
                     }
@@ -369,7 +383,7 @@ fun ModelScreen(
                             OrientationCube(state.yaw, state.pitch, actions::viewFrom, size = 72.dp)
                         }
                         Surface(color = Palette.surface.copy(alpha = 0.72f), shape = RoundedCornerShape(14.dp)) {
-                            IconButton(onClick = actions::fit) { Icon(Icons.fit, "Fit the model in view", tint = Palette.text) }
+                            IconButton(onClick = actions::fit, Modifier.focusProperties { canFocus = false }) { Icon(Icons.fit, "Fit the model in view", tint = Palette.text) }
                         }
                     }
                     Column(Modifier.align(Alignment.TopCenter).padding(top = 8.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -446,6 +460,7 @@ private fun TopBar(logo: @Composable () -> Unit, state: ModelState, design: Desi
                 DropdownMenuItem({ Text("Export…") }, onClick = { menu = false; onExport() }, leadingIcon = { Icon(Icons.export, null, tint = Palette.mint) })
                 androidx.compose.material3.HorizontalDivider(color = Palette.line)
                 DropdownMenuItem({ Text("Settings…") }, onClick = { menu = false; actions.showScreen(AppScreen.Settings) }, leadingIcon = { Icon(Icons.parameters, null, tint = Palette.mint) })
+                DropdownMenuItem({ Text("Help") }, onClick = { menu = false; actions.showScreen(AppScreen.Help) }, leadingIcon = { Icon(Icons.help, null, tint = Palette.mint) })
                 DropdownMenuItem({ Text("Main menu") }, onClick = { menu = false; actions.showScreen(AppScreen.Start) }, leadingIcon = { Icon(Icons.close, null, tint = Palette.mint) })
             }
         }
@@ -463,9 +478,10 @@ private fun TopBar(logo: @Composable () -> Unit, state: ModelState, design: Desi
                 maxLines = 1,
             )
         }
-        IconButton(onClick = onParts) { Icon(Icons.parts, "Parts list", tint = Palette.text) }
-        IconButton(onClick = design::undo, enabled = design.canUndo) { Icon(Icons.undo, "Undo", tint = if (design.canUndo) Palette.text else Palette.faint) }
-        IconButton(onClick = design::redo, enabled = design.canRedo) { Icon(Icons.redo, "Redo", tint = if (design.canRedo) Palette.text else Palette.faint) }
+        val keepKeys = Modifier.focusProperties { canFocus = false }
+        IconButton(onClick = onParts, keepKeys) { Icon(Icons.parts, "Parts list", tint = Palette.text) }
+        IconButton(onClick = design::undo, keepKeys, enabled = design.canUndo) { Icon(Icons.undo, "Undo", tint = if (design.canUndo) Palette.text else Palette.faint) }
+        IconButton(onClick = design::redo, keepKeys, enabled = design.canRedo) { Icon(Icons.redo, "Redo", tint = if (design.canRedo) Palette.text else Palette.faint) }
     }
 }
 
@@ -542,6 +558,18 @@ private fun HistoryBar(design: DesignEditor, actions: ModelActions) {
                                 else -> Modifier
                             },
                         )
+                        // A right-click opens the menu too, as a long press does.
+                        .pointerInput(Unit) {
+                            awaitPointerEventScope {
+                                while (true) {
+                                    val e = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                                    if (e.type == androidx.compose.ui.input.pointer.PointerEventType.Press && e.buttons.isSecondaryPressed) {
+                                        e.changes.forEach { it.consume() }
+                                        menu = true
+                                    }
+                                }
+                            }
+                        }
                         .combinedClickable(
                             onClick = { (entry.error ?: entry.warning)?.let { design.message = it }; actions.openHistory(entry.id) },
                             onLongClick = { menu = true },
@@ -708,7 +736,7 @@ private fun ExpandedModel(
                         OrientationCube(state.yaw, state.pitch, actions::viewFrom, size = 72.dp)
                     }
                     Surface(color = Palette.surface.copy(alpha = 0.72f), shape = RoundedCornerShape(14.dp)) {
-                        IconButton(onClick = actions::fit) { Icon(Icons.fit, "Fit the model in view", tint = Palette.text) }
+                        IconButton(onClick = actions::fit, Modifier.focusProperties { canFocus = false }) { Icon(Icons.fit, "Fit the model in view", tint = Palette.text) }
                     }
                 }
                 Column(Modifier.align(Alignment.TopCenter), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {

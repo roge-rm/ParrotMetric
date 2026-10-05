@@ -35,6 +35,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -56,9 +57,9 @@ import com.rm.parrotmetric.ui.Palette
 import kotlinx.coroutines.delay
 import kotlin.math.round
 
-/** The top of the screen while sketching: its name and plane, undo, redo and Finish. */
+/** The top of the screen while sketching: its name and plane, fit, undo, redo and Finish. */
 @Composable
-fun SketchTopBar(editor: SketchEditor, onFinish: () -> Unit) {
+fun SketchTopBar(editor: SketchEditor, onFit: () -> Unit, onFinish: () -> Unit) {
     editor.version
     Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) { Icon(Icons.sketch, null, tint = Palette.sketch) }
@@ -66,8 +67,11 @@ fun SketchTopBar(editor: SketchEditor, onFinish: () -> Unit) {
             Text(editor.name, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = Palette.text, maxLines = 1)
             Text(editor.plane.name, fontSize = 12.sp, color = Palette.muted, maxLines = 1)
         }
-        IconButton(onClick = editor::undo, enabled = editor.canUndo) { Icon(Icons.undo, "Undo", tint = if (editor.canUndo) Palette.text else Palette.faint) }
-        IconButton(onClick = editor::redo, enabled = editor.canRedo) { Icon(Icons.redo, "Redo", tint = if (editor.canRedo) Palette.text else Palette.faint) }
+        // These leave the keys with the sketch, so its letter keys still work after a click.
+        val keepKeys = Modifier.focusProperties { canFocus = false }
+        IconButton(onClick = onFit, keepKeys) { Icon(Icons.fit, "Fit the sketch in view", tint = Palette.text) }
+        IconButton(onClick = editor::undo, keepKeys, enabled = editor.canUndo) { Icon(Icons.undo, "Undo", tint = if (editor.canUndo) Palette.text else Palette.faint) }
+        IconButton(onClick = editor::redo, keepKeys, enabled = editor.canRedo) { Icon(Icons.redo, "Redo", tint = if (editor.canRedo) Palette.text else Palette.faint) }
         Surface(onClick = onFinish, shape = RoundedCornerShape(22.dp), color = Palette.mint, contentColor = Palette.ink, modifier = Modifier.padding(start = 4.dp, end = 6.dp)) {
             Text("Finish", Modifier.padding(horizontal = 18.dp, vertical = 11.dp), fontSize = 15.sp, fontWeight = FontWeight.Bold)
         }

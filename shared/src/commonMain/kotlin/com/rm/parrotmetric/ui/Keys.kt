@@ -33,7 +33,7 @@ private val letters = listOf(
 
 private val named = mapOf(
     Key.Escape to "Esc", Key.Enter to "Enter", Key.NumPadEnter to "Enter", Key.Backspace to "Backspace",
-    Key.Delete to "Delete", Key.Tab to "Tab", Key.F6 to "F6",
+    Key.Delete to "Delete", Key.Tab to "Tab", Key.F1 to "F1", Key.F6 to "F6",
 )
 
 /**

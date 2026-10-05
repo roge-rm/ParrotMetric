@@ -48,7 +48,7 @@ import androidx.compose.ui.unit.sp
 import com.rm.parrotmetric.ui.design.Segmented
 
 /** Which screen is up: the start menu, the model, or settings. */
-enum class AppScreen { Start, Model, Settings }
+enum class AppScreen { Start, Model, Settings, Help }
 
 /** How much detail curved surfaces get on screen: by the device's speed, or set. */
 enum class DisplayDetail(val label: String) {
@@ -110,6 +110,7 @@ fun StartScreen(icon: Painter?, state: ModelState, actions: ModelActions) {
         BigButton("New design", Icons.newFile, primary = last == null) { actions.newDesign(); actions.showScreen(AppScreen.Model) }
         BigButton("Open…", Icons.open, onClick = actions::openFile)
         BigButton("Settings", Icons.parameters) { actions.showScreen(AppScreen.Settings) }
+        BigButton("Help", Icons.help) { actions.showScreen(AppScreen.Help) }
         if (state.canQuit) BigButton("Quit", Icons.close, onClick = actions::quit)
         val folder = state.folderName
         if (folder != null) {

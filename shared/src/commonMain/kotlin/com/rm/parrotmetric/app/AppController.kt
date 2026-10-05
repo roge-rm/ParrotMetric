@@ -135,6 +135,33 @@ class AppController(
         return files.http?.let { WebDavFolder(login, it) }
     }
 
+    /**
+     * Frames an open sketch's points in the part of the view panels don't
+     * cover, with some room round them. False if it has no points to frame.
+     */
+    private fun fitSketch(sketch: SketchEditor, camera: CameraState): Boolean {
+        val s = sketch.sketch
+        if (s.points.isEmpty()) return false
+        val projection = com.rm.parrotmetric.ui.sketch.PlaneProjection(camera, sketch.plane)
+        val onScreen = s.points.map { projection.toScreen(s.x(it), s.y(it)) }
+        val x0 = onScreen.minOf { it.x }; val x1 = onScreen.maxOf { it.x }
+        val y0 = onScreen.minOf { it.y }; val y1 = onScreen.maxOf { it.y }
+        val (l, t, r, b) = covered
+        val w = camera.width - l - r
+        val h = camera.height - t - b
+        if (w <= 0f || h <= 0f) return false
+        val dx = l + w / 2 - (x0 + x1) / 2
+        val dy = t + h / 2 - (y0 + y1) / 2
+        // A lone point only needs centring.
+        val size = maxOf((x1 - x0) / w, (y1 - y0) / h)
+        val factor = if (size > 1e-3f) (0.75f / size).coerceIn(0.02f, 50f) else 1f
+        gl {
+            core.pan(dx, dy)
+            core.zoom(factor)
+        }
+        return true
+    }
+
     private fun saveSettings() {
         val text = settings.entries.joinToString("") { "${it.key}=${it.value}\n" }
         scope.launch { files.writeSettings(text) }
@@ -456,7 +483,8 @@ class AppController(
         }
 
         override fun showScreen(screen: AppScreen) {
-            if (screen == AppScreen.Settings) beforeSettings = state.screen
+            // Settings and Help go back to where they were opened from.
+            if (screen in pages && state.screen !in pages) beforeSettings = state.screen
             if (screen == AppScreen.Start) {
                 // Leaving the design: keep it for Continue.
                 scope.launch { saveNow(); refreshProjects() }
@@ -466,6 +494,8 @@ class AppController(
         }
 
         override fun closeSettings() = showScreen(beforeSettings)
+
+        private val pages = setOf(AppScreen.Settings, AppScreen.Help)
 
         override fun insertCanvas() = files.open { name, bytes ->
             if (bytes == null) design.message = "Couldn't read the file" else design.startCanvas(name, bytes)
@@ -571,7 +601,11 @@ class AppController(
             design.selectionChanged()
         }
 
-        override fun fit() = gl { core.fit() }
+        override fun fit() {
+            val sketch = state.sketch
+            val camera = state.camera
+            if (sketch == null || camera == null || !fitSketch(sketch, camera)) gl { core.fit() }
+        }
         override fun setCovered(left: Float, top: Float, right: Float, bottom: Float) {
             val now = listOf(left, top, right, bottom)
             if (now == covered) return

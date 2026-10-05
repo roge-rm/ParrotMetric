@@ -68,6 +68,7 @@ fun modelShortcuts(c: ToolContext, openFinder: () -> Unit, openKeys: () -> Unit,
         Shortcut("Save as", keys("Ctrl+Shift+S"), "File") { actions.saveAs() },
         Shortcut("Export", keys("Ctrl+E"), "File") { c.openSheet("export") },
         Shortcut("Settings", keys(), "File") { actions.showScreen(AppScreen.Settings) },
+        Shortcut("Help", keys("F1"), "File") { actions.showScreen(AppScreen.Help) },  // F1 itself is handled before shortcuts, on every screen
         Shortcut("Main menu", keys(), "File") { actions.showScreen(AppScreen.Start) },
         Shortcut("Undo", keys("Ctrl+Z"), "Edit", design.canUndo) { design.undo() },
         Shortcut("Redo", keys("Ctrl+Shift+Z", "Ctrl+Y"), "Edit", design.canRedo) { design.redo() },
@@ -137,6 +138,7 @@ fun sketchShortcuts(e: SketchEditor, actions: ModelActions, openFinder: () -> Un
     } + listOf(
         Shortcut("Horizontal", keys("H"), "Constrain", false) {},
         Shortcut("Vertical", keys("V"), "Constrain", false) {},
+        Shortcut("Fit the view", keys("F6"), "Sketch") { actions.fit() },
         Shortcut("Finish the sketch", keys("Ctrl+Enter"), "Sketch") { actions.finishSketch() },
         Shortcut("Find a tool", keys("S"), "Keys", run = openFinder),
         Shortcut("List the keys", keys("?"), "Keys", run = openKeys),
