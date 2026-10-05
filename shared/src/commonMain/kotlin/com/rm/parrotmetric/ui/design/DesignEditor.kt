@@ -485,6 +485,21 @@ class DesignEditor(
         return ref to SketchPlane("On a face", ref.origin(Vec3(d[0], d[1], d[2]), n), x, n.cross(x))
     }
 
+    /** The bodies shown now, by label and the name they're shown by. */
+    fun shownNames(): List<Pair<String, String>> = shownBodies.map { it.label to design.nameOf(it.label) }
+
+    /** A shown body's outline flattened onto a plane: where its middle, along the plane's normal, crosses it. */
+    fun bodyOutline(label: String, plane: SketchPlane): List<ProfileCurve>? = try {
+        val b = shownBodies.firstOrNull { it.label == label }
+        b?.let {
+            val box = kernel.bounds(it.handle)
+            val centre = com.rm.parrotmetric.sketch.Vec3((box[0] + box[3]) / 2, (box[1] + box[4]) / 2, (box[2] + box[5]) / 2)
+            viewport.section(listOf(it.handle), plane.copy(origin = plane.origin + plane.normal * (centre - plane.origin).dot(plane.normal)))
+        }?.ifEmpty { null }
+    } catch (e: RuntimeException) {
+        null
+    }
+
     /** The labels of the bodies shown now, as a projection through them remembers them. */
     fun shownLabels(): List<String> = shownBodies.map { it.label }
 

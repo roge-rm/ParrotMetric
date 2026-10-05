@@ -112,6 +112,10 @@ class SketchEditor(
     private val pickFile: ((then: (String, ByteArray?) -> Unit) -> Unit)? = null,
     /** Text as outline curves at (0, 0): text, capital height (mm), bold. Null where there are no fonts. */
     private val outliner: ((String, Double, Boolean) -> List<ProfileCurve>)? = null,
+    /** The bodies shown, by label and name, for projecting one by its outline. */
+    val bodies: () -> List<Pair<String, String>> = { emptyList() },
+    /** A body's outline, by label, flattened onto the sketch. */
+    private val bodyOutline: ((String) -> com.rm.parrotmetric.sketch.ProjectedOutline?)? = null,
 ) {
     /** Goes up whenever anything changes, so the overlay redraws. */
     var version by mutableIntStateOf(0)
@@ -1381,6 +1385,18 @@ class SketchEditor(
                 sketch.addPoint(u, v).also { addQuietly(Constraint.Fixed(it, u, v)) }
             }
         }
+        changed()
+    }
+
+    /** Brings a body's outline, by label, into the sketch as fixed curves that follow it. */
+    fun projectBody(label: String) {
+        val found = bodyOutline?.invoke(label)
+        if (found == null || found.curves.isEmpty()) {
+            message = "That body's outline couldn't be found"
+            return
+        }
+        checkpoint()
+        sketch.links += SketchOps.project(sketch, found.curves, true, listOf(label), middle = true)
         changed()
     }
 

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -23,6 +24,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Icon
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -109,81 +111,186 @@ fun SketchStatus(editor: SketchEditor, modifier: Modifier = Modifier) {
 }
 
 /**
- * The bottom of the screen while sketching: number entry, the Constrain
- * sheet, or the tools. [expanded] (large screens) shows every tool in one row
- * and the constraints for the selection as chips of their own.
+ * The bottom of the screen while sketching: number entry, or what can be
+ * done and the tools. [expanded] (large screens) shows every tool in one row.
  */
 @Composable
-fun SketchBottom(editor: SketchEditor, expanded: Boolean = false) {
+fun SketchBottom(editor: SketchEditor, large: Boolean = false) {
     editor.version
-    var constraining by remember { mutableStateOf(false) }
+    // A phone on its side has width to spare and little height: every tool in one row, as on a large screen.
+    val window = androidx.compose.ui.platform.LocalWindowInfo.current.containerSize
+    val expanded = large || window.width > window.height
     val editing = editor.editing
     Column(Modifier.imePadding().padding(start = 10.dp, end = 10.dp, bottom = 10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         when {
             editing != null -> DimensionEntry(editor, editing)
             editor.transform != null -> TransformEntry(editor, editor.transform!!)
             editor.textEdit != null -> TextEntry(editor, editor.textEdit!!)
-            constraining -> ConstrainSheet(editor) { constraining = false }
             else -> {
                 val placed = editor.placed
-                if (placed != null) PlacedSizes(editor, placed) else ChipRow(editor, expanded) { constraining = true }
+                if (placed != null) PlacedSizes(editor, placed) else ActionBar(editor)
                 ToolGrid(editor, expanded)
             }
         }
     }
 }
 
+/** An action in a group's menu; a null [run] shows it greyed out, as it needs something picked. */
+private class SketchAction(val label: String, val icon: ImageVector, val run: (() -> Unit)?, val active: Boolean = false)
+
+/**
+ * What can be done to the sketch, as one row of icons: single actions, and
+ * groups that open their related actions above them. Names show on hover or
+ * a long press.
+ */
 @Composable
-private fun ChipRow(editor: SketchEditor, expanded: Boolean, onConstrain: () -> Unit) {
+private fun ActionBar(editor: SketchEditor) {
     val hasSelection = editor.selection.isNotEmpty()
-    val choices = editor.constraintChoices()
-    Row(Modifier.fillMaxWidth().sideways(rememberScrollState()).padding(horizontal = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        Chip("Dimension", Icons.dimension, active = editor.tool == SketchTool.Dimension) {
-            editor.selectTool(if (editor.tool == SketchTool.Dimension) SketchTool.Select else SketchTool.Dimension)
+    val curves = editor.selectedCurves
+    fun tool(label: String, icon: ImageVector, t: SketchTool) =
+        SketchAction(label, icon, { editor.selectTool(if (editor.tool == t) SketchTool.Select else t) }, editor.tool == t)
+    fun withCurves(label: String, icon: ImageVector, run: () -> Unit) = SketchAction(label, icon, if (curves.isNotEmpty()) run else null)
+    val corners = editor.selectedCorner != null
+    val change = listOfNotNull(
+        tool("Trim", Icons.trim, SketchTool.Trim),
+        tool("Extend", Icons.extend, SketchTool.Extend),
+        tool("Break", Icons.breakTool, SketchTool.Break),
+        withCurves("Offset", Icons.offset) { editor.startOffset() },
+        SketchAction("Round corner", Icons.fillet, if (corners) ({ editor.startCornerFillet() }) else null),
+        SketchAction("Cut corner", Icons.chamfer, if (corners) ({ editor.startCornerChamfer() }) else null),
+        editor.selectedConic?.let { c -> SketchAction("Fullness ${kotlin.math.round(c.rho * 100) / 100}", Icons.conic, { editor.startConicFullness() }) },
+        (editor.selection.singleOrNull() as? SketchItem.T)?.let { t -> SketchAction("Change text", Icons.text, { editor.editText(t.text) }) },
+    )
+    val mirror = curves.size >= 2 && curves.any { it is com.rm.parrotmetric.sketch.Line }
+    val copy = listOf(
+        withCurves("Move", Icons.move) { editor.startTransform(SketchTransform.Kind.Move) },
+        withCurves("Scale", Icons.scale) { editor.startTransform(SketchTransform.Kind.Scale) },
+        SketchAction("Mirror", Icons.mirror, if (mirror) ({ editor.mirrorSelection() }) else null),
+        withCurves("Pattern", Icons.pattern) { editor.startTransform(SketchTransform.Kind.Row) },
+        withCurves("Pattern round", Icons.patternRound) { editor.startTransform(SketchTransform.Kind.Round) },
+    )
+    val bring = buildList {
+        if (editor.outline != null) add(SketchAction("Project", Icons.project, { editor.projectOutline() }))
+        for ((label, name) in editor.bodies()) add(SketchAction("Outline of $name", Icons.project, { editor.projectBody(label) }))
+        if (editor.canAddDrawing) add(SketchAction("Add drawing", Icons.open, { editor.addDrawing() }))
+    }
+    val constrain = editor.constraintChoices().map { c -> SketchAction(c.label, Icons.constrain, { editor.apply(c) }) }
+    val dimension = tool("Dimension", Icons.dimension, SketchTool.Dimension)
+    val construction = SketchAction("Construction", Icons.construction, { editor.toggleConstruction() }, editor.construction && !hasSelection)
+    val delete = SketchAction("Delete", Icons.delete, if (hasSelection) ({ editor.deleteSelection() }) else null)
+    Surface(color = Palette.surface, shape = RoundedCornerShape(22.dp)) {
+        BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp)) {
+            // Spread out as far as the width allows: every action named, then every action as an
+            // icon, then groups that open above. Constrain and Bring in stay groups, as their lists change.
+            val flat = listOf(dimension) + change + copy + listOf(construction, delete)
+            // Roughly how wide each layout is: a name about 7 dp a letter, an icon button 40, a group's 52.
+            val named = flat.sumOf { 46 + it.label.length * 7 } + 2 * 110
+            val icons = flat.size * 42 + 2 * 54
+            val width = maxWidth.value
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                when {
+                    width >= named -> {
+                        BarButton(dimension, showName = true)
+                        BarGroup("Constrain", Icons.constrain, constrain, showName = true)
+                        for (a in change + copy) BarButton(a, showName = true)
+                        BarGroup("Bring in", Icons.project, bring, showName = true)
+                        BarButton(construction, showName = true)
+                        BarButton(delete, showName = true, tint = Palette.orange)
+                    }
+                    width >= icons -> {
+                        BarButton(dimension)
+                        BarGroup("Constrain", Icons.constrain, constrain)
+                        for (a in change + copy) BarButton(a)
+                        BarGroup("Bring in", Icons.project, bring)
+                        BarButton(construction)
+                        BarButton(delete, tint = Palette.orange)
+                    }
+                    else -> {
+                        BarButton(dimension)
+                        BarGroup("Constrain", Icons.constrain, constrain)
+                        BarGroup("Change", Icons.trim, change)
+                        BarGroup("Copy and move", Icons.pattern, copy)
+                        BarGroup("Bring in", Icons.project, bring)
+                        BarButton(construction)
+                        BarButton(delete, tint = Palette.orange)
+                    }
+                }
+            }
         }
-        if (expanded) for (c in choices) Chip(c.label, Icons.constrain) { editor.apply(c) }
-        else Chip("Constrain", Icons.constrain, enabled = choices.isNotEmpty(), onClick = onConstrain)
-        Chip("Trim", Icons.trim, active = editor.tool == SketchTool.Trim) {
-            editor.selectTool(if (editor.tool == SketchTool.Trim) SketchTool.Select else SketchTool.Trim)
-        }
-        Chip("Extend", Icons.extend, active = editor.tool == SketchTool.Extend) {
-            editor.selectTool(if (editor.tool == SketchTool.Extend) SketchTool.Select else SketchTool.Extend)
-        }
-        if (editor.selectedCurves.isNotEmpty()) Chip("Offset", Icons.offset) { editor.startOffset() }
-        if (editor.outline != null) Chip("Project", Icons.project) { editor.projectOutline() }
-        if (editor.canAddDrawing) Chip("Add drawing", Icons.open) { editor.addDrawing() }
-        (editor.selection.singleOrNull() as? SketchItem.T)?.let { t -> Chip("Change text", Icons.text) { editor.editText(t.text) } }
-        Chip("Break", Icons.breakTool, active = editor.tool == SketchTool.Break) {
-            editor.selectTool(if (editor.tool == SketchTool.Break) SketchTool.Select else SketchTool.Break)
-        }
-        if (editor.selectedCorner != null) Chip("Round corner", Icons.fillet) { editor.startCornerFillet() }
-        if (editor.selectedCorner != null) Chip("Cut corner", Icons.chamfer) { editor.startCornerChamfer() }
-        if (editor.selectedCurves.size >= 2 && editor.selectedCurves.any { it is com.rm.parrotmetric.sketch.Line }) Chip("Mirror", Icons.mirror) { editor.mirrorSelection() }
-        if (editor.selectedCurves.isNotEmpty()) {
-            Chip("Move", Icons.move) { editor.startTransform(SketchTransform.Kind.Move) }
-            Chip("Scale", Icons.scale) { editor.startTransform(SketchTransform.Kind.Scale) }
-            Chip("Pattern", Icons.pattern) { editor.startTransform(SketchTransform.Kind.Row) }
-            Chip("Pattern round", Icons.pattern) { editor.startTransform(SketchTransform.Kind.Round) }
-        }
-        editor.selectedConic?.let { c -> Chip("Fullness ${kotlin.math.round(c.rho * 100) / 100}", Icons.conic) { editor.startConicFullness() } }
-        Chip("Construction", Icons.construction, active = editor.construction && !hasSelection) { editor.toggleConstruction() }
-        if (hasSelection) Chip("Delete", Icons.delete, tint = Palette.orange) { editor.deleteSelection() }
     }
 }
 
+/** An icon with its name in a tooltip on hover or a long press. */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-private fun Chip(label: String, icon: ImageVector, active: Boolean = false, enabled: Boolean = true, tint: Color = Palette.yellow, onClick: () -> Unit) {
-    Surface(
-        onClick = onClick,
-        enabled = enabled,
-        shape = RoundedCornerShape(19.dp),
-        color = if (active) Palette.yellow.copy(alpha = 0.18f) else Palette.surface,
-        contentColor = if (enabled) Palette.text else Palette.faint,
-    ) {
-        Row(Modifier.height(38.dp).padding(horizontal = 13.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, null, Modifier.size(16.dp), tint = if (enabled) tint else Palette.faint)
-            Spacer(Modifier.width(6.dp))
-            Text(label, fontSize = 13.sp, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium)
+private fun Named(label: String, content: @Composable () -> Unit) {
+    androidx.compose.material3.TooltipBox(
+        positionProvider = androidx.compose.material3.TooltipDefaults.rememberTooltipPositionProvider(androidx.compose.material3.TooltipAnchorPosition.Above),
+        tooltip = { PlainTooltip { Text(label) } },
+        state = androidx.compose.material3.rememberTooltipState(),
+    ) { content() }
+}
+
+/** An action as a button: its icon, and its name beside it when there's room. */
+@Composable
+private fun BarButton(a: SketchAction, showName: Boolean = false, tint: Color = Palette.yellow) {
+    val enabled = a.run != null
+    Named(a.label) {
+        Surface(
+            onClick = { a.run?.invoke() },
+            enabled = enabled,
+            modifier = Modifier.height(44.dp),
+            shape = RoundedCornerShape(14.dp),
+            color = if (a.active) Palette.yellow.copy(alpha = 0.18f) else Color.Transparent,
+            contentColor = if (enabled) Palette.text else Palette.faint,
+        ) {
+            Row(Modifier.padding(horizontal = if (showName) 10.dp else 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(a.icon, a.label, Modifier.size(22.dp), tint = if (enabled) tint else Palette.faint)
+                if (showName) {
+                    Spacer(Modifier.width(6.dp))
+                    Text(a.label, fontSize = 13.sp, fontWeight = if (a.active) FontWeight.SemiBold else FontWeight.Medium, maxLines = 1)
+                }
+            }
+        }
+    }
+}
+
+/** A group: its icon, and name when there's room, opens its actions above it. Greyed out when none can be used now. */
+@Composable
+private fun BarGroup(label: String, icon: ImageVector, actions: List<SketchAction>, showName: Boolean = false) {
+    var open by remember { mutableStateOf(false) }
+    val enabled = actions.any { it.run != null }
+    val active = actions.any { it.active }
+    Box {
+        Named(label) {
+            Surface(
+                onClick = { open = true },
+                enabled = enabled,
+                modifier = Modifier.height(44.dp),
+                shape = RoundedCornerShape(14.dp),
+                color = if (active || open) Palette.yellow.copy(alpha = 0.18f) else Color.Transparent,
+                contentColor = if (enabled) Palette.text else Palette.faint,
+            ) {
+                Row(Modifier.padding(horizontal = if (showName) 10.dp else 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(icon, label, Modifier.size(22.dp), tint = if (enabled) Palette.yellow else Palette.faint)
+                    if (showName) {
+                        Spacer(Modifier.width(6.dp))
+                        Text(label, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                    }
+                    // A group opens a menu: a small mark says so.
+                    Icon(Icons.more, null, Modifier.padding(start = 2.dp).size(10.dp), tint = if (enabled) Palette.muted else Palette.faint)
+                }
+            }
+        }
+        androidx.compose.material3.DropdownMenu(open, onDismissRequest = { open = false }, containerColor = Palette.raised) {
+            for (a in actions) {
+                androidx.compose.material3.DropdownMenuItem(
+                    { Text(a.label, fontWeight = if (a.active) FontWeight.SemiBold else FontWeight.Normal) },
+                    onClick = { open = false; a.run?.invoke() },
+                    enabled = a.run != null,
+                    leadingIcon = { Icon(a.icon, null, Modifier.size(18.dp), tint = if (a.run != null) Palette.yellow else Palette.faint) },
+                )
+            }
         }
     }
 }
@@ -525,35 +632,3 @@ private fun TransformEntry(editor: SketchEditor, t: SketchTransform) {
     }
 }
 
-@Composable
-private fun ConstrainSheet(editor: SketchEditor, close: () -> Unit) {
-    val choices = editor.constraintChoices()
-    if (choices.isEmpty()) {
-        LaunchedEffect(Unit) { close() }
-        return
-    }
-    Surface(color = Palette.surface, shape = RoundedCornerShape(26.dp)) {
-        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Constrain", Modifier.weight(1f), fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = Palette.text)
-                IconButton(onClick = close) { Icon(Icons.close, "Close", Modifier.size(16.dp), tint = Palette.muted) }
-            }
-            for (row in choices.chunked(3)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    for (c in row) {
-                        Surface(
-                            onClick = { editor.apply(c); close() },
-                            modifier = Modifier.weight(1f).height(48.dp),
-                            shape = RoundedCornerShape(16.dp),
-                            color = Palette.raised,
-                            contentColor = Palette.text,
-                        ) {
-                            Box(contentAlignment = Alignment.Center) { Text(c.label, fontSize = 13.sp, fontWeight = FontWeight.Medium) }
-                        }
-                    }
-                    repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
-                }
-            }
-        }
-    }
-}

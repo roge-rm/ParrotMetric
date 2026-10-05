@@ -74,7 +74,7 @@ object SketchOps {
      * (see [ProjectionLink]), which the caller keeps in [Sketch.links] if it
      * should follow. A point already at a place is used, not doubled.
      */
-    fun project(s: Sketch, curves: List<ProfileCurve>, section: Boolean, bodies: List<String>): ProjectionLink {
+    fun project(s: Sketch, curves: List<ProfileCurve>, section: Boolean, bodies: List<String>, middle: Boolean = false): ProjectionLink {
         val points = mutableListOf<Point>()
         val circles = mutableListOf<Circle>()
         fun fixedPoint(u: Double, v: Double): Point {
@@ -93,7 +93,7 @@ object SketchOps {
                 if (ps.distinct().size >= 2) s.addSpline(if (closed) ps else ps.distinct(), construction = false)
             },
         )
-        return ProjectionLink(section, bodies, points, circles)
+        return ProjectionLink(section, bodies, points, circles, middle)
     }
 
     /**

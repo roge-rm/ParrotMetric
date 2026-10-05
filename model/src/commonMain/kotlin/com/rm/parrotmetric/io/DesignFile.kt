@@ -411,7 +411,7 @@ object DesignFile {
         },
         "constraints" to s.constraints.mapNotNull { constraint(it) },
         "links" to s.links.map { l ->
-            mapOf("section" to l.section, "bodies" to l.bodies, "points" to l.points.map { it.id }, "circles" to l.circles.map { it.id })
+            mapOf("section" to l.section, "bodies" to l.bodies, "points" to l.points.map { it.id }, "circles" to l.circles.map { it.id }, "middle" to l.middle)
         },
         "texts" to s.texts.map { t ->
             mapOf(
@@ -517,7 +517,7 @@ object DesignFile {
             val l = j as Json.Obj
             val points = ints(l["points"]).mapNotNull { s.point(it) }
             val circles = ints(l["circles"]).mapNotNull { s.curve(it) as? com.rm.parrotmetric.sketch.Circle }
-            s.links += com.rm.parrotmetric.sketch.ProjectionLink(l.bool("section"), strings(l.arr("bodies")), points, circles)
+            s.links += com.rm.parrotmetric.sketch.ProjectionLink(l.bool("section"), strings(l.arr("bodies")), points, circles, l.bool("middle"))
         }
         return s
     }

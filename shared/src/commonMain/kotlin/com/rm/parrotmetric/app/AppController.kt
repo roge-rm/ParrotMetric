@@ -675,14 +675,14 @@ class AppController(
             val ref = PlaneRef.Construction(id)
             val plane = p.copy(name = f.name)
             newSketch = ref to name
-            openSketch(SketchEditor(plane, name, Sketch(), regionFinder, outlineFor(ref, plane), design::names, design::constructionPoints, files::open, ::textOutline))
+            openSketch(SketchEditor(plane, name, Sketch(), regionFinder, outlineFor(ref, plane), design::names, design::constructionPoints, files::open, ::textOutline, design::shownNames, bodyOutlineFor(plane)))
         }
 
         override fun startSketch(plane: SketchPlane?) {
             val name = design.nextSketchName()
             val (ref, p) = if (plane != null) PlaneRef.Fixed(plane) to plane else design.sketchPlaneUnderSelection(state.yaw, name) ?: return
             newSketch = ref to name
-            openSketch(SketchEditor(p, name, Sketch(), regionFinder, outlineFor(ref, p), design::names, design::constructionPoints, files::open, ::textOutline))
+            openSketch(SketchEditor(p, name, Sketch(), regionFinder, outlineFor(ref, p), design::names, design::constructionPoints, files::open, ::textOutline, design::shownNames, bodyOutlineFor(p)))
         }
 
         override fun finishSketch() {
@@ -719,7 +719,7 @@ class AppController(
                 val plane = design.planeOf(f) ?: return
                 design.checkpoint()
                 newSketch = null
-                openSketch(SketchEditor(plane, f.name, f.sketch, regionFinder, outlineFor(f.plane, plane), design::names, design::constructionPoints, files::open, ::textOutline))
+                openSketch(SketchEditor(plane, f.name, f.sketch, regionFinder, outlineFor(f.plane, plane), design::names, design::constructionPoints, files::open, ::textOutline, design::shownNames, bodyOutlineFor(plane)))
             } else {
                 design.edit(id)
             }
@@ -739,6 +739,10 @@ class AppController(
     }
 
     /** For Project: a face's edges for a sketch on a face, else where the bodies cross the sketch's plane. */
+    private fun bodyOutlineFor(plane: SketchPlane): (String) -> com.rm.parrotmetric.sketch.ProjectedOutline? = { label ->
+        design.bodyOutline(label, plane)?.let { com.rm.parrotmetric.sketch.ProjectedOutline(it, true, listOf(label), middle = true) }
+    }
+
     private fun outlineFor(ref: PlaneRef, plane: SketchPlane): (() -> com.rm.parrotmetric.sketch.ProjectedOutline?) =
         if (ref is PlaneRef.OnFace) ({ design.outlineOf(ref, plane)?.let { com.rm.parrotmetric.sketch.ProjectedOutline(it, false, emptyList()) } })
         else ({ design.sectionThrough(plane)?.let { com.rm.parrotmetric.sketch.ProjectedOutline(it, true, design.shownLabels()) } })

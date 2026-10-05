@@ -72,6 +72,7 @@ object Icons {
     val hole = stroke("hole", "M6 6a6 2.5 0 1 0 12 0a6 2.5 0 1 0-12 0", "M6 6v12c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5V6")
     val mirror = stroke("mirror", "M12 3v2M12 8v2M12 13v2M12 18v2", "M9 6L3 18h6zM15 6l6 12h-6z")
     val pattern = stroke("pattern", "M4.5 3h4a1.5 1.5 0 0 1 1.5 1.5v4a1.5 1.5 0 0 1-1.5 1.5h-4A1.5 1.5 0 0 1 3 8.5v-4A1.5 1.5 0 0 1 4.5 3zM15.5 3h4A1.5 1.5 0 0 1 21 4.5v4a1.5 1.5 0 0 1-1.5 1.5h-4A1.5 1.5 0 0 1 14 8.5v-4A1.5 1.5 0 0 1 15.5 3zM4.5 14h4a1.5 1.5 0 0 1 1.5 1.5v4a1.5 1.5 0 0 1-1.5 1.5h-4A1.5 1.5 0 0 1 3 19.5v-4A1.5 1.5 0 0 1 4.5 14zM15.5 14h4a1.5 1.5 0 0 1 1.5 1.5v4a1.5 1.5 0 0 1-1.5 1.5h-4a1.5 1.5 0 0 1-1.5-1.5v-4a1.5 1.5 0 0 1 1.5-1.5z")
+    val patternRound = stroke("patternRound", circle(12f, 4.5f, 2.2f), circle(19.5f, 12f, 2.2f), circle(12f, 19.5f, 2.2f), circle(4.5f, 12f, 2.2f), circle(12f, 12f, 1f))
     val combine = stroke("combine", circle(9f, 12f, 6f), circle(15f, 12f, 6f))
     val move = stroke("move", "M12 3v18M3 12h18", "M8 7l4-4 4 4M8 17l4 4 4-4")
     val cut = stroke("cut", "M3 13h18", "M6 9l6-6 6 6", "M6 17h12v4H6z")

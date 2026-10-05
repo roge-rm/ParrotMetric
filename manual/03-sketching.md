@@ -46,7 +46,7 @@ Type the size and tap **Set**. A size can use your parameters, like `width/2`. T
 
 ## Constraints
 
-Constraints keep things in place relative to each other. Pick the things it's about and **Constrain** shows what fits them. On a large screen they show straight away in the row above the tools.
+Constraints keep things in place relative to each other. Pick the things it's about and **Constrain**, in the row above the tools, lists what fits them.
 
 The constraints are:
 
@@ -60,7 +60,7 @@ Constraints show as small marks beside what they hold. Tap one to pick it, and *
 
 ## Changing what's drawn
 
-With **Select** in hand, drag points or curves to move them. Tap a curve twice quickly to pick the whole outline it's part of. The row above the tools has these, some only once the right things are picked:
+With **Select** in hand, drag points or curves to move them. Tap a curve twice quickly to pick the whole outline it's part of. The row above the tools has these, some only once the right things are picked. Where there's room they're each a button, with their names on a wide screen; on a narrow one they're grouped under **Change**, **Copy and move** and **Bring in**, which open above the row. Hover over an icon, or press and hold it, to see its name.
 
 - **Trim** takes away the piece of a curve you tap, up to where it crosses other curves.
 - **Extend** stretches the line end you tap to the next curve it would meet.

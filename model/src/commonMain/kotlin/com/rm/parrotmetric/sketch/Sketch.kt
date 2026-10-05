@@ -451,9 +451,11 @@ class Spline internal constructor(id: Int, val through: List<Point>, constructio
  * the face the sketch is on, or with [section], where the bodies labelled
  * [bodies] cross the sketch's plane. [points] are its points in the order the
  * projection placed them, [circles] its circles in order, so the same
- * projection made again can move each to where its edge is now.
+ * projection made again can move each to where its edge is now. With
+ * [middle], each body is cut through its own middle, along the sketch's
+ * normal, so a board above or below the sketch comes in by its outline.
  */
-class ProjectionLink(val section: Boolean, val bodies: List<String>, val points: List<Point>, val circles: List<Circle>)
+class ProjectionLink(val section: Boolean, val bodies: List<String>, val points: List<Point>, val circles: List<Circle>, val middle: Boolean = false)
 
 /** Edges ready to project into a sketch: flattened onto it, and where they came from, as for [ProjectionLink]. */
-class ProjectedOutline(val curves: List<ProfileCurve>, val section: Boolean, val bodies: List<String>)
+class ProjectedOutline(val curves: List<ProfileCurve>, val section: Boolean, val bodies: List<String>, val middle: Boolean = false)

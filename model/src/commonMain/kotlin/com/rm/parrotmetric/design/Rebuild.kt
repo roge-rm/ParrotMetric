@@ -893,7 +893,10 @@ class Rebuilder(private val kernel: Kernel) {
                 // Each body a hair behind the plane, so a sketch on a body's flat top still finds its
                 // outline; else a hair in front, for a body standing on the plane.
                 fun at(b: BodyState, offset: Double) = kernel.section(listOf(b.handle), plane.copy(origin = plane.origin + plane.normal * offset))
-                val found = through.map { b -> at(b, -0.01)?.ifEmpty { at(b, 0.01) } ?: return true }
+                val found = through.map { b ->
+                    if (link.middle) at(b, middleOf(b, plane)) ?: return true
+                    else at(b, -0.01)?.ifEmpty { at(b, 0.01) } ?: return true
+                }
                 found.flatten()
             } else {
                 val face = (f.plane as? PlaneRef.OnFace)?.face ?: continue
@@ -903,6 +906,13 @@ class Rebuilder(private val kernel: Kernel) {
             if (!com.rm.parrotmetric.sketch.SketchOps.reproject(f.sketch, link, curves)) ok = false
         }
         return ok
+    }
+
+    /** How far along a plane's normal the middle of a body is, from the plane. */
+    private fun middleOf(b: BodyState, plane: SketchPlane): Double {
+        val box = kernel.bounds(b.handle)
+        val centre = Vec3((box[0] + box[3]) / 2, (box[1] + box[4]) / 2, (box[2] + box[5]) / 2)
+        return (centre - plane.origin).dot(plane.normal)
     }
 
     /** Whether two solids share some volume, not just a face. */
