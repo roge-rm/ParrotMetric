@@ -778,18 +778,21 @@ internal fun MoveSettings(editor: DesignEditor, d: DesignEditor.MoveDraft) {
         AxisRow("Turn round", d.axis, false) { d.axis = it!!; editor.draftChanged() }
         Field(editor, d, "angle", "By", d.degrees, "°", allowNegative = true) { d.degrees = it; editor.draftChanged() }
     }
-    Toggle("Same scale every way", d.evenly) {
-        d.evenly = it
-        if (!it) { d.sy = d.sx; d.sz = d.sx }
-        d.exprs.remove("scale"); d.exprs.remove("sx")
-        editor.draftChanged()
-    }
-    if (d.evenly) {
-        Field(editor, d, "scale", "Scale", d.sx, "×", allowNegative = false) { d.sx = it; editor.draftChanged() }
-    } else {
-        Field(editor, d, "sx", "Scale X", d.sx, "×", allowNegative = false) { d.sx = it; editor.draftChanged() }
-        Field(editor, d, "sy", "Y", d.sy, "×", allowNegative = false) { d.sy = it; editor.draftChanged() }
-        Field(editor, d, "sz", "Z", d.sz, "×", allowNegative = false) { d.sz = it; editor.draftChanged() }
+    // Scale has its own tool; a move that also scales, from an older design, shows both.
+    if (d.scaling || d.sx != 1.0 || d.sy != 1.0 || d.sz != 1.0) {
+        Toggle("Same scale every way", d.evenly) {
+            d.evenly = it
+            if (!it) { d.sy = d.sx; d.sz = d.sx }
+            d.exprs.remove("scale"); d.exprs.remove("sx")
+            editor.draftChanged()
+        }
+        if (d.evenly) {
+            Field(editor, d, "scale", "Scale", d.sx, "×", allowNegative = false) { d.sx = it; editor.draftChanged() }
+        } else {
+            Field(editor, d, "sx", "Scale X", d.sx, "×", allowNegative = false) { d.sx = it; editor.draftChanged() }
+            Field(editor, d, "sy", "Y", d.sy, "×", allowNegative = false) { d.sy = it; editor.draftChanged() }
+            Field(editor, d, "sz", "Z", d.sz, "×", allowNegative = false) { d.sz = it; editor.draftChanged() }
+        }
     }
     Toggle("Move a copy", d.copy) { d.copy = it; editor.draftChanged() }
 }

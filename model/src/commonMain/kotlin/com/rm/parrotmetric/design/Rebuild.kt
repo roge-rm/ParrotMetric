@@ -541,14 +541,35 @@ class Rebuilder(private val kernel: Kernel) {
     /** A joint's axis: a point on it and its unit direction. */
     private fun jointAxis(f: JointFeature, bodies: List<BodyState>): Pair<Vec3, Vec3> {
         f.axisFeature?.let { id -> return steps.firstNotNullOfOrNull { it.axes[id] } ?: throw KernelException("Its axis has been deleted") }
-        val picked = f.edge?.let { n -> ref(f, n, true, bodies).let { r -> bodies.firstNotNullOfOrNull { kernel.shapeOf(it.handle, r, true) } } }
-            ?: f.face?.let { n -> ref(f, n, false, bodies).let { r -> bodies.firstNotNullOfOrNull { kernel.shapeOf(it.handle, r, false) } } }
+        // While the joint's panel is open its own result is shown, so a pick there is named
+        // after it: back to the name it had before the joint moved it.
+        val edge = f.edge?.let { unwrap(it, "F${f.id}.j(") }
+        val face = f.face?.let { unwrap(it, "F${f.id}.j(") }
+        val picked = edge?.let { n -> ref(f, n, true, bodies).let { r -> bodies.firstNotNullOfOrNull { kernel.shapeOf(it.handle, r, true) } } }
+            ?: face?.let { n -> ref(f, n, false, bodies).let { r -> bodies.firstNotNullOfOrNull { kernel.shapeOf(it.handle, r, false) } } }
         if (f.edge != null || f.face != null) {
             if (picked == null || picked[0] > 2.0) throw KernelException("Its axis edge or face isn't there any more")
             val d = Vec3(picked[4], picked[5], picked[6])
             return Vec3(picked[1], picked[2], picked[3]) to d * (1 / sqrt(d.dot(d)))
         }
         return Vec3(0.0, 0.0, 0.0) to Transforms.unit(f.axis)
+    }
+
+    /** [name] with each "[open]...)" around a part of it taken off, keeping what was inside. */
+    private fun unwrap(name: String, open: String): String {
+        var out = name
+        while (true) {
+            val at = out.indexOf(open)
+            if (at < 0) return out
+            var depth = 1
+            var i = at + open.length
+            while (i < out.length && depth > 0) {
+                if (out[i] == '(') depth++ else if (out[i] == ')') depth--
+                i++
+            }
+            if (depth != 0) return out
+            out = out.substring(0, at) + out.substring(at + open.length, i - 1) + out.substring(i)
+        }
     }
 
     /** A component and those joined rigidly to it by earlier joints, other than [fixed]. */
