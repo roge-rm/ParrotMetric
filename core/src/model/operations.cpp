@@ -1209,10 +1209,16 @@ TopoDS_Wire helix(const gp_Ax3& frame, double r, double pitch, double turns, dou
     Handle(Geom_CylindricalSurface) cylinder = new Geom_CylindricalSurface(frame, r);
     gp_Lin2d line(gp_Pnt2d(0, z0), gp_Dir2d(2 * M_PI, pitch));
     double length = turns * std::hypot(2 * M_PI, pitch);
-    Handle(Geom2d_TrimmedCurve) segment = new Geom2d_TrimmedCurve(new Geom2d_Line(line), 0, length);
-    TopoDS_Edge edge = BRepBuilderAPI_MakeEdge(segment, cylinder);
-    BRepLib::BuildCurves3d(edge);
-    return BRepBuilderAPI_MakeWire(edge);
+    // A turn per edge: a thread cuts in about two thirds of the time it takes along one long edge.
+    Handle(Geom2d_Line) carrier = new Geom2d_Line(line);
+    const int pieces = std::max(1, int(std::ceil(turns)));
+    BRepBuilderAPI_MakeWire wire;
+    for (int i = 0; i < pieces; ++i) {
+        TopoDS_Edge edge = BRepBuilderAPI_MakeEdge(carrier, cylinder, length * i / pieces, length * (i + 1) / pieces);
+        BRepLib::BuildCurves3d(edge);
+        wire.Add(edge);
+    }
+    return wire.Wire();
 }
 
 /** A closed polygon as a wire. */

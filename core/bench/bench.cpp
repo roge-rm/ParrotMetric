@@ -83,6 +83,45 @@ int main(int argc, char** argv) {
     }
     std::printf("cores: %u\n", std::thread::hardware_concurrency());
 
+    // The steps of a project box and a threaded rod, as the app builds them; "parts" alone runs only this.
+    if (argc > 1 && std::strcmp(argv[1], "parts") == 0) {
+        const gp_Ax3 top(gp_Pnt(0, 0, 0), gp::DZ(), gp::DX());
+        const gp_Ax3 front(gp_Pnt(0, -20, 0), -gp::DY(), gp::DX());
+        auto named = [](const std::vector<std::string>& all, const char* part) {
+            std::vector<std::string> out;
+            for (const auto& n : all) if (n.find(part) != std::string::npos) out.push_back(n);
+            return out;
+        };
+        pm::NamedShape box, rounded, hollow, vented, rod, threaded;
+        double tBox = best(2, [&] { box = pm::primitive(1, top, pm::Primitive::Box, 0, 0, 80, 40, 25); });
+        std::vector<std::string> upright;
+        for (const auto& e : box.edgeNames())
+            if ((e.find(".x0") != std::string::npos || e.find(".x1") != std::string::npos) &&
+                (e.find(".y0") != std::string::npos || e.find(".y1") != std::string::npos)) upright.push_back(e);
+        double tFillet = best(2, [&] { rounded = pm::fillet(2, box, upright, 4); });
+        double tShell = best(2, [&] { hollow = pm::shell(3, rounded, named(rounded.faceNames(), ".end"), 2); });
+        double tVents = best(1, [&] {
+            vented = hollow;
+            for (int i = 0; i < 5; ++i) {
+                pm::NamedShape vent = pm::primitive(10 + i, front, pm::Primitive::Cylinder, -24.0 + 12 * i, 12, 5, 10, 0);
+                vented = pm::combine(20 + i, vented, vent, pm::Combine::Cut);
+            }
+        });
+        double tRod = best(2, [&] { rod = pm::primitive(30, top, pm::Primitive::Cylinder, 0, 0, 10, 20, 0); });
+        double tThread = best(1, [&] { threaded = pm::thread(31, rod, named(rod.faceNames(), ".side").at(0), 1.5); });
+        double tDisplay = best(2, [&] { BRepTools::Clean(vented.shape); pm::Solid::fromShape(vented.shape).display({0.05, 0.3}); });
+        double tThreadDisplay = best(2, [&] { BRepTools::Clean(threaded.shape); pm::Solid::fromShape(threaded.shape).display({0.05, 0.3}); });
+        std::printf("%-34s %9.1f\n", "box", tBox);
+        std::printf("%-34s %9.1f\n", "box: fillet 4 corners", tFillet);
+        std::printf("%-34s %9.1f\n", "box: shell open top", tShell);
+        std::printf("%-34s %9.1f\n", "box: cut 5 vents", tVents);
+        std::printf("%-34s %9.1f\n", "box: display at medium", tDisplay);
+        std::printf("%-34s %9.1f\n", "rod: cylinder", tRod);
+        std::printf("%-34s %9.1f\n", "rod: M10 thread", tThread);
+        std::printf("%-34s %9.1f\n", "rod: display at medium", tThreadDisplay);
+        return 0;
+    }
+
     // A vase: a smooth loft through four rings, hollowed out, then meshed for display at
     // each detail level. Each step timed on its own; "vase" alone runs only this.
     {

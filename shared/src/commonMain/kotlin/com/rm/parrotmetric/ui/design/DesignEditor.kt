@@ -167,14 +167,43 @@ class DesignEditor(
         }
     }
 
-    /** The tool a step comes from, by the tool ids in Tools: mostly its class name, such as ShellFeature for "shell". */
+    /** The tool a step comes from, by the tool ids in Tools, for its icon. Named here, since release builds rename classes. */
     private fun toolFor(f: Feature): String? = when (f) {
         is com.rm.parrotmetric.design.PrimitiveFeature -> f.kind.name.lowercase()
-        is com.rm.parrotmetric.design.OffsetFaceFeature -> "presspull"
-        is com.rm.parrotmetric.design.ConvertFeature -> "tosolid"
         is com.rm.parrotmetric.design.MeshEditFeature -> f.kind.name.lowercase()
+        is ExtrudeFeature -> "extrude"
+        is RevolveFeature -> "revolve"
+        is com.rm.parrotmetric.design.SweepFeature -> "sweep"
+        is com.rm.parrotmetric.design.LoftFeature -> "loft"
+        is com.rm.parrotmetric.design.PipeFeature -> "pipe"
+        is com.rm.parrotmetric.design.CoilFeature -> "coil"
+        is com.rm.parrotmetric.design.PatchFeature -> "patch"
+        is com.rm.parrotmetric.design.StitchFeature -> "stitch"
+        is com.rm.parrotmetric.design.ThickenFeature -> "thicken"
+        is FilletFeature -> "fillet"
+        is ChamferFeature -> "chamfer"
+        is com.rm.parrotmetric.design.ShellFeature -> "shell"
+        is com.rm.parrotmetric.design.OffsetFaceFeature -> "presspull"
+        is com.rm.parrotmetric.design.DeleteFaceFeature -> "deleteface"
+        is com.rm.parrotmetric.design.DraftFeature -> "draft"
+        is com.rm.parrotmetric.design.RibFeature -> if (f.web) "web" else "rib"
+        is com.rm.parrotmetric.design.EmbossFeature -> "emboss"
+        is HoleFeature -> "hole"
+        is com.rm.parrotmetric.design.ThreadFeature -> "thread"
+        is MirrorFeature -> "mirror"
+        is PatternFeature -> "pattern"
+        is com.rm.parrotmetric.design.JointFeature -> "joint"
+        is CombineFeature -> "combine"
+        is com.rm.parrotmetric.design.SplitFeature -> "split"
+        is com.rm.parrotmetric.design.MoveFeature -> "move"
+        is com.rm.parrotmetric.design.AlignFeature -> "align"
+        is com.rm.parrotmetric.design.ConvertFeature -> "tosolid"
         is PlaneFeature -> "plane.offset"
-        else -> f::class.simpleName?.removeSuffix("Feature")?.lowercase()
+        is AxisFeature -> "axis"
+        is PointFeature -> "point"
+        is com.rm.parrotmetric.design.CanvasFeature -> "canvas"
+        is ImportFeature -> "open"
+        else -> null
     }
 
     /** Every body there is now, labels and handles, hidden ones too. */
