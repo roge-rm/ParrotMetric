@@ -20,7 +20,8 @@ work=$here/build/occt-work/$target
 # The file formats pull in its viewer toolkits too, built here without FreeType or
 # OpenGL, and the linker drops what we don't call.
 toolkits="TKMesh TKFillet TKOffset TKBool TKPrim TKShHealing TKHLR TKDESTEP TKDEIGES TKDEOBJ TKDEPLY TKDEVRML"
-rev="$(git -C "$src" rev-parse HEAD 2>/dev/null || echo unknown) $toolkits${OCCT_FLAGS:+ $OCCT_FLAGS}"
+# OCCT_OPT replaces the release build's -O3, such as -Os for a smaller library.
+rev="$(git -C "$src" rev-parse HEAD 2>/dev/null || echo unknown) $toolkits${OCCT_FLAGS:+ $OCCT_FLAGS}${OCCT_OPT:+ opt=$OCCT_OPT}"
 
 if [ -f "$out/.rev" ] && [ "$(cat "$out/.rev")" = "$rev" ]; then
     exit 0
@@ -46,6 +47,9 @@ set -- -G Ninja -S "$src" -B "$work" \
     "-DCMAKE_C_FLAGS=-ffunction-sections -fdata-sections ${OCCT_FLAGS:-}" \
     "-DCMAKE_CXX_FLAGS=-ffunction-sections -fdata-sections ${OCCT_FLAGS:-}" \
     -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+if [ -n "${OCCT_OPT:-}" ]; then
+    set -- "$@" "-DCMAKE_C_FLAGS_RELEASE=$OCCT_OPT -DNDEBUG" "-DCMAKE_CXX_FLAGS_RELEASE=$OCCT_OPT -DNDEBUG"
+fi
 
 case "$second" in
     "") ;;

@@ -118,6 +118,10 @@ val occtTasks = abis.map { abi ->
         executable(rootProject.file("core/scripts/build-occt.sh").absolutePath)
         // The ABIs build side by side, so each gets half of a build's 10 workers.
         environment("OCCT_JOBS", (10 / abis.size).coerceAtLeast(1).toString())
+        // -O2 for the ARM builds that ship: about 9% smaller than -O3 and
+        // within a few percent of its speed on the Fire HD 8. -Os was 45%
+        // slower at shelling.
+        if (abi.startsWith("arm")) environment("OCCT_OPT", "-O2")
         // Only locals in the lambda, so the configuration cache can store it.
         val ndk = ndkPath
         argumentProviders.add(CommandLineArgumentProvider { listOf(abi, ndk.get()) })
