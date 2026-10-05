@@ -69,7 +69,7 @@ With **Select** in hand, drag points or curves to move them. Tap a curve twice q
 - **Round corner** and **Cut corner** round off or cut corners: pick the corner points, or the lines that meet there, or tap an outline twice to do all its corners. Sizes measured to a corner still measure to where the lines would meet.
 - **Mirror** copies the picked curves across a line. Pick the line last. They stay mirrored when you change them.
 - **Move** and **Scale** move or resize the picked curves.
-- **Pattern** and **Pattern round** copy them in a row or round a point.
+- **Pattern** copies them in a row, **X apart** and **Y apart**, and with **Rows** more than 1, repeats the row **Rows apart**, square to it. The copies stay tied to what was copied: move it and they follow, and the first step across and up are sizes you can change to respace them all. **Pattern round** copies them round a point.
 - **Delete** takes away what's picked.
 
 ## Bringing things in

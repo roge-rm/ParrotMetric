@@ -171,6 +171,15 @@ sealed class Constraint {
         }
     }
 
+    /** From a to b is the same step, in distance and direction, as from c to d: how a pattern's copies follow. */
+    class SameStep(val a: Point, val b: Point, val c: Point, val d: Point) : Constraint() {
+        override fun points() = listOf(a, b, c, d)
+        override fun residuals(v: (Int) -> Double) = doubleArrayOf(
+            (b.px(v) - a.px(v)) - (d.px(v) - c.px(v)),
+            (b.py(v) - a.py(v)) - (d.py(v) - c.py(v)),
+        )
+    }
+
     /** Two points mirrored across a line. */
     class Symmetric(val p: Point, val q: Point, val line: Line) : Constraint() {
         override fun points() = listOf(p, q) + line.points()

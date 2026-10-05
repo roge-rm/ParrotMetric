@@ -505,6 +505,8 @@ private fun TransformEntry(editor: SketchEditor, t: SketchTransform) {
                     com.rm.parrotmetric.ui.design.NumberRow("Count", t.count, "", false) { t.count = it }
                     com.rm.parrotmetric.ui.design.NumberRow("X apart", t.dx, "mm", true) { t.dx = it }
                     com.rm.parrotmetric.ui.design.NumberRow("Y apart", t.dy, "mm", true) { t.dy = it }
+                    com.rm.parrotmetric.ui.design.NumberRow("Rows", t.rows, "", false) { t.rows = it }
+                    if (t.rows >= 1.5) com.rm.parrotmetric.ui.design.NumberRow("Rows apart", t.rowGap, "mm", true) { t.rowGap = it }
                 }
                 SketchTransform.Kind.Round -> {
                     com.rm.parrotmetric.ui.design.NumberRow("Count", t.count, "", false) { t.count = it }

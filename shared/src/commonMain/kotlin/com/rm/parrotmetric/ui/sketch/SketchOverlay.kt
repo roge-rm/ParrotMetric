@@ -487,6 +487,8 @@ private fun annotations(editor: SketchEditor, proj: PlaneProjection, dp: Float):
             is Constraint.ArcRadius, is Constraint.EllipseAxes -> {}
             // What a rounded corner holds by itself: its smooth joins, and the sharp corner kept on both lines.
             is Constraint.TangentJoin -> {}
+            // A pattern's copies show by their places; its steps are dimensioned once.
+            is Constraint.SameStep -> {}
             is Constraint.OnLine -> if (s.curves.any { c.p in it.points() }) {
                 val a = screen(c.line.a, editor, proj); val b = screen(c.line.b, editor, proj)
                 val n = stacked.getOrElse(c.line) { 0 }

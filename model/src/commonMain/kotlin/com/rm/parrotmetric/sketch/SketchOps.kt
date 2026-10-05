@@ -486,6 +486,57 @@ object SketchOps {
     }
 
     /**
+     * Copies [curves] [count] times along (dx, dy), and with [rows] above 1,
+     * that row again [rows] times, each row [rowGap] on from the last, square
+     * to the row. The copies stay tied to the originals: the first copy's
+     * step across is dimensioned, and so is the first row's, and every other
+     * copy repeats those steps, so moving the originals or changing a step
+     * moves them all. Circles keep the originals' size.
+     */
+    fun pattern(s: Sketch, curves: List<Curve>, count: Int, dx: Double, dy: Double, rows: Int = 1, rowGap: Double = 0.0): String? {
+        if (curves.isEmpty()) return "Select the curves first"
+        if (count < 1 || rows < 1 || count * rows < 2) return "Make at least two"
+        if (count > 1 && hypot(dx, dy) < 1e-9) return "The copies would sit on top of each other"
+        if (rows > 1 && abs(rowGap) < 1e-9) return "The rows would sit on top of each other"
+        val len = hypot(dx, dy)
+        // Rows go square to the row, to its left; a row of one goes up.
+        val (rx, ry) = if (len < 1e-9) 0.0 to rowGap else -dy / len * rowGap to dx / len * rowGap
+        val originals = curves.flatMap { it.points() }.distinct()
+        val ref = originals.first()
+        val copies = HashMap<Pair<Int, Int>, Map<Point, Point>>()
+        copies[0 to 0] = originals.associateWith { it }
+        for (j in 0 until rows) for (i in 0 until count) {
+            if (i == 0 && j == 0) continue
+            val before = s.curves.toSet()
+            val made = copy(s, curves, 1.0, false) { x, y -> x + i * dx + j * rx to y + i * dy + j * ry }
+            copies[i to j] = made
+            val fresh = s.curves.filter { it !in before }
+            for ((old, new) in curves.zip(fresh)) if (old is Circle && new is Circle) s.add(Constraint.Equal(new, old))
+        }
+        // A step held by two sizes: across and up, or one of them level or upright when it's 0.
+        fun dimension(from: Point, to: Point, sx: Double, sy: Double) {
+            if (abs(sx) > 1e-9) s.add(Constraint.AxisDistance(from, to, false, sx)) else s.add(Constraint.VerticalPoints(from, to))
+            if (abs(sy) > 1e-9) s.add(Constraint.AxisDistance(from, to, true, sy)) else s.add(Constraint.HorizontalPoints(from, to))
+        }
+        val across = copies[1 to 0]?.get(ref)
+        val up = copies[0 to 1]?.get(ref)
+        across?.let { dimension(ref, it, dx, dy) }
+        up?.let { dimension(ref, it, rx, ry) }
+        for ((at, map) in copies) {
+            val (i, j) = at
+            if (i == 0 && j == 0) continue
+            val (prev, stepTo) = if (i > 0) copies.getValue(i - 1 to j) to across!! else copies.getValue(0 to j - 1) to up!!
+            for (p in originals) {
+                val from = prev.getValue(p); val to = map.getValue(p)
+                if (from === ref && to === stepTo) continue
+                s.add(Constraint.SameStep(from, to, ref, stepTo))
+            }
+        }
+        s.solve()
+        return null
+    }
+
+    /**
      * Copies curves mirrored across [axis], each copied point held
      * symmetric to its original; points on the axis are shared.
      */

@@ -170,6 +170,29 @@ class SketchOpsTest {
         assertTrue(stray in SketchOps.connected(s, bottom))
     }
 
+    @Test
+    fun aPatternsCopiesFollowTheOriginalAndItsSteps() {
+        // A Pi Zero's holes from one: 2 across 58 apart, 2 rows 23 apart.
+        val s = Sketch()
+        val hole = s.addCircle(s.addPoint(3.5, 3.5), 1.375)
+        s.add(Constraint.Radius(hole, true, 2.75))
+        s.add(Constraint.AxisDistance(s.origin, hole.centre, false, 3.5))
+        s.add(Constraint.AxisDistance(s.origin, hole.centre, true, 3.5))
+        assertNull(SketchOps.pattern(s, listOf(hole), 2, 58.0, 0.0, rows = 2, rowGap = 23.0))
+        val circles = s.curves.filterIsInstance<Circle>()
+        assertEquals(4, circles.size)
+        assertEquals(0, s.freedom().count)
+        val centres = circles.map { s.x(it.centre) to s.y(it.centre) }.toSet()
+        assertEquals(setOf(3.5 to 3.5, 61.5 to 3.5, 3.5 to 26.5, 61.5 to 26.5), centres.map { (x, y) -> Math.round(x * 10) / 10.0 to Math.round(y * 10) / 10.0 }.toSet())
+        // Changing the step across moves both copies on the right.
+        val across = s.constraints.filterIsInstance<Constraint.AxisDistance>().first { abs(it.value - 58.0) < 1e-9 }
+        across.value = 60.0
+        s.solve()
+        assertEquals(2, circles.count { abs(s.x(it.centre) - 63.5) < 1e-6 })
+        // All the same size as the first.
+        circles.forEach { near(1.375, s.radius(it)) }
+    }
+
     /** A square corner at the origin: one line along x and one up y, 10 long. */
     private fun corner(s: Sketch): Point {
         val p = s.addPoint(0.0, 0.0)

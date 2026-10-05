@@ -36,13 +36,15 @@ enum class SketchTool { Select, Line, Rectangle, Circle, Arc, Point, Spline, Pol
  * origin if no point is selected.
  */
 class SketchTransform(val kind: Kind) {
-    enum class Kind(val title: String) { Move("Move"), Scale("Scale"), Row("Pattern in a row"), Round("Pattern round") }
+    enum class Kind(val title: String) { Move("Move"), Scale("Scale"), Row("Pattern"), Round("Pattern round") }
 
     var dx by mutableStateOf(10.0)
     var dy by mutableStateOf(0.0)
     var degrees by mutableStateOf(if (kind == Kind.Round) 360.0 else 0.0)
     var factor by mutableStateOf(2.0)
     var count by mutableStateOf(3.0)
+    var rows by mutableStateOf(1.0)
+    var rowGap by mutableStateOf(10.0)
     var copy by mutableStateOf(false)
 }
 
@@ -1479,7 +1481,8 @@ class SketchEditor(
             return { x, y -> (px + (x - px) * c - (y - py) * s + dx) to (py + (x - px) * s + (y - py) * c + dy) }
         }
         val n = t.count.toInt()
-        if ((t.kind == SketchTransform.Kind.Row || t.kind == SketchTransform.Kind.Round) && n !in 2..200) {
+        val tooMany = if (t.kind == SketchTransform.Kind.Row) n !in 1..200 || t.rows !in 1.0..200.0 else n !in 2..200
+        if ((t.kind == SketchTransform.Kind.Row || t.kind == SketchTransform.Kind.Round) && tooMany) {
             message = "Use between 2 and 200"
             return
         }
@@ -1498,10 +1501,7 @@ class SketchEditor(
                 val f: (Double, Double) -> Pair<Double, Double> = { x, y -> (px + (x - px) * k) to (py + (y - py) * k) }
                 if (t.copy) { SketchOps.copy(sketch, curves, k, false, f); null } else SketchOps.move(sketch, curves, k, f)
             }
-            SketchTransform.Kind.Row -> {
-                for (i in 1 until n) SketchOps.copy(sketch, curves, 1.0, false, turned(0.0, t.dx * i, t.dy * i))
-                null
-            }
+            SketchTransform.Kind.Row -> SketchOps.pattern(sketch, curves, n, t.dx, t.dy, kotlin.math.round(t.rows).toInt().coerceAtLeast(1), t.rowGap)
             SketchTransform.Kind.Round -> {
                 // A full turn spaces them evenly; less spreads them from the first to the last.
                 val total = t.degrees * PI / 180
