@@ -124,6 +124,20 @@ TEST_CASE("a shell leaves walls round an open top") {
     CHECK(has(cup.faceNames(), "F1.s1"));
 }
 
+TEST_CASE("areas extruded side by side make one end face, not one per area") {
+    // Two rectangles sharing a side, 20 x 10 each.
+    std::vector<SketchCurve> c = {line(1, 0, 0, 20, 0), line(2, 20, 0, 20, 10), line(3, 20, 10, 0, 10), line(4, 0, 10, 0, 0),
+                                  line(5, 20, 0, 40, 0), line(6, 40, 0, 40, 10), line(7, 40, 10, 20, 10)};
+    NamedShape block = extrude(1, top, c, {{{1, 2, 3, 4}, 10, 5}, {{2, 5, 6, 7}, 30, 5}}, 5, 0);
+    CHECK(volume(block) == Catch::Approx(40 * 10 * 5));
+    auto names = block.faceNames();
+    CHECK(std::count(names.begin(), names.end(), "F1.end") == 1);
+    CHECK(std::count(names.begin(), names.end(), "F1.start") == 1);
+    // The front and back are still a side for each line: nothing a later step names goes away.
+    CHECK(names.size() == 8);
+    CHECK(std::count(names.begin(), names.end(), "F1.s5") == 1);
+}
+
 TEST_CASE("a shell names each inside face after the face it lines") {
     NamedShape box = extrude(1, top, rectangle(40, 20), {{{1, 2, 3, 4}, 5, 5}}, 10, 0);
     NamedShape cup = shell(2, box, {"F1.end"}, 2);

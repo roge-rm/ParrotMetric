@@ -35,6 +35,7 @@
 #include <BRepClass3d_SolidClassifier.hxx>
 #include <BRep_Tool.hxx>
 #include <ShapeUpgrade_UnifySameDomain.hxx>
+#include <BRepTools_History.hxx>
 #include <TopoDS_Shell.hxx>
 #include <gp_Circ.hxx>
 #include <BRepBuilderAPI_MakeFace.hxx>
@@ -146,7 +147,44 @@ NamedShape fuseAll(int id, std::vector<NamedShape> pieces) {
         if (!fuse.IsDone()) throw std::runtime_error("The areas couldn't be joined");
         out = carryNames({&out, &pieces[i]}, fuse, fuse.Shape(), prefix(id));
     }
-    return out;
+    if (pieces.size() < 2) return out;
+    // Areas side by side leave seams across their ends: merged, each end is one face again. Only faces
+    // with the same name merge, so every name a later step can refer to is still there.
+    ShapeUpgrade_UnifySameDomain unify(out.shape, true, true, false);
+    TopTools_IndexedDataMapOfShapeListOfShape edgeFaces;
+    TopExp::MapShapesAndAncestors(out.shape, TopAbs_EDGE, TopAbs_FACE, edgeFaces);
+    for (int i = 1; i <= edgeFaces.Extent(); ++i) {
+        const auto& faces = edgeFaces(i);
+        std::string first;
+        bool differ = false;
+        for (const auto& f : faces) {
+            std::string n = out.faceName(f);
+            if (first.empty()) first = n;
+            else if (n != first) differ = true;
+        }
+        if (differ || first.empty()) unify.KeepShape(edgeFaces.FindKey(i));
+    }
+    unify.Build();
+    if (unify.Shape().IsNull() || !BRepCheck_Analyzer(unify.Shape()).IsValid()) return out;
+    NamedShape merged;
+    merged.shape = unify.Shape();
+    TopTools_IndexedMapOfShape present;
+    TopExp::MapShapes(merged.shape, TopAbs_FACE, present);
+    Handle(BRepTools_History) history = unify.History();
+    for (TopExp_Explorer f(out.shape, TopAbs_FACE); f.More(); f.Next()) {
+        std::string name = out.faceName(f.Current());
+        if (name.empty()) continue;
+        if (present.Contains(f.Current())) {
+            if (!merged.names.IsBound(f.Current())) merged.names.Bind(f.Current(), name);
+            continue;
+        }
+        for (const auto& m : history->Modified(f.Current()))
+            if (present.Contains(m) && !merged.names.IsBound(m)) merged.names.Bind(m, name);
+    }
+    int k = 0;
+    for (int i = 1; i <= present.Extent(); ++i)
+        if (!merged.names.IsBound(present(i))) merged.names.Bind(present(i), prefix(id) + ".n" + std::to_string(k++));
+    return merged;
 }
 
 /** A swept region's faces: sides by the curve their edge came from, and the two ends. */
