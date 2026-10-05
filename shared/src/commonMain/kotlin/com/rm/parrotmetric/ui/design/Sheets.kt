@@ -53,7 +53,8 @@ private val formats = listOf("STL", "3MF", "OBJ", "STEP", "IGES")
 @Composable
 private fun SheetFrame(title: String, close: () -> Unit, content: @Composable () -> Unit) {
     Surface(color = Palette.surface, shape = RoundedCornerShape(26.dp)) {
-        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // Scrolls when it's taller than the room it has, so its last buttons stay reachable.
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(title, Modifier.weight(1f), fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = Palette.text)
                 IconButton(onClick = close) { Icon(Icons.close, "Close", Modifier.size(16.dp), tint = Palette.muted) }

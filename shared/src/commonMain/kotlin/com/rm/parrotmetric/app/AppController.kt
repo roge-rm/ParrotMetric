@@ -400,13 +400,21 @@ class AppController(
         }
     }
 
+    /** What a body is called in an exported file: its component's name when it's the only body in it. */
+    private fun exportName(label: String): String {
+        val d = design.design
+        val component = d.info(label).component ?: return d.nameOf(label)
+        val alone = design.allBodies().count { d.info(it.label).component == component } == 1
+        return if (alone) component else "$component ${d.nameOf(label)}"
+    }
+
     /** Hands the bodies [request] picks to [to], such as a slicer, as a 3MF. */
     private fun handOff(to: String, request: ExportRequest) {
         val chosen = design.allBodies().filter { b ->
             if (request.labels.isEmpty()) !design.design.info(b.label).hidden else b.label in request.labels
         }
         val bodies = chosen.map { it.handle }.toLongArray()
-        val names = chosen.map { design.design.nameOf(it.label) }.toTypedArray()
+        val names = chosen.map { exportName(it.label) }.toTypedArray()
         val colours = chosen.map { design.design.info(it.label).colour ?: -1 }.toIntArray()
         scope.launch {
             val error = try {
@@ -425,7 +433,7 @@ class AppController(
             if (request.labels.isEmpty()) !design.design.info(b.label).hidden else b.label in request.labels
         }
         val bodies = chosen.map { it.handle }.toLongArray()
-        val names = chosen.map { design.design.nameOf(it.label) }.toTypedArray()
+        val names = chosen.map { exportName(it.label) }.toTypedArray()
         val colours = chosen.map { design.design.info(it.label).colour ?: -1 }.toIntArray()
         scope.launch {
             val error = try {
