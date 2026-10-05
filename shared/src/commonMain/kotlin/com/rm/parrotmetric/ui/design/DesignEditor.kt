@@ -1528,6 +1528,14 @@ class DesignEditor(
                 through = false
                 exprs.remove("depth")
             }
+            if (newFit == com.rm.parrotmetric.design.HoleFit.Clearance) com.rm.parrotmetric.design.HolePresets.top(kind, newSize)?.let { (across, deep) ->
+                topDiameter = across
+                exprs.remove("topDiameter")
+                if (kind == com.rm.parrotmetric.design.HoleKind.Counterbore) {
+                    topDepth = deep
+                    exprs.remove("topDepth")
+                }
+            }
         }
 
         override fun feature(): Feature? {

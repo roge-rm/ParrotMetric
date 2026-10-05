@@ -643,9 +643,14 @@ internal fun HoleSettings(editor: DesignEditor, d: DesignEditor.HoleDraft) {
         d.sketchId = sketches[it].id
         editor.draftChanged()
     }
-    Segmented(listOf("Simple", "Counterbore", "Countersink"), d.kind.ordinal) { d.kind = com.rm.parrotmetric.design.HoleKind.entries[it]; editor.draftChanged() }
-    val fits = listOf(null, com.rm.parrotmetric.design.HoleFit.Insert, com.rm.parrotmetric.design.HoleFit.SelfTap)
-    Segmented(listOf("Any size", "Insert", "Self-tap"), fits.indexOf(d.fit)) { d.usePreset(fits[it], d.size); editor.draftChanged() }
+    Segmented(listOf("Simple", "Counterbore", "Countersink"), d.kind.ordinal) {
+        d.kind = com.rm.parrotmetric.design.HoleKind.entries[it]
+        // A screw head's room follows the size picked.
+        d.usePreset(d.fit, d.size)
+        editor.draftChanged()
+    }
+    val fits = listOf(null, com.rm.parrotmetric.design.HoleFit.Insert, com.rm.parrotmetric.design.HoleFit.SelfTap, com.rm.parrotmetric.design.HoleFit.Clearance)
+    Segmented(listOf("Any size", "Insert", "Self-tap", "Clearance"), fits.indexOf(d.fit)) { d.usePreset(fits[it], d.size); editor.draftChanged() }
     if (d.fit != null) {
         val sizes = com.rm.parrotmetric.design.HolePresets.sizes
         Segmented(sizes, sizes.indexOf(d.size).coerceAtLeast(0)) { d.usePreset(d.fit, sizes[it]); editor.draftChanged() }

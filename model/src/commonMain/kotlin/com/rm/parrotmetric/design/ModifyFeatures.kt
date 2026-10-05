@@ -127,7 +127,7 @@ data class MeshEditFeature(
 enum class HoleKind { Simple, Counterbore, Countersink }
 
 /** What a hole is for, when it's for a metric screw in a printed part. */
-enum class HoleFit { Insert, SelfTap }
+enum class HoleFit { Insert, SelfTap, Clearance }
 
 /**
  * Hole sizes for metric screws in printed parts: a pocket for a standard
@@ -143,9 +143,24 @@ object HolePresets {
     // Two thirds of the screw's size, tight enough that it forces its own thread: 2 mm for M3 holds.
     private val selfTap = mapOf("M2" to 1.3, "M2.5" to 1.7, "M3" to 2.0, "M4" to 2.7, "M5" to 3.3)
 
+    // The screw passes through freely: 3.5 for M3, as printed holes come out a little small.
+    private val clearance = mapOf("M2" to 2.5, "M2.5" to 3.0, "M3" to 3.5, "M4" to 4.5, "M5" to 5.5)
+
+    // Room for the head: a countersunk screw's head across (ISO 10642), and a socket cap's across and how deep, each a little over.
+    private val countersink = mapOf("M2" to 4.4, "M2.5" to 5.5, "M3" to 6.7, "M4" to 9.0, "M5" to 11.2)
+    private val counterbore = mapOf("M2" to (4.2 to 2.3), "M2.5" to (5.0 to 2.8), "M3" to (6.0 to 3.3), "M4" to (7.5 to 4.3), "M5" to (9.0 to 5.3))
+
     fun diameter(fit: HoleFit, size: String): Double = when (fit) {
         HoleFit.Insert -> insert.getValue(size).first
         HoleFit.SelfTap -> selfTap.getValue(size)
+        HoleFit.Clearance -> clearance.getValue(size)
+    }
+
+    /** The top's size across and depth for a screw head, for a clearance hole that's countersunk or counterbored. */
+    fun top(kind: HoleKind, size: String): Pair<Double, Double>? = when (kind) {
+        HoleKind.Countersink -> countersink.getValue(size) to 0.0
+        HoleKind.Counterbore -> counterbore.getValue(size)
+        HoleKind.Simple -> null
     }
 
     /** How deep the hole has to be, or null when it's up to the screw's length. */
@@ -155,6 +170,7 @@ object HolePresets {
     fun match(diameter: Double): Pair<HoleFit, String>? {
         insert.entries.firstOrNull { kotlin.math.abs(it.value.first - diameter) < 1e-6 }?.let { return HoleFit.Insert to it.key }
         selfTap.entries.firstOrNull { kotlin.math.abs(it.value - diameter) < 1e-6 }?.let { return HoleFit.SelfTap to it.key }
+        clearance.entries.firstOrNull { kotlin.math.abs(it.value - diameter) < 1e-6 }?.let { return HoleFit.Clearance to it.key }
         return null
     }
 }
