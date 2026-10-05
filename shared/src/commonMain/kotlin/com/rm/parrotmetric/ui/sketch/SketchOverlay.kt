@@ -505,7 +505,7 @@ private fun annotations(editor: SketchEditor, proj: PlaneProjection, dp: Float):
             }
             is Constraint.AxisDistance -> {
                 val a = screen(c.p, editor, proj); val b = screen(c.q, editor, proj)
-                out += Annotation(item, (a + b) / 2f + Offset(0f, -18 * dp), format(c.value), c)
+                out += Annotation(item, (a + b) / 2f + Offset(0f, -18 * dp), c.expression ?: format(c.value), c)
             }
             is Constraint.PointLineDistance -> {
                 val p = screen(c.p, editor, proj)
@@ -515,7 +515,9 @@ private fun annotations(editor: SketchEditor, proj: PlaneProjection, dp: Float):
                 // Halfway when short; when long, near the point it measures, where it's looked for.
                 val gap = foot - p
                 val len = gap.getDistance()
-                val at = if (len < 90 * dp) (p + foot) / 2f + d * (16 * dp) else p + gap * (34 * dp / len) + d * (16 * dp)
+                // A circle's centre: clear of the circle, out past its edge.
+                val clear = s.curves.filterIsInstance<Circle>().filter { it.centre === c.p }.maxOfOrNull { s.radius(it) / proj.mmPerPixel() }?.toFloat() ?: 0f
+                val at = if (len < 90 * dp + clear) (p + foot) / 2f + d * (16 * dp) else p + gap * ((34 * dp + clear) / len) + d * (16 * dp)
                 out += Annotation(item, at, c.expression ?: format(c.value), c)
             }
             is Constraint.Radius -> {
@@ -535,11 +537,11 @@ private fun annotations(editor: SketchEditor, proj: PlaneProjection, dp: Float):
                 }
                 val centre = proj.toScreen(cx, cy)
                 val rim = proj.toScreen(cx + r * cos(angle), cy + r * sin(angle))
-                out += Annotation(item, rim + along(centre, rim) * (20 * dp), (if (c.diameter) "Ø" else "R") + format(c.value), c)
+                out += Annotation(item, rim + along(centre, rim) * (20 * dp), (if (c.diameter) "Ø" else "R") + (c.expression ?: format(c.value)), c)
             }
             is Constraint.Angle -> {
                 val a = mid(c.l1); val b = mid(c.l2)
-                out += Annotation(item, (a + b) / 2f, format(abs(c.value) * 180 / PI) + "°", c)
+                out += Annotation(item, (a + b) / 2f, (c.expression ?: format(abs(c.value) * 180 / PI)) + "°", c)
             }
             else -> {
                 // Glyphs sit beside the first line they're about, or beside the point.
