@@ -144,11 +144,16 @@ class AppController(
      * Frames an open sketch's points in the part of the view panels don't
      * cover, with some room round them. False if it has no points to frame.
      */
-    private fun fitSketch(sketch: SketchEditor, camera: CameraState, onlyIfOutside: Boolean = false): Boolean {
+    /**
+     * Frames the sketch, or with [only] just those points; with [onlyIfOutside], only when
+     * some are out of view, and then for [only] by sliding them in, zooming out no more than they need.
+     */
+    private fun fitSketch(sketch: SketchEditor, camera: CameraState, onlyIfOutside: Boolean = false, only: List<com.rm.parrotmetric.sketch.Point> = emptyList()): Boolean {
         val s = sketch.sketch
-        if (s.points.isEmpty()) return false
+        val points = only.ifEmpty { s.points }
+        if (points.isEmpty()) return false
         val projection = com.rm.parrotmetric.ui.sketch.PlaneProjection(camera, sketch.plane)
-        val onScreen = s.points.map { projection.toScreen(s.x(it), s.y(it)) }
+        val onScreen = points.map { projection.toScreen(s.x(it), s.y(it)) }
         val x0 = onScreen.minOf { it.x }; val x1 = onScreen.maxOf { it.x }
         val y0 = onScreen.minOf { it.y }; val y1 = onScreen.maxOf { it.y }
         val (l, t, r, b) = covered
@@ -160,7 +165,11 @@ class AppController(
         val dy = t + h / 2 - (y0 + y1) / 2
         // A lone point only needs centring.
         val size = maxOf((x1 - x0) / w, (y1 - y0) / h)
-        val factor = if (size > 1e-3f) (0.75f / size).coerceIn(0.02f, 50f) else 1f
+        val factor = when {
+            size <= 1e-3f -> 1f
+            only.isNotEmpty() -> (0.9f / size).coerceIn(0.02f, 1f)
+            else -> (0.75f / size).coerceIn(0.02f, 50f)
+        }
         gl {
             core.pan(dx, dy)
             core.zoom(factor)
@@ -639,7 +648,8 @@ class AppController(
         override fun keepSketchInView() {
             val sketch = state.sketch ?: return
             val camera = state.camera ?: return
-            fitSketch(sketch, camera, onlyIfOutside = true)
+            // Just what the size was set on, so a view zoomed in on part of the sketch stays as it is.
+            if (sketch.resizedPoints.isNotEmpty()) fitSketch(sketch, camera, onlyIfOutside = true, only = sketch.resizedPoints)
         }
 
         override fun fit() {

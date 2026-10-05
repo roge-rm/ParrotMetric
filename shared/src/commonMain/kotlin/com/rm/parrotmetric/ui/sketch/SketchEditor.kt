@@ -618,6 +618,10 @@ class SketchEditor(
     var resized by mutableIntStateOf(0)
         private set
 
+    /** The points the last size set was on, to keep in view. */
+    var resizedPoints: List<Point> = emptyList()
+        private set
+
     /** The sizes of the shape just placed, offered until the next touch or tool. */
     var placed by mutableStateOf<List<PlacedSize>?>(null)
         private set
@@ -639,8 +643,10 @@ class SketchEditor(
             return false
         }
         checkpoint()
+        val touched = mutableListOf<Point>()
         for ((i, size) in sizes.withIndex()) {
             val d = size.make(values[i]!!).also { if (Expression.usesNames(texts[i])) it.expression = texts[i].trim() }
+            touched += d.points()
             val why = when (sketch.add(d)) {
                 Sketch.Added.Yes -> null
                 Sketch.Added.AlreadySet -> "That's already set by other constraints"
@@ -655,6 +661,7 @@ class SketchEditor(
             }
         }
         placed = null
+        resizedPoints = touched
         resized++
         changed()
         return true
@@ -1323,7 +1330,9 @@ class SketchEditor(
             val d = edit.existing
             sketch.setDimension(d, if (d is Constraint.Angle && d.value < 0) -value else value).also { if (it) d.expression = expression }
         } else {
-            when (sketch.add(edit.make!!(value).also { it.expression = expression })) {
+            val made = edit.make!!(value).also { it.expression = expression }
+            resizedPoints = made.points()
+            when (sketch.add(made)) {
                 Sketch.Added.Yes -> true
                 Sketch.Added.AlreadySet -> { message = "That's already set by other constraints"; false }
                 Sketch.Added.Conflicts -> { message = "That doesn't fit the other constraints"; false }
@@ -1334,6 +1343,8 @@ class SketchEditor(
             if (message == null) message = "That doesn't fit the other constraints"
             return false
         }
+        if (edit.action != null) resizedPoints = emptyList()
+        edit.existing?.let { resizedPoints = it.points() }
         cancelDimension()
         resized++
         changed()

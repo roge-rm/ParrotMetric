@@ -378,7 +378,7 @@ fun ModelScreen(
                 }
                 Column(Modifier.fillMaxSize().safeDrawingPadding()) {
                     SketchTopBar(sketch, actions::fit, actions::finishSketch)
-                    Box(Modifier.weight(1f).fillMaxWidth().openArea(actions)) {
+                    Box(Modifier.weight(1f).fillMaxWidth().steadyOpenArea(actions, sketch)) {
                         SketchStatus(sketch, Modifier.align(Alignment.TopCenter).padding(top = 6.dp))
                     }
                     SketchBottom(sketch, expanded)
@@ -450,6 +450,22 @@ private fun Modifier.openArea(actions: ModelActions) = onGloballyPositioned { c 
     val root = c.findRootCoordinates().size
     val b = c.boundsInRoot()
     actions.setCovered(b.left, b.top, root.width - b.right, root.height - b.bottom)
+}
+
+/**
+ * As [openArea], but taken once for each [key] and again only when the window changes size,
+ * so rows coming and going under a sketch don't slide the drawing about.
+ */
+@Composable
+private fun Modifier.steadyOpenArea(actions: ModelActions, key: Any): Modifier {
+    var at by remember(key) { mutableStateOf<androidx.compose.ui.unit.IntSize?>(null) }
+    return onGloballyPositioned { c ->
+        val root = c.findRootCoordinates().size
+        if (root == at) return@onGloballyPositioned
+        at = root
+        val b = c.boundsInRoot()
+        actions.setCovered(b.left, b.top, root.width - b.right, root.height - b.bottom)
+    }
 }
 
 /** Keys a text field handles itself when it has focus. */
