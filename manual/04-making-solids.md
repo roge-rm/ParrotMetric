@@ -11,7 +11,7 @@ Pushes areas straight out of their plane. Tap the areas first, or with none tapp
 - With a distance, it goes **One side**, **Both ways** (the same each way) or **Two sides** (a different distance each way). With the other two, pick **Forward**, **Back** or **Both ways**.
 - **Taper** leans the sides in or out by an angle.
 - **Start at** starts it a distance away from the sketch's plane.
-- **Thin wall** makes a wall of a set thickness round the outline instead of a solid.
+- **Thin wall** makes a wall of a set thickness round the outline instead of a solid. A sketch of just an open line, like the shape of a clip, extrudes as a wall that thick along the line, with round ends.
 
 ## Revolve
 

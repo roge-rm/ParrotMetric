@@ -136,7 +136,7 @@ object Manual {
             ManualBlock(ManualKind.Bullet, "With a distance, it goes **One side**, **Both ways** (the same each way) or **Two sides** (a different distance each way). With the other two, pick **Forward**, **Back** or **Both ways**."),
             ManualBlock(ManualKind.Bullet, "**Taper** leans the sides in or out by an angle."),
             ManualBlock(ManualKind.Bullet, "**Start at** starts it a distance away from the sketch's plane."),
-            ManualBlock(ManualKind.Bullet, "**Thin wall** makes a wall of a set thickness round the outline instead of a solid."),
+            ManualBlock(ManualKind.Bullet, "**Thin wall** makes a wall of a set thickness round the outline instead of a solid. A sketch of just an open line, like the shape of a clip, extrudes as a wall that thick along the line, with round ends."),
             ManualBlock(ManualKind.Heading, "Revolve"),
             ManualBlock(ManualKind.Para, "Turns areas round an axis: the sketch's **Y axis** or **X axis**, or a line in the sketch. **Angle** is how far it goes, 360 for all the way round."),
             ManualBlock(ManualKind.Heading, "Sweep"),

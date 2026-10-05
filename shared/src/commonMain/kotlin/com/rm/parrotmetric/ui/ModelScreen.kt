@@ -239,7 +239,8 @@ fun ModelScreen(
             state.screen != AppScreen.Model -> return false
             sketch != null -> when {
                 sketch.editing != null -> sketch.cancelDimension()
-                sketch.placed != null -> sketch.dropPlaced()
+                // The size offered for what was just drawn goes, and so does the line being drawn.
+                sketch.placed != null -> { sketch.dropPlaced(); if (sketch.pending.isNotEmpty()) sketch.endDrawing() }
                 sketch.textEdit != null -> sketch.cancelText()
                 sketch.dropTyped() -> {}
                 sketch.pending.isNotEmpty() -> sketch.endDrawing()

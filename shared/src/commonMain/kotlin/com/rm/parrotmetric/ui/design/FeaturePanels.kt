@@ -147,7 +147,7 @@ internal fun count(n: Int, one: String, many: String) = if (n == 1) "1 $one" els
 
 @Composable
 private fun ExtrudeSettings(editor: DesignEditor, d: DesignEditor.ExtrudeDraft) {
-    Header("Extrude", Icons.extrude, Palette.create, if (d.regions.isEmpty()) null else count(d.regions.size, "area", "areas"))
+    Header("Extrude", Icons.extrude, Palette.create, when { d.regions.isNotEmpty() -> count(d.regions.size, "area", "areas"); d.sketchId != null && d.thinOn -> "Open line"; else -> null })
     Segmented(listOf("Distance", "Through all", "Up to"), if (d.throughAll) 1 else if (d.upToOn) 2 else 0) {
         d.throughAll = it == 1
         d.upToOn = it == 2

@@ -94,3 +94,18 @@ TEST_CASE("text outlines are capital letters the height asked for, and close int
     CHECK(boldWidth > width);
     CHECK_THROWS(textOutline("H", 0, false, 0));
 }
+
+TEST_CASE("an open arc with lines off its ends has no area") {
+    std::vector<SketchCurve> curves;
+    SketchCurve arc;
+    arc.kind = SketchCurve::Arc; arc.id = 4; arc.x1 = 0; arc.y1 = 16.6242; arc.r = 6;
+    arc.a0 = std::atan2(11.8598 - 16.6242, 3.6470); arc.a1 = std::atan2(11.8598 - 16.6242, -3.6470);
+    curves.push_back(arc);
+    SketchCurve a; a.kind = SketchCurve::Line; a.id = 6; a.x1 = 3.6470; a.y1 = 11.8598; a.x2 = 14.1733; a.y2 = 11.8598;
+    SketchCurve b; b.kind = SketchCurve::Line; b.id = 9; b.x1 = -3.6470; b.y1 = 11.8598; b.x2 = -14.1733; b.y2 = 11.8598;
+    curves.push_back(a);
+    curves.push_back(b);
+    CHECK(findRegions(curves).empty());
+    curves.resize(1);
+    CHECK(findRegions(curves).empty());
+}

@@ -737,3 +737,19 @@ TEST_CASE("a coil on a cylinder's side cuts a groove") {
     NamedShape cut = combine(3, cyl, c, Combine::Cut);
     CHECK(volume(cut) == Catch::Approx(volume(cyl) - o).epsilon(1e-6));
 }
+
+TEST_CASE("an open line with a thin wall extrudes as a wall along it") {
+    // A 20 long line, wall 2 thick with round ends, 10 high.
+    NamedShape wall = extrude(1, top, {line(1, 0, 0, 20, 0)}, {}, 10, 0, 0, 2);
+    CHECK(volume(wall) == Catch::Approx((20 * 2 + M_PI) * 10).epsilon(1e-6));
+    CHECK(has(wall.faceNames(), "F1.end"));
+    // A clip: most of a circle with a flat foot off each end.
+    const double a0 = -52.5 * M_PI / 180, a1 = 232.5 * M_PI / 180, r = 6;
+    SketchCurve arc;
+    arc.kind = SketchCurve::Arc; arc.id = 1; arc.r = r; arc.a0 = a0; arc.a1 = a1;
+    double ex = r * std::cos(a0), ey = r * std::sin(a0);
+    NamedShape clip = extrude(2, top, {arc, line(2, ex, ey, ex + 8, ey), line(3, -ex, ey, -ex - 8, ey)}, {}, 10, 0, 0, 1.5);
+    double length = r * (a1 - a0) + 16;
+    // Less a little where the feet meet the arc at an angle.
+    CHECK(volume(clip) == Catch::Approx((length * 1.5 + M_PI * 0.75 * 0.75) * 10).epsilon(0.03));
+}

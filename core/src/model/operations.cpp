@@ -296,10 +296,17 @@ TopoDS_Face thinned(const TopoDS_Face& face, double thin) {
 
 }  // namespace
 
+NamedShape openWall(int id, const gp_Ax3& plane, const std::vector<SketchCurve>& curves, double forward, double back, double thin);
+
 NamedShape extrude(int id, const gp_Ax3& plane, const std::vector<SketchCurve>& curves, const std::vector<RegionPick>& picks,
                    double forward, double back, double taper, double thin) {
     if (std::abs(forward + back) < 1e-6) throw std::runtime_error("The extrude has no length");
     if (thin < 0) throw std::runtime_error("The wall has to be thicker than 0");
+    if (picks.empty() && thin > 0) {
+        NamedShape out = openWall(id, plane, curves, forward, back, thin);
+        if (std::abs(taper) > 1e-9) out = taperSides(id, out, plane, taper);
+        return out;
+    }
     try {
         auto regions = buildRegionFaces(curves);
         std::vector<NamedShape> pieces;
@@ -1343,6 +1350,40 @@ TopoDS_Wire pathFromSketch(const gp_Ax3& plane, const std::vector<SketchCurve>& 
 }
 
 TopoDS_Wire pathFromEdges(const std::vector<TopoDS_Edge>& edges) { return chain(edges); }
+
+/** An open line in a sketch made into a wall [thin] thick, centred on the line with round ends, and extruded. */
+NamedShape openWall(int id, const gp_Ax3& plane, const std::vector<SketchCurve>& curves, double forward, double back, double thin) {
+    try {
+        std::vector<TopoDS_Edge> edges;
+        for (const auto& c : curves) {
+            TopoDS_Edge e = sketchEdge(c);
+            if (!e.IsNull()) edges.push_back(e);
+        }
+        TopoDS_Wire path = chain(edges);
+        if (path.Closed()) throw std::runtime_error("Tap the areas to extrude");
+        // On the sketch's plane given outright: a straight line alone doesn't fix one.
+        BRepOffsetAPI_MakeOffset offset;
+        offset.Init(BRepBuilderAPI_MakeFace(gp_Pln(gp::XOY())).Face(), GeomAbs_Arc, false);
+        offset.AddWire(path);
+        offset.Perform(thin / 2);
+        if (!offset.IsDone()) throw std::runtime_error("The wall couldn't be laid out along the line");
+        TopoDS_Wire outline;
+        for (TopExp_Explorer w(offset.Shape(), TopAbs_WIRE); w.More() && outline.IsNull(); w.Next()) outline = TopoDS::Wire(w.Current());
+        if (outline.IsNull()) throw std::runtime_error("The wall couldn't be laid out along the line");
+        BRepBuilderAPI_MakeFace face(gp_Pln(gp::XOY()), outline);
+        if (!face.IsDone()) throw std::runtime_error("The wall couldn't be laid out along the line");
+        gp_Trsf shift;
+        shift.SetTranslation(gp_Vec(plane.Direction()) * -back);
+        TopoDS_Face placed = TopoDS::Face(face.Face().Moved(TopLoc_Location(shift * placeOn(plane))));
+        BRepPrimAPI_MakePrism prism(placed, gp_Vec(plane.Direction()) * (forward + back));
+        if (!prism.IsDone()) throw std::runtime_error("The extrude couldn't be made");
+        NamedShape out = nameAll(id, prism.Shape(), prism.FirstShape(), prism.LastShape(), "w");
+        check(out.shape, "The extrude couldn't be made");
+        return out;
+    } catch (const Standard_Failure&) {
+        throw std::runtime_error("The wall couldn't be laid out along the line");
+    }
+}
 
 NamedShape sweep(int id, const gp_Ax3& plane, const std::vector<SketchCurve>& curves, const std::vector<RegionPick>& picks,
                  const TopoDS_Wire& path) {

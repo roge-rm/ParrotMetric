@@ -908,7 +908,14 @@ class DesignEditor(
         selectionChanged()
         // Nothing picked: the newest sketch's area, when it has just the one and nothing uses it yet.
         if (d.regions.isEmpty()) design.active.lastOrNull { it is SketchFeature }?.takeIf { f -> design.active.none { usesSketch(it, f.id) } }?.let { f ->
-            val only = finder.find((f as SketchFeature).sketch.profileCurves()).singleOrNull() ?: return@let
+            val areas = finder.find((f as SketchFeature).sketch.profileCurves())
+            // Only open lines: an extrude makes them a thin wall.
+            if (areas.isEmpty() && d is ExtrudeDraft && f.sketch.curves.any { !it.construction }) {
+                d.sketchId = f.id
+                d.thinOn = true
+                return@let
+            }
+            val only = areas.singleOrNull() ?: return@let
             d.sketchId = f.id
             d.regions = listOf(RegionRef(only.curveIds, only.insideU, only.insideV))
             joinOnFace(d)
@@ -1489,7 +1496,8 @@ class DesignEditor(
 
         override fun feature(): Feature? {
             val s = sketchId ?: return null
-            if (regions.isEmpty()) return null
+            // With no areas, a thin wall goes along the sketch's open line.
+            if (regions.isEmpty() && !thinOn) return null
             val taper = taperDegrees * PI / 180
             val wall = if (thinOn) thin else 0.0
             if (throughAll) {
