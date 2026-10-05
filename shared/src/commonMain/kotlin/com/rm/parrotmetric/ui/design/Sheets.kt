@@ -132,7 +132,7 @@ fun PartsSheet(editor: DesignEditor, close: () -> Unit) {
     var renaming by remember { mutableStateOf<String?>(null) }
     var newComponentFor by remember { mutableStateOf<String?>(null) }
     SheetFrame("Parts", close) {
-        if (bodies.isEmpty()) Text("No bodies yet", fontSize = 14.sp, color = Palette.muted)
+        if (bodies.isEmpty() && editor.planes().isEmpty()) Text("No bodies yet", fontSize = 14.sp, color = Palette.muted)
         Column(Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState())) {
             for ((component, list) in bodies.groupBy { editor.design.info(it.label).component }) {
                 if (component != null) Text(component, Modifier.padding(start = 6.dp, top = 8.dp, bottom = 2.dp), fontSize = 13.sp, color = Palette.muted, fontWeight = FontWeight.SemiBold)
@@ -162,6 +162,18 @@ fun PartsSheet(editor: DesignEditor, close: () -> Unit) {
                             }
                         }
                     }
+                }
+            }
+            // Construction planes, which can be hidden once they've been drawn on.
+            val planes = editor.planes()
+            if (planes.isNotEmpty()) Text("Planes", Modifier.padding(start = 6.dp, top = 8.dp, bottom = 2.dp), fontSize = 13.sp, color = Palette.muted, fontWeight = FontWeight.SemiBold)
+            for ((id, name) in planes) {
+                val hidden = id in editor.design.hiddenPlanes
+                Row(Modifier.fillMaxWidth().height(46.dp).padding(start = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { editor.setPlaneHidden(id, !hidden) }) {
+                        Icon(if (hidden) Icons.hidden else Icons.shown, if (hidden) "Show" else "Hide", tint = if (hidden) Palette.faint else Palette.mint)
+                    }
+                    Text(name, Modifier.weight(1f).alpha(if (hidden) 0.5f else 1f), fontSize = 15.sp, color = Palette.text)
                 }
             }
         }

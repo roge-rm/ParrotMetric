@@ -27,11 +27,13 @@ With a mouse, a click picks just that thing and Shift or Ctrl and a click adds t
 
 ## The parts list
 
-The layers button in the top bar opens the parts list on a phone. On a large screen it's on the left. It has every body in the design, grouped by component.
+The layers button in the top bar opens the parts list on a phone. On a large screen it's on the left. It has every body in the design, grouped by component, and the construction planes.
 
 - The eye shows or hides a body.
 - The dot sets its colour, which also goes into 3MF files.
 - The menu beside it has **Rename…** and puts the body into a component or takes it out (see Components and joints).
+
+Under **Planes** are the construction planes, each with an eye to hide it once you've drawn on it.
 
 ## The history
 

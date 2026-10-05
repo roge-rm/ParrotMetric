@@ -91,6 +91,7 @@ object DesignFile {
         "parameters" to design.parameters.map { mapOf("name" to it.name, "expression" to it.expression) },
         "expressions" to design.expressions.mapKeys { it.key.toString() },
         "suppressed" to design.suppressed.sorted(),
+        "hiddenPlanes" to design.hiddenPlanes.sorted(),
         "configurations" to design.configurations.map { c ->
             mapOf("name" to c.name, "parameters" to c.parameters, "suppressed" to c.suppressed.sorted())
         },
@@ -135,6 +136,7 @@ object DesignFile {
         into.load(
             features, root.int("marker"), bodies, parameters, expressions, suppressed, hints,
             configurations, (root["configuration"] as? Json.Str)?.value,
+            (root["hiddenPlanes"] as? Json.Arr)?.items?.map { (it as Json.Num).value.toInt() }?.toSet() ?: emptySet(),
         )
         return (root["title"] as? Json.Str)?.value ?: "Untitled"
     }

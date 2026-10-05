@@ -275,6 +275,15 @@ class DesignEditor(
 
     fun setHidden(label: String, hidden: Boolean) = setInfo(label) { it.copy(hidden = hidden) }
 
+    /** Construction planes there are, by id and name, for the parts list. */
+    fun planes(): List<Pair<Int, String>> = design.active.filterIsInstance<PlaneFeature>().map { it.id to it.name }
+
+    fun setPlaneHidden(id: Int, hidden: Boolean) {
+        checkpoint()
+        if (hidden) design.hiddenPlanes += id else design.hiddenPlanes -= id
+        changed()
+    }
+
     /** 0xRRGGBB, or null for the usual grey. */
     fun setColour(label: String, colour: Int?) = setInfo(label) { it.copy(colour = colour) }
 
@@ -511,7 +520,7 @@ class DesignEditor(
                         val sketches = sketchesToShow(features, draft)
                         val shown = sketches.mapNotNull { s -> b.sketchPlanes[s.id]?.let { s to it } }
                         val refit = refitNow || (!hadBodies && b.bodies.isNotEmpty())
-                        val planeFeatures = features.filterIsInstance<PlaneFeature>().filter { b.sketchPlanes.containsKey(it.id) }
+                        val planeFeatures = features.filterIsInstance<PlaneFeature>().filter { b.sketchPlanes.containsKey(it.id) && it.id !in design.hiddenPlanes }
                         val visible = b.bodies.filter { !design.info(it.label).hidden }
                         shownBodies = visible
                         viewport.show(
@@ -1101,7 +1110,8 @@ class DesignEditor(
                 rebuild()
             }
             is LoftDraft -> {
-                d.sections = loftPicks()
+                // A tap on empty space keeps what's picked, as Sweep does.
+                loftPicks().takeIf { it.isNotEmpty() }?.let { d.sections = it }
                 rebuild()
             }
             is ThreadDraft -> {

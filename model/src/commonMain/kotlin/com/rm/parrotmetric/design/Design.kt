@@ -30,6 +30,9 @@ class Design {
     /** Features turned off: kept in the history but not built. */
     val suppressed = mutableSetOf<Int>()
 
+    /** Construction planes hidden from view, by feature id. */
+    val hiddenPlanes = mutableSetOf<Int>()
+
     /** A named version of the design: its parameters' expressions and which features are off. */
     data class Configuration(val name: String, val parameters: Map<String, String>, val suppressed: Set<Int>)
 
@@ -84,7 +87,10 @@ class Design {
         parameters: List<Parameter> = emptyList(), expressions: Map<Int, Map<String, String>> = emptyMap(),
         suppressed: Set<Int> = emptySet(), hints: Map<String, DoubleArray> = emptyMap(),
         configurations: List<Configuration> = emptyList(), configuration: String? = null,
+        hiddenPlanes: Set<Int> = emptySet(),
     ) {
+        this.hiddenPlanes.clear()
+        this.hiddenPlanes += hiddenPlanes
         this.configurations.clear()
         this.configurations += configurations
         this.configuration = configuration?.takeIf { n -> configurations.any { it.name == n } }
@@ -148,6 +154,7 @@ class Design {
         internal val suppressed: Set<Int>,
         internal val configurations: List<Configuration> = emptyList(),
         internal val configuration: String? = null,
+        internal val hiddenPlanes: Set<Int> = emptySet(),
     )
 
     fun snapshot() = Snapshot(
@@ -161,6 +168,7 @@ class Design {
         suppressed.toSet(),
         configurations.toList(),
         configuration,
+        hiddenPlanes.toSet(),
     )
 
     fun restore(s: Snapshot) {
@@ -171,6 +179,8 @@ class Design {
         for ((sketch, snap) in s.sketches) sketch.restore(snap)
         bodies.clear()
         bodies.putAll(s.bodies)
+        hiddenPlanes.clear()
+        hiddenPlanes += s.hiddenPlanes
         parameters.clear()
         parameters += s.parameters
         expressions.clear()
