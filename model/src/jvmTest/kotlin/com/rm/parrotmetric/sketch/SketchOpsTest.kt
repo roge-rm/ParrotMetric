@@ -193,6 +193,29 @@ class SketchOpsTest {
         circles.forEach { near(1.375, s.radius(it)) }
     }
 
+    @Test
+    fun anOffsetOutlineKeepsItsDistance() {
+        // A 65 x 30 rounded rectangle, fully set, offset outwards by 2.5.
+        val s = Sketch()
+        val o = s.origin
+        val br = s.addPoint(65.0, 0.0); val tr = s.addPoint(65.0, 30.0); val tl = s.addPoint(0.0, 30.0)
+        val bottom = s.addLine(o, br); val right = s.addLine(br, tr); val top = s.addLine(tr, tl); val left = s.addLine(tl, o)
+        s.add(Constraint.Horizontal(bottom)); s.add(Constraint.Horizontal(top)); s.add(Constraint.Vertical(right)); s.add(Constraint.Vertical(left))
+        s.add(Constraint.Length(bottom, 65.0)); s.add(Constraint.Length(right, 30.0))
+        for (p in listOf(o, br, tr, tl)) assertNull(SketchOps.filletCorner(s, p, 3.0))
+        assertEquals(0, s.freedom().count)
+        val outline = s.curves.toList()
+        assertNull(SketchOps.offset(s, outline, 2.5, "gap+wall"))
+        assertEquals(0, s.freedom().count)
+        val held = s.constraints.filterIsInstance<Constraint.PointLineDistance>()
+        assertTrue(held.isNotEmpty() && held.all { it.expression == "gap+wall" })
+        // Wider walls: the whole outline moves out.
+        held.first().value = 4.0
+        s.solve()
+        val xs = s.curves.filter { it !in outline }.flatMap { it.points() }.map { s.x(it) }
+        near(-4.0, xs.min(), 1e-5); near(69.0, xs.max(), 1e-5)
+    }
+
     /** A square corner at the origin: one line along x and one up y, 10 long. */
     private fun corner(s: Sketch): Point {
         val p = s.addPoint(0.0, 0.0)

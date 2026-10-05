@@ -1325,6 +1325,7 @@ class SketchEditor(
         val value = if (edit.isAngle) typed * PI / 180 else typed
         checkpoint()
         val ok = if (edit.action != null) {
+            typedExpression = expression
             val why = edit.action.invoke(value)
             if (why != null) message = why
             why == null
@@ -1428,10 +1429,13 @@ class SketchEditor(
         return null
     }
 
+    /** What was typed for the number an action is doing, when it used a parameter's name. */
+    private var typedExpression: String? = null
+
     fun startOffset() {
         val curves = selectedCurves
         if (curves.isEmpty()) return
-        editing = DimensionEdit(null, null, 2.0, false, "Offset", action = { d -> SketchOps.offset(sketch, curves, d).also { if (it == null) selection.clear() } })
+        editing = DimensionEdit(null, null, 2.0, false, "Offset", action = { d -> SketchOps.offset(sketch, curves, d, typedExpression).also { if (it == null) selection.clear() } })
     }
 
     fun startCornerChamfer() {

@@ -313,7 +313,7 @@ object SketchOps {
      * the same centre. Positive moves away from the middle of what's copied.
      * Copies of lines that met still meet, at their new corner.
      */
-    fun offset(s: Sketch, curves: List<Curve>, distance: Double): String? {
+    fun offset(s: Sketch, curves: List<Curve>, distance: Double, expression: String? = null): String? {
         if (curves.isEmpty()) return "Select the curves to copy"
         if (curves.any { it is Spline }) return "Splines can't be offset yet"
         if (abs(distance) < 1e-9) return "The distance can't be 0"
@@ -360,11 +360,25 @@ object SketchOps {
             s.addPoint(u, v)
         }
         for (c in curves) if (radial(c) > 0 && newRadius(c) <= 1e-9) return "The copy of a circle or arc would have no size"
+        val made = LinkedHashMap<Curve, Curve>()
         for (c in curves) when (c) {
-            is Line -> s.addLine(moveOf(c.a), moveOf(c.b), c.construction).also { s.add(Constraint.Parallel(it, c)) }
-            is Circle -> s.addCircle(c.centre, newRadius(c), c.construction)
-            is Arc -> s.addArc(c.centre, moveOf(c.start), moveOf(c.end), c.construction)
+            is Line -> s.addLine(moveOf(c.a), moveOf(c.b), c.construction).also { s.add(Constraint.Parallel(it, c)); made[c] = it }
+            is Circle -> s.addCircle(c.centre, newRadius(c), c.construction).also { made[c] = it }
+            is Arc -> s.addArc(c.centre, moveOf(c.start), moveOf(c.end), c.construction).also { made[c] = it }
             is Spline -> {}
+        }
+        // Where a line ran smoothly into an arc, square to its radius, the copies do too.
+        for ((old, new) in made) if (old is Line && new is Line) for (p in old.points()) {
+            val arc = curves.firstOrNull { it is Arc && p in it.points() && p !== it.centre } as Arc? ?: continue
+            val dx = s.x(old.b) - s.x(old.a); val dy = s.y(old.b) - s.y(old.a)
+            val rx = s.x(p) - s.x(arc.centre); val ry = s.y(p) - s.y(arc.centre)
+            if (abs(dx * rx + dy * ry) > 1e-6 * hypot(dx, dy) * hypot(rx, ry)) continue
+            s.add(Constraint.TangentJoin(new, made.getValue(arc), moved.getValue(p)))
+        }
+        // Each line is held its distance from the one it came from, typed as a parameter if it was,
+        // so changing the distance moves it; round a smooth outline one of these sets them all.
+        for ((old, new) in made) if (old is Line && new is Line) {
+            s.add(Constraint.PointLineDistance(new.a, old, abs(distance)).also { it.expression = expression })
         }
         s.solve()
         return null
