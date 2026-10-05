@@ -121,6 +121,8 @@ data class ModelState(
     /** While a server is being tried, and why it couldn't be used. */
     val connecting: Boolean = false,
     val serverProblem: String? = null,
+    /** Apps an export can be handed to, such as slicers. */
+    val handOffs: List<String> = emptyList(),
 )
 
 /** Which screen layout: by the window's width, or always the phone one or the large-screen one. */
@@ -137,6 +139,8 @@ interface ModelActions {
     fun saveAs()
     fun openFile()
     fun export(request: com.rm.parrotmetric.ui.design.ExportRequest)
+    /** Hands the bodies to an app such as a slicer, one of [ModelState.handOffs]. */
+    fun handOff(to: String, request: com.rm.parrotmetric.ui.design.ExportRequest) {}
     fun clearSelection()
     fun fit()
     /** Fits an open sketch in view if any of it has gone past the edges. */
@@ -419,7 +423,7 @@ fun ModelScreen(
                     } else if (sheet == "parameters") {
                         com.rm.parrotmetric.ui.design.ParametersSheet(design) { sheet = null }
                     } else if (sheet == "export") {
-                        com.rm.parrotmetric.ui.design.ExportSheet(design, { sheet = null }) { actions.export(it); sheet = null }
+                        com.rm.parrotmetric.ui.design.ExportSheet(design, { sheet = null }, state.handOffs, { to, r -> actions.handOff(to, r); sheet = null }) { actions.export(it); sheet = null }
                     } else {
                         AnimatedVisibility(
                             visible = openGroup != null,
@@ -763,7 +767,7 @@ private fun ExpandedModel(
                     sheet == "surfacecheck" -> com.rm.parrotmetric.ui.design.SurfaceCheckSheet(design) { design.stopPrintCheck(); setSheet(null) }
                     sheet == "interference" -> com.rm.parrotmetric.ui.design.InterferenceSheet(design) { setSheet(null) }
                     sheet == "parameters" -> com.rm.parrotmetric.ui.design.ParametersSheet(design) { setSheet(null) }
-                    sheet == "export" -> com.rm.parrotmetric.ui.design.ExportSheet(design, { setSheet(null) }) { actions.export(it); setSheet(null) }
+                    sheet == "export" -> com.rm.parrotmetric.ui.design.ExportSheet(design, { setSheet(null) }, state.handOffs, { to, r -> actions.handOff(to, r); setSheet(null) }) { actions.export(it); setSheet(null) }
                 }
             }
         }

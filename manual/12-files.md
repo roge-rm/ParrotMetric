@@ -31,6 +31,15 @@ From the start screen, a mesh, a STEP file or a picture starts a new design.
 
 It exports **All shown bodies** together, or tap bodies or components in the list to export just those.
 
+## Sending to a slicer
+
+The Export sheet can also hand the part straight to a slicer, as a 3MF that keeps each body and its colour.
+
+- On a computer there's an **Open in** button for each slicer it finds: Bambu Studio, OrcaSlicer, PrusaSlicer and Cura. **Open with the default app** opens it in whatever opens 3MF files.
+- On Android, **Share…** sends it through the share sheet, to Drive, an email or another app.
+
+ParrotMetric doesn't slice, so printing goes through your slicer as usual. For a Bambu printer, open it in Bambu Studio or OrcaSlicer and print from there.
+
 ## Keeping designs in sync
 
 In Settings, **Projects folder** lets you keep your designs in one place so they're the same on every device.

@@ -122,6 +122,24 @@ private class DesktopFiles(private val data: File) : PlatformFiles {
 
     override val http: Http = JdkHttp
 
+    private val slicers = Slicers.find(onWindows)
+    private val defaultApp = "Open with the default app"
+
+    override val handOffs: List<String> =
+        slicers.map { "Open in ${it.name}" } + listOfNotNull(defaultApp.takeIf { java.awt.Desktop.isDesktopSupported() })
+
+    override suspend fun handOff(to: String, name: String, bytes: ByteArray): String? = withContext(Dispatchers.IO) {
+        // Kept in the app's folder, where a sandboxed slicer can still read it.
+        val file = File(data, "to-slicer").apply { mkdirs() }.resolve(name)
+        runCatching { file.writeBytes(bytes) }.onFailure { return@withContext "Couldn't write the file" }
+        runCatching {
+            val slicer = slicers.firstOrNull { "Open in ${it.name}" == to }
+            if (slicer != null) ProcessBuilder(slicer.command + file.path).redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.DISCARD).start()
+            else java.awt.Desktop.getDesktop().open(file)
+            null
+        }.getOrElse { "Couldn't open it: ${it.message}" }
+    }
+
     override val deviceName: String
         get() = runCatching { java.net.InetAddress.getLocalHost().hostName }.getOrNull()?.substringBefore('.')?.ifEmpty { null } ?: "this computer"
 }

@@ -54,6 +54,8 @@ class AppHolder : ViewModel() {
         override val hasFolders get() = true
         override fun folder(token: String) = current.folder(token)
         override val http get() = current.http
+        override val handOffs get() = current.handOffs
+        override suspend fun handOff(to: String, name: String, bytes: ByteArray) = current.handOff(to, name, bytes)
         override val deviceName get() = current.deviceName
     }
 
@@ -149,6 +151,21 @@ class MainActivity : ComponentActivity() {
 
         override val deviceName: String get() = android.os.Build.MODEL ?: "this device"
         override val http: Http = AndroidHttp
+
+        override val handOffs = listOf("Share…")
+
+        /** Shares the 3MF through the system's share sheet, to a slicer or anywhere else. */
+        override suspend fun handOff(to: String, name: String, bytes: ByteArray): String? {
+            val file = withContext(Dispatchers.IO) {
+                runCatching { java.io.File(cacheDir, "shared").apply { mkdirs() }.resolve(name).also { it.writeBytes(bytes) } }.getOrNull()
+            } ?: return "Couldn't write the file"
+            val uri = androidx.core.content.FileProvider.getUriForFile(this@MainActivity, "$packageName.files", file)
+            val send = Intent(Intent.ACTION_SEND)
+                .setType("model/3mf")
+                .putExtra(Intent.EXTRA_STREAM, uri)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            return runCatching { startActivity(Intent.createChooser(send, name)); null }.getOrElse { "Nothing here can take it" }
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

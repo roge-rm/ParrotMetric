@@ -62,9 +62,12 @@ private fun SheetFrame(title: String, close: () -> Unit, content: @Composable ()
     }
 }
 
-/** Export: format, quality for mesh formats, and which bodies. */
+/** Export: format, quality for mesh formats, and which bodies; and handing them to a slicer as a 3MF. */
 @Composable
-fun ExportSheet(editor: DesignEditor, close: () -> Unit, export: (ExportRequest) -> Unit) {
+fun ExportSheet(
+    editor: DesignEditor, close: () -> Unit, handOffs: List<String> = emptyList(), handOff: (String, ExportRequest) -> Unit = { _, _ -> },
+    export: (ExportRequest) -> Unit,
+) {
     editor.version
     val bodies = editor.allBodies().filter { !editor.design.info(it.label).hidden }
     var format by remember { mutableStateOf(0) }
@@ -93,6 +96,15 @@ fun ExportSheet(editor: DesignEditor, close: () -> Unit, export: (ExportRequest)
             contentColor = Palette.ink,
         ) {
             Box(contentAlignment = Alignment.Center) { Text("Export ${formats[format]}…", fontSize = 15.sp, fontWeight = FontWeight.Bold) }
+        }
+        for (to in handOffs) Surface(
+            onClick = { handOff(to, ExportRequest("3MF", if (format < 3) quality else 0, picked.toList())) },
+            modifier = Modifier.fillMaxWidth().height(46.dp),
+            shape = RoundedCornerShape(18.dp),
+            color = Palette.raised,
+            contentColor = Palette.text,
+        ) {
+            Box(contentAlignment = Alignment.Center) { Text(to, fontSize = 15.sp, fontWeight = FontWeight.SemiBold) }
         }
     }
 }

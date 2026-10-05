@@ -50,6 +50,11 @@ interface PlatformFiles {
     val hasFolders: Boolean get() = false
     /** The folder a token from [chooseFolder] names, or null if it can't be reached any more. */
     fun folder(token: String): ProjectFolder? = null
+    /** Apps an exported part can be handed to, such as slicers, by what their button says; empty if none. */
+    val handOffs: List<String> get() = emptyList()
+    /** Hands a 3MF called [name] to the app [to], one of [handOffs]. Why it couldn't, or null. Main thread. */
+    suspend fun handOff(to: String, name: String, bytes: ByteArray): String? = "That isn't possible here"
+
     /** HTTP, for a projects folder on a WebDAV server, or null if this platform can't. */
     val http: Http? get() = null
     /** What to call this device in the name of a copy kept after a clash, such as "Pixel 5". */
@@ -113,7 +118,7 @@ class AppController(
         if (state.autoDetail == null) measureSpeed()
         folder = settings["folder"]?.let(::folderFor)
         state = state.copy(
-            folderName = folder?.name, canChooseFolder = files.hasFolders, canUseServer = files.http != null,
+            folderName = folder?.name, canChooseFolder = files.hasFolders, canUseServer = files.http != null, handOffs = files.handOffs,
             server = settings["folder"]?.let(DavLogin::from),
         )
         refreshProjects()
@@ -395,6 +400,25 @@ class AppController(
         }
     }
 
+    /** Hands the bodies [request] picks to [to], such as a slicer, as a 3MF. */
+    private fun handOff(to: String, request: ExportRequest) {
+        val chosen = design.allBodies().filter { b ->
+            if (request.labels.isEmpty()) !design.design.info(b.label).hidden else b.label in request.labels
+        }
+        val bodies = chosen.map { it.handle }.toLongArray()
+        val names = chosen.map { design.design.nameOf(it.label) }.toTypedArray()
+        val colours = chosen.map { design.design.info(it.label).colour ?: -1 }.toIntArray()
+        scope.launch {
+            val error = try {
+                val bytes = withContext(Dispatchers.Default) { core.exportBodies(bodies, names, colours, FileFormat.ThreeMf.ordinal, request.quality) }
+                if (bytes == null) "There's nothing to export" else files.handOff(to, projectFileName(state.title).removeSuffix(".pmet") + ".3mf", bytes)
+            } catch (e: RuntimeException) {
+                e.message ?: "Couldn't export"
+            }
+            if (error != null) design.message = error
+        }
+    }
+
     private fun export(request: ExportRequest, sink: FileSink) {
         val format = FileFormat.forLabel(request.format)
         val chosen = design.allBodies().filter { b ->
@@ -592,6 +616,8 @@ class AppController(
 
         override fun saveAs() = files.create(state.title + ".pmet", ::writeDesign)
         override fun openFile() = files.open(::opened)
+        override fun handOff(to: String, request: ExportRequest) = this@AppController.handOff(to, request)
+
         override fun export(request: ExportRequest) =
             files.create(state.title + "." + FileFormat.forLabel(request.format).extensions.first()) { export(request, it) }
 
