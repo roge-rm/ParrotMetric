@@ -962,6 +962,26 @@ JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_coil(JNIEnv* env, jobject,
     }
 }
 
+JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_lipTool(JNIEnv* env, jobject, jint id, jlong body, jstring face, jdouble inside,
+                                                             jdouble outside, jdouble height, jstring tag) {
+    try {
+        auto text = [&](jstring j) {
+            const char* c = env->GetStringUTFChars(j, nullptr);
+            std::string s(c);
+            env->ReleaseStringUTFChars(j, c);
+            return s;
+        };
+        std::string name = text(face), t = text(tag);
+        std::unique_lock<std::mutex> g(lock);
+        pm::NamedShape s = solidOf(body);
+        g.unlock();
+        return keep(pm::lipTool(id, s, name, inside, outside, height, t));
+    } catch (const std::exception& e) {
+        fail(env, e.what());
+        return 0;
+    }
+}
+
 JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_thread(JNIEnv* env, jobject, jint id, jlong body, jstring face, jdouble pitch) {
     try {
         const char* c = env->GetStringUTFChars(face, nullptr);

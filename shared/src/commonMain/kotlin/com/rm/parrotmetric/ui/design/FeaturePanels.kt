@@ -113,6 +113,7 @@ fun FeaturePanel(editor: DesignEditor, maxHeight: androidx.compose.ui.unit.Dp = 
                 is DesignEditor.PipeDraft -> PipeSettings(editor, d)
                 is DesignEditor.CoilDraft -> CoilSettings(editor, d)
                 is DesignEditor.ThreadDraft -> ThreadSettings(editor, d)
+                is DesignEditor.LipDraft -> LipSettings(editor, d)
                 is DesignEditor.LoftDraft -> LoftSettings(editor, d)
                 is DesignEditor.CanvasDraft -> CanvasSettings(editor, d)
                 else -> {}
@@ -291,6 +292,28 @@ private fun CoilSettings(editor: DesignEditor, d: DesignEditor.CoilDraft) {
         d.operation = it
         editor.draftChanged()
     }
+}
+
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun LipSettings(editor: DesignEditor, d: DesignEditor.LipDraft) {
+    Header("Lip", Icons.lip, Palette.modify, if (d.face != null) "1 face" else null)
+    Field(editor, d, "width", "Width", d.width, "mm", allowNegative = false) { d.width = it; editor.draftChanged() }
+    Field(editor, d, "height", "Height", d.height, "mm", allowNegative = false) { d.height = it; editor.draftChanged() }
+    // The body the groove goes in, usually the lid sitting on the rim.
+    val base = d.face?.let { editor.bodyWithFace(it) }
+    val others = editor.allBodies().map { it.label }.filter { it != base }
+    if (others.isEmpty()) return
+    Text("Groove in", fontSize = 13.sp, color = Palette.muted)
+    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        for (l in listOf<String?>(null) + others) Surface(
+            onClick = { d.lid = l; editor.draftChanged() },
+            shape = RoundedCornerShape(12.dp),
+            color = if (d.lid == l) Palette.line else Palette.ground,
+            contentColor = Palette.text,
+        ) { Text(l?.let { editor.design.nameOf(it) } ?: "Nothing", Modifier.padding(horizontal = 10.dp, vertical = 7.dp), fontSize = 13.sp) }
+    }
+    if (d.lid != null) Field(editor, d, "gap", "Gap", d.gap, "mm", allowNegative = false) { d.gap = it; editor.draftChanged() }
 }
 
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)

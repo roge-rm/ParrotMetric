@@ -234,6 +234,14 @@ NamedShape meshToSolid(int id, const Mesh& mesh);
 /** The plane of a named flat face, facing out, with x as given if it lies in the plane. Throws if the face isn't flat. */
 gp_Ax3 facePlane(const NamedShape& body, const std::string& face);
 
+/**
+ * Rings round the openings in a flat rim face, standing [height] mm out of
+ * it: from [inside] to [outside] mm out from each opening's edge (less than
+ * 0 is into the opening). A lip on a base is (0, width); the groove in its
+ * lid is (-gap, width + gap). Faces are F<id>.<tag><n>.
+ */
+NamedShape lipTool(int id, const NamedShape& body, const std::string& face, double inside, double outside, double height, const std::string& tag);
+
 /** Whether two solids share any volume or meet over a face, so that joining them makes one solid. */
 bool overlaps(const NamedShape& a, const NamedShape& b);
 

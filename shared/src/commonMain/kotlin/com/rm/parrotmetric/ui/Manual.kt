@@ -160,6 +160,7 @@ object Manual {
             ManualBlock(ManualKind.Para, "Edges that join smoothly are taken together, so one tap can pick the whole way round a rounded corner."),
             ManualBlock(ManualKind.Heading, "Faces"),
             ManualBlock(ManualKind.Bullet, "**Shell** hollows the body out to the wall thickness you give. The faces you pick are left open, and with none it's hollow inside."),
+            ManualBlock(ManualKind.Bullet, "**Lip** stands a lip round the inside of an opening, on the top of its wall: tap the top face, then set the **Width** and **Height**. Under **Groove in**, pick the lid and it gets a groove the lip fits into, with the **Gap** you give all round (0.2 mm to start). The lid should sit on the top of the wall."),
             ManualBlock(ManualKind.Bullet, "**Press pull** moves a face in or out, and the faces next to it follow."),
             ManualBlock(ManualKind.Bullet, "**Delete face** takes faces away and closes the gap, for getting rid of a round or a small feature."),
             ManualBlock(ManualKind.Bullet, "**Draft** tilts faces by an angle, for parts that need to come out of a mould. Pick the faces to tilt, then switch to **Pivot face** and pick the face they turn about."),

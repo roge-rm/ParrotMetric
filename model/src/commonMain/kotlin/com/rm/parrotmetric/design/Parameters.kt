@@ -147,6 +147,12 @@ object Parametrics {
                 else -> f
             }
             is ThreadFeature -> if (field == "pitch") f.copy(pitch = v) else f
+            is LipFeature -> when (field) {
+                "width" -> f.copy(width = v)
+                "height" -> f.copy(height = v)
+                "gap" -> f.copy(gap = v)
+                else -> f
+            }
             is CanvasFeature -> when (field) {
                 "width" -> f.copy(width = v)
                 "u" -> f.copy(u = v)

@@ -152,6 +152,29 @@ TEST_CASE("a shell names each inside face after the face it lines") {
     CHECK(std::abs(floor.Location().Z()) == Catch::Approx(2));
 }
 
+TEST_CASE("a lip stands round the opening of a shell, and its groove is wider") {
+    NamedShape box = extrude(1, top, rectangle(40, 20), {{{1, 2, 3, 4}, 5, 5}}, 10, 0);
+    NamedShape cup = shell(2, box, {"F1.end"}, 2);
+    // The rim: the flat face at the top.
+    std::string rim;
+    for (const auto& n : cup.faceNames()) {
+        try {
+            if (std::abs(facePlane(cup, n).Location().Z() - 10) < 1e-6) rim = n;
+        } catch (const std::exception&) {}
+    }
+    REQUIRE(!rim.empty());
+    const double pi = 3.14159265358979;
+    // Round the 36 x 16 opening, 1 wide with round outside corners, 2 tall.
+    NamedShape lip = lipTool(3, cup, rim, 0, 1, 2, "l");
+    CHECK(volume(lip) == Catch::Approx((104 + pi) * 2).epsilon(1e-3));
+    CHECK(bounds(lip)[5] == Catch::Approx(12));
+    CHECK(has(lip.faceNames(), "F3.l0"));
+    // 0.2 bigger all round and 0.2 deeper.
+    NamedShape groove = lipTool(3, cup, rim, -0.2, 1.2, 2.2, "g");
+    CHECK(volume(groove) == Catch::Approx((36 * 16 + 104 * 1.2 + pi * 1.44 - 35.6 * 15.6) * 2.2).epsilon(1e-3));
+    CHECK_THROWS_WITH(lipTool(3, box, "F1.start", 0, 1, 2, "l"), Catch::Matchers::Equals("Pick the top of a wall, round an opening"));
+}
+
 TEST_CASE("a shell keeps the inside corner of an L sharp") {
     // An L, 40 by 30 with arms 15 wide, 20 high and open at the top.
     std::vector<SketchCurve> l = {line(1, 0, 0, 40, 0), line(2, 40, 0, 40, 15), line(3, 40, 15, 15, 15),

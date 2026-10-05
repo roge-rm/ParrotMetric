@@ -218,6 +218,9 @@ object DesignFile {
                 "turns" to f.turns, "section" to f.section, "square" to f.square, "operation" to f.operation.name,
             )
             is ThreadFeature -> mapOf("type" to "thread", "face" to f.face, "pitch" to f.pitch)
+            is com.rm.parrotmetric.design.LipFeature -> mapOf(
+                "type" to "lip", "face" to f.face, "width" to f.width, "height" to f.height, "gap" to f.gap, "lid" to f.lid,
+            )
             is CanvasFeature -> mapOf(
                 "type" to "canvas", "plane" to plane(f.plane), "image" to Base64.encode(f.image), "aspect" to f.aspect, "width" to f.width,
                 "u" to f.u, "v" to f.v, "angle" to f.angle, "opacity" to f.opacity,
@@ -318,6 +321,9 @@ object DesignFile {
                 o.bool("square"), Operation.valueOf(o.str("operation")),
             )
             "thread" -> ThreadFeature(id, name, o.str("face"), o.num("pitch"))
+            "lip" -> com.rm.parrotmetric.design.LipFeature(
+                id, name, o.str("face"), o.num("width"), o.num("height"), o.num("gap"), (o["lid"] as? Json.Str)?.value,
+            )
             "canvas" -> CanvasFeature(
                 id, name, plane(o.obj("plane")), Base64.decode(o.str("image")), o.num("aspect"), o.num("width"), o.num("u"), o.num("v"),
                 o.num("angle"), o.num("opacity"),

@@ -99,6 +99,11 @@ interface Kernel {
     fun coil(id: Int, plane: SketchPlane, u: Double, v: Double, diameter: Double, pitch: Double, turns: Double, section: Double, square: Boolean): Long
     /** The body with an ISO metric thread cut into a round face. */
     fun thread(id: Int, body: Long, face: String, pitch: Double): Long
+    /**
+     * Rings round the openings in a flat rim face, standing [height] out of it, from
+     * [inside] to [outside] mm out from each opening's edge. Faces are F<id>.<tag><n>.
+     */
+    fun lipTool(id: Int, body: Long, face: String, inside: Double, outside: Double, height: Double, tag: String): Long
     /** A solid through one area of each sketch, in order. */
     fun loft(id: Int, sections: List<Triple<SketchPlane, List<ProfileCurve>, RegionRef>>, ruled: Boolean): Long
     fun retain(body: Long)

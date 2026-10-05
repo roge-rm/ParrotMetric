@@ -190,6 +190,7 @@ class DesignEditor(
         is com.rm.parrotmetric.design.EmbossFeature -> "emboss"
         is HoleFeature -> "hole"
         is com.rm.parrotmetric.design.ThreadFeature -> "thread"
+        is com.rm.parrotmetric.design.LipFeature -> "lip"
         is MirrorFeature -> "mirror"
         is PatternFeature -> "pattern"
         is com.rm.parrotmetric.design.JointFeature -> "joint"
@@ -208,6 +209,9 @@ class DesignEditor(
 
     /** Every body there is now, labels and handles, hidden ones too. */
     fun allBodies(): List<com.rm.parrotmetric.design.BodyState> = built?.bodies ?: emptyList()
+
+    /** The body with this face, if one has it. */
+    fun bodyWithFace(face: String): String? = allBodies().firstOrNull { face in kernel.faceNames(it.handle) }?.label
 
     /** The bodies that aren't hidden, for export. */
     fun bodies(): List<Long> = shownBodies.map { it.handle }
@@ -810,6 +814,18 @@ class DesignEditor(
         rebuild()
     }
 
+    fun startLip() {
+        val d = LipDraft(null)
+        lipPick(d)
+        panel = d
+        rebuild()
+    }
+
+    /** A lip's rim from the selection: the first flat face. */
+    private fun lipPick(d: LipDraft) {
+        d.face = viewport.selectedFaces().map { it.second }.firstOrNull { it.isNotEmpty() && faceKind(it) == 4.0 } ?: return
+    }
+
     fun startLoft() {
         val d = LoftDraft(null)
         d.sections = loftPicks()
@@ -1158,6 +1174,7 @@ class DesignEditor(
             is com.rm.parrotmetric.design.PipeFeature -> PipeDraft(f)
             is com.rm.parrotmetric.design.CoilFeature -> CoilDraft(f).also { it.planes = planeChoices() }
             is com.rm.parrotmetric.design.ThreadFeature -> ThreadDraft(f)
+            is com.rm.parrotmetric.design.LipFeature -> LipDraft(f)
             is com.rm.parrotmetric.design.LoftFeature -> LoftDraft(f)
             is com.rm.parrotmetric.design.CanvasFeature -> CanvasDraft(f, f.image).also { it.planes = planeChoices() }
             else -> return f
@@ -1218,6 +1235,10 @@ class DesignEditor(
             }
             is ThreadDraft -> {
                 threadPick(d)
+                rebuild()
+            }
+            is LipDraft -> {
+                lipPick(d)
                 rebuild()
             }
             is AreaDraft -> {
@@ -1284,6 +1305,7 @@ class DesignEditor(
             is PipeDraft -> viewport.select(d.pathEdges, emptyList())
             is LoftDraft -> viewport.select(emptyList(), d.sections.flatMap { regionPairs(it.sketchId, listOf(it.region)) })
             is ThreadDraft -> viewport.select(emptyList(), emptyList(), listOfNotNull(d.face))
+            is LipDraft -> viewport.select(emptyList(), emptyList(), listOfNotNull(d.face))
             is AreaDraft -> {
                 val s = shownSketches.indexOfFirst { it.id == d.sketchId }
                 if (s < 0) return
@@ -1488,6 +1510,18 @@ class DesignEditor(
         var pitch by mutableStateOf(editing?.pitch ?: 1.0)
         override fun feature(): Feature? = face?.let { com.rm.parrotmetric.design.ThreadFeature(id, name, it, pitch) }
         override fun missing() = "Tap the round face of a shaft or hole"
+    }
+
+    inner class LipDraft(editing: com.rm.parrotmetric.design.LipFeature?) : FeatureDraft() {
+        val id = editing?.id ?: newId()
+        private val name = editing?.name ?: nextName("Lip", design.features.count { it is com.rm.parrotmetric.design.LipFeature })
+        var face by mutableStateOf(editing?.face)
+        var width by mutableStateOf(editing?.width ?: 1.0)
+        var height by mutableStateOf(editing?.height ?: 2.0)
+        var gap by mutableStateOf(editing?.gap ?: 0.2)
+        var lid by mutableStateOf(editing?.lid)
+        override fun feature(): Feature? = face?.let { com.rm.parrotmetric.design.LipFeature(id, name, it, width, height, gap, lid) }
+        override fun missing() = "Tap the top of a wall, round the opening"
     }
 
     /** A loft through areas of sketches, in the order they're tapped. */

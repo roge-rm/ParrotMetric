@@ -1791,4 +1791,69 @@ NamedShape loft(int id, const std::vector<LoftProfile>& profiles, bool ruled) {
     }
 }
 
+namespace {
+
+/** A flat face grown outward by d mm (shrunk when d is less than 0), corners going round as they grow. */
+TopoDS_Face grown(const TopoDS_Face& face, double d) {
+    if (std::abs(d) < 1e-9) return face;
+    BRepOffsetAPI_MakeOffset offset(face, GeomAbs_Arc);
+    offset.Perform(d);
+    if (!offset.IsDone()) throw std::runtime_error("The lip doesn't fit the opening");
+    BRepBuilderAPI_MakeFace out(BRep_Tool::Surface(face), Precision::Confusion());
+    bool any = false;
+    for (TopExp_Explorer w(offset.Shape(), TopAbs_WIRE); w.More(); w.Next()) {
+        out.Add(TopoDS::Wire(w.Current()));
+        any = true;
+    }
+    if (!any || !out.IsDone()) throw std::runtime_error("The lip doesn't fit the opening");
+    ShapeFix_Face fix(out.Face());
+    fix.Perform();
+    return fix.Face();
+}
+
+}  // namespace
+
+NamedShape lipTool(int id, const NamedShape& body, const std::string& face, double inside, double outside, double height, const std::string& tag) {
+    if (height <= 0) throw std::runtime_error("The lip has to be taller than 0");
+    if (outside <= inside) throw std::runtime_error("The lip has to be wider than 0");
+    auto faces = body.findFaces(face);
+    if (faces.empty()) throw std::runtime_error("The rim isn't there any more");
+    const TopoDS_Face& rim = faces[0];
+    BRepAdaptor_Surface surface(rim);
+    if (surface.GetType() != GeomAbs_Plane) throw std::runtime_error("The rim has to be flat");
+    gp_Pln pln = surface.Plane();
+    gp_Dir n = pln.Axis().Direction();
+    if (rim.Orientation() == TopAbs_REVERSED) n.Reverse();
+    try {
+        TopoDS_Wire outer = BRepTools::OuterWire(rim);
+        TopoDS_Compound all;
+        BRep_Builder b;
+        b.MakeCompound(all);
+        bool any = false;
+        // Each opening in the rim gets a ring round it, from inside to outside mm out from its edge.
+        for (TopExp_Explorer w(rim, TopAbs_WIRE); w.More(); w.Next()) {
+            TopoDS_Wire wire = TopoDS::Wire(w.Current());
+            if (wire.IsSame(outer)) continue;
+            BRepBuilderAPI_MakeFace make(pln, wire, Standard_True);
+            if (!make.IsDone()) continue;
+            ShapeFix_Face fix(make.Face());
+            fix.Perform();
+            TopoDS_Face opening = fix.Face();
+            BRepAlgoAPI_Cut ring(grown(opening, outside), grown(opening, inside));
+            if (!ring.IsDone()) throw std::runtime_error("The lip doesn't fit the opening");
+            b.Add(all, BRepPrimAPI_MakePrism(ring.Shape(), gp_Vec(n) * height).Shape());
+            any = true;
+        }
+        if (!any) throw std::runtime_error("Pick the top of a wall, round an opening");
+        NamedShape out;
+        out.shape = all;
+        int k = 0;
+        for (TopExp_Explorer f(all, TopAbs_FACE); f.More(); f.Next())
+            if (!out.names.IsBound(f.Current())) out.names.Bind(f.Current(), prefix(id) + "." + tag + std::to_string(k++));
+        return out;
+    } catch (const Standard_Failure&) {
+        throw std::runtime_error("The lip couldn't be made");
+    }
+}
+
 }  // namespace pm

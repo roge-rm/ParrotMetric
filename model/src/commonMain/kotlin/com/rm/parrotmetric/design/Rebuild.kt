@@ -271,6 +271,35 @@ class Rebuilder(private val kernel: Kernel) {
             val plane = resolvePlane(f.plane, bodies, f, planes)
             applyTool(f, kernel.coil(f.id, plane, f.u, f.v, f.diameter, f.pitch, f.turns, f.section, f.square), f.operation, bodies, planes, made)
         }
+        is LipFeature -> {
+            val rim = ref(f, f.face, false, bodies)
+            val base = bodyWithFace(rim, bodies) ?: throw KernelException("The rim isn't there any more")
+            val lid = f.lid?.let { l -> bodies.firstOrNull { it.label == l } ?: throw KernelException("The lid isn't there any more") }
+            if (lid == base) throw KernelException("The groove goes in another body")
+            // Both from the rim as it is before the lip goes on.
+            val lip = kernel.lipTool(f.id, base.handle, rim, 0.0, f.width, f.height, "l")
+            val groove = try {
+                lid?.let { kernel.lipTool(f.id, base.handle, rim, -f.gap, f.width + f.gap, f.height + f.gap, "g") }
+            } catch (e: KernelException) {
+                kernel.release(lip)
+                throw e
+            }
+            val out = mutableListOf<BodyState>()
+            try {
+                for (b in bodies) out += when {
+                    b == base -> BodyState(b.label, kernel.combine(f.id, b.handle, lip, Operation.Join))
+                    b == lid && groove != null -> BodyState(b.label, kernel.combine(f.id, b.handle, groove, Operation.Cut))
+                    else -> b.also { kernel.retain(it.handle) }
+                }
+            } catch (e: KernelException) {
+                out.forEach { kernel.release(it.handle) }
+                throw e
+            } finally {
+                kernel.release(lip)
+                groove?.let { kernel.release(it) }
+            }
+            Step(f.key(), out, planes, null, made)
+        }
         is ThreadFeature -> {
             val face = ref(f, f.face, false, bodies)
             val body = bodyWithFace(face, bodies) ?: throw KernelException("The face it's on isn't there any more")

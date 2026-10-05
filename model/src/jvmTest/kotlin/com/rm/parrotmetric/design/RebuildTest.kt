@@ -134,6 +134,12 @@ private class FakeKernel : Kernel {
         calls += "coil $id"
         return make(Box(u - diameter / 2, u + diameter / 2, listOf("F$id.c0")))
     }
+    override fun lipTool(id: Int, body: Long, face: String, inside: Double, outside: Double, height: Double, tag: String): Long {
+        calls += "lipTool $id $face $inside $outside $height $tag"
+        val b = bodies.getValue(body)
+        return make(Box(b.to, b.to + height, listOf("F$id.${tag}0")))
+    }
+
     override fun thread(id: Int, body: Long, face: String, pitch: Double): Long {
         calls += "thread $id $face $pitch"
         return make(bodies.getValue(body).let { it.copy(faces = it.faces + "F$id.t0") })
@@ -249,6 +255,25 @@ class RebuildTest {
         val t = sketchAt(d, 50.0, 10.0)
         d.add(ExtrudeFeature(d.newId(), "Extrude", t.id, listOf(RegionRef(listOf(1, 2, 3, 4), 0.0, 0.0)), 10.0, 0.0, Operation.Cut, only = listOf("Body 1")))
         assertEquals("It doesn't reach the bodies it's set to change", Rebuilder(k).rebuild(d.active).errors.values.single())
+    }
+
+    @Test
+    fun aLipGoesOnTheRimAndItsGrooveInTheLid() {
+        val k = FakeKernel()
+        val d = Design()
+        val base = extrude(d, sketchAt(d, 0.0, 10.0), Operation.NewBody)
+        extrude(d, sketchAt(d, 10.0, 2.0), Operation.NewBody)
+        d.add(LipFeature(d.newId(), "Lip", "F${base.id}.end", 1.0, 2.0, 0.2, "Body 2"))
+        val built = Rebuilder(k).rebuild(d.active)
+        assertTrue(built.errors.isEmpty(), built.errors.toString())
+        assertTrue("lipTool 5 F2.end 0.0 1.0 2.0 l" in k.calls, k.calls.toString())
+        assertTrue(k.calls.any { it.startsWith("lipTool 5 F2.end -0.2 1.2") && it.endsWith(" g") }, k.calls.toString())
+        assertEquals(12.0, k.bodies.getValue(built.bodies[0].handle).to)
+        assertEquals(10.0, k.bodies.getValue(built.bodies[1].handle).to)
+
+        // The groove can't go in the body the lip is on.
+        d.replace(LipFeature(5, "Lip", "F${base.id}.end", 1.0, 2.0, 0.2, "Body 1"))
+        assertEquals("The groove goes in another body", Rebuilder(k).rebuild(d.active).errors.values.single())
     }
 
     @Test

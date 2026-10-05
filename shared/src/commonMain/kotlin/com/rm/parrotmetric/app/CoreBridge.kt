@@ -156,6 +156,8 @@ class CoreKernel(private val core: NativeCore) : Kernel {
         call { core.coil(id, plane.numbers(), u, v, diameter, pitch, turns, section, square) }
 
     override fun thread(id: Int, body: Long, face: String, pitch: Double) = call { core.thread(id, body, face, pitch) }
+    override fun lipTool(id: Int, body: Long, face: String, inside: Double, outside: Double, height: Double, tag: String) =
+        call { core.lipTool(id, body, face, inside, outside, height, tag) }
 
     override fun loft(id: Int, sections: List<Triple<SketchPlane, List<ProfileCurve>, RegionRef>>, ruled: Boolean): Long {
         val c = Curves(sections.flatMap { it.second })

@@ -65,6 +65,7 @@ object Icons {
     val chamfer = stroke("chamfer", "M4 20v-9l7-7h9")
     val draft = stroke("draft", "M7 20L9 4h6l2 16", "M4 20h16")
     val shell = stroke("shell", "M3 7h18v13H3z", "M7 7v9h10V7")
+    val lip = stroke("lip", "M3 12v8h18v-8", "M6 12V8h12v4", "M3 5h18")
     val pressPull = stroke("pressPull", "M4 12h16v8H4z", "M12 10V3", "M9 6l3-3 3 3")
     val meshEdit = stroke("meshEdit", "M4 19L12 4l8 15z", "M8 11.5h8M12 4v15M8 11.5L12 19l4-7.5")
     val printCheck = stroke("printCheck", "M4 20h16", "M7 20v-6h10v6", "M9 14l2-6h2l4 6", "M18 5l1.5-1.5")

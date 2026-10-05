@@ -322,3 +322,20 @@ data class MoveFeature(
     val scaled get() = sx != 1.0 || sy != 1.0 || sz != 1.0
     override fun key() = this
 }
+
+/**
+ * A lip standing [height] mm out of a flat rim face, [width] mm wide round the
+ * inside of each opening in it, and when [lid] names a body, a groove in that
+ * body the lip fits into with [gap] mm to spare all round.
+ */
+data class LipFeature(
+    override val id: Int,
+    override val name: String,
+    val face: String,
+    val width: Double,
+    val height: Double,
+    val gap: Double,
+    val lid: String?,
+) : Feature() {
+    override fun key() = this
+}
