@@ -52,7 +52,8 @@ data class CoilFeature(
 }
 
 /** An ISO metric thread [pitch] mm a turn, cut into a round [face]: outside a shaft or inside a hole. */
-data class ThreadFeature(override val id: Int, override val name: String, val face: String, val pitch: Double) : Feature() {
+/** [clearance] (mm) moves the face away from the mating part first: a shaft gets smaller, a hole bigger, so printed threads fit. */
+data class ThreadFeature(override val id: Int, override val name: String, val face: String, val pitch: Double, val clearance: Double = 0.0) : Feature() {
     override fun key() = this
 }
 

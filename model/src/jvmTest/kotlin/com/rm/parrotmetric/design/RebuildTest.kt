@@ -38,10 +38,13 @@ private class FakeKernel : Kernel {
         lastForward = forward
         lastBack = back
         lastThin = thin
+        // With [facingBack] set, a sketch plane there whose front looks towards -x.
+        facingBack?.let { at -> return make(Box(at - forward, at + back, listOf("F$id.$side", "F$id.end"))) }
         val x = curves.minOf { minOf(it.x1, it.x2) }
         val w = curves.maxOf { maxOf(it.x1, it.x2) } - x
         return make(Box(x, x + w, listOf("F$id.$side", "F$id.end")))
     }
+    var facingBack: Double? = null
 
     /** A box's place along x, for faces and edges it has. */
     override fun signature(body: Long, name: String, edge: Boolean) = bodies.getValue(body).let { b ->
@@ -595,6 +598,37 @@ class RebuildTest {
         assertTrue("pipe ${d.features[4].id}" in k.calls)
         assertTrue("thread ${thread.id} F${box.id}.end 1.5" in k.calls)
         assertTrue(k.calls.any { it.startsWith("loft") && it.endsWith(" 2") })
+    }
+
+    @Test
+    fun aCutGoesIntoTheBodyItIsSetToChangeEvenWhenAnotherIsOnTheOtherSide() {
+        val k = FakeKernel()
+        val d = Design()
+        // Body 1 from 0 to 10, Body 2 from 10 to 20; a cut sketched at 10 is set to change Body 2.
+        extrude(d, sketchAt(d, 0.0, 10.0), Operation.NewBody)
+        extrude(d, sketchAt(d, 10.0, 10.0), Operation.NewBody)
+        val s = sketchAt(d, 10.0, 0.5)
+        val r = Rebuilder(k)
+        r.rebuild(d.active)
+        // Only the cut is built from here on, its sketch facing Body 1.
+        k.facingBack = 10.0
+        d.add(ExtrudeFeature(d.newId(), "Extrude", s.id, listOf(RegionRef(listOf(1, 2, 3, 4), 0.0, 0.0)), 3.0, 0.0, Operation.Cut, only = listOf("Body 2")))
+        val built = r.rebuild(d.active)
+        assertTrue(built.errors.isEmpty(), built.errors.toString())
+        // Cut from Body 2 (the fake cut keeps what lies before the tool).
+        assertEquals(10.0, k.bodies.getValue(built.bodies[1].handle).to)
+    }
+
+    @Test
+    fun aThreadWithClearanceEasesItsFaceFirst() {
+        val k = FakeKernel()
+        val d = Design()
+        val box = extrude(d, sketchAt(d, 0.0, 10.0), Operation.NewBody)
+        val thread = ThreadFeature(d.newId(), "Thread", "F${box.id}.end", 1.5, 0.3).also { d.add(it) }
+        assertTrue(Rebuilder(k).rebuild(d.active).errors.isEmpty())
+        val i = k.calls.indexOf("offsetFaces ${thread.id} [F${box.id}.end] -0.3")
+        assertTrue(i >= 0, k.calls.toString())
+        assertTrue(k.calls.indexOf("thread ${thread.id} F${box.id}.end 1.5") > i)
     }
 
     @Test

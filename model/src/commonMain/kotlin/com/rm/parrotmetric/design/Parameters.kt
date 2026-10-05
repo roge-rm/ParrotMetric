@@ -146,7 +146,11 @@ object Parametrics {
                 "v" -> f.copy(v = v)
                 else -> f
             }
-            is ThreadFeature -> if (field == "pitch") f.copy(pitch = v) else f
+            is ThreadFeature -> when (field) {
+                "pitch" -> f.copy(pitch = v)
+                "clearance" -> f.copy(clearance = v)
+                else -> f
+            }
             is LipFeature -> when (field) {
                 "width" -> f.copy(width = v)
                 "height" -> f.copy(height = v)

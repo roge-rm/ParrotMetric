@@ -1540,7 +1540,8 @@ class DesignEditor(
         private val name = editing?.name ?: nextName("Thread", design.features.count { it is com.rm.parrotmetric.design.ThreadFeature })
         var face by mutableStateOf(editing?.face)
         var pitch by mutableStateOf(editing?.pitch ?: 1.0)
-        override fun feature(): Feature? = face?.let { com.rm.parrotmetric.design.ThreadFeature(id, name, it, pitch) }
+        var clearance by mutableStateOf(editing?.clearance ?: 0.0)
+        override fun feature(): Feature? = face?.let { com.rm.parrotmetric.design.ThreadFeature(id, name, it, pitch, clearance) }
         override fun missing() = "Tap the round face of a shaft or hole"
     }
 

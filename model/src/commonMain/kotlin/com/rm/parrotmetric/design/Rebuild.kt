@@ -251,9 +251,11 @@ class Rebuilder(private val kernel: Kernel) {
                 }
                 else -> {
                     val out = kernel.extrude(f.id, plane, sketch.curves(), f.regions, f.forward, f.back, f.taper, f.thin)
-                    // A one-sided cut from a sketch on a face goes into the body, whichever way the face looks.
+                    // A one-sided cut from a sketch on a face goes into the body, whichever way the face looks;
+                    // only the bodies it may change count.
                     val oneSide = f.back == 0.0 && f.forward > 0
-                    if (oneSide && f.operation != Operation.NewBody && f.operation != Operation.Join && bodies.none { shares(it.handle, out) }) {
+                    val mayChange = if (f.only.isEmpty()) bodies else bodies.filter { it.label in f.only }
+                    if (oneSide && f.operation != Operation.NewBody && f.operation != Operation.Join && mayChange.none { shares(it.handle, out) }) {
                         kernel.release(out)
                         kernel.extrude(f.id, plane, sketch.curves(), f.regions, 0.0, f.forward, f.taper, f.thin)
                     } else out
@@ -312,7 +314,14 @@ class Rebuilder(private val kernel: Kernel) {
         is ThreadFeature -> {
             val face = ref(f, f.face, false, bodies)
             val body = bodyWithFace(face, bodies) ?: throw KernelException("The face it's on isn't there any more")
-            replace(f, bodies, planes, made, body) { kernel.thread(f.id, body.handle, face, f.pitch) }
+            replace(f, bodies, planes, made, body) {
+                if (f.clearance <= 0) kernel.thread(f.id, body.handle, face, f.pitch)
+                else {
+                    // Faces point out of the solid, so going in shrinks a shaft and widens a hole.
+                    val eased = kernel.offsetFaces(f.id, body.handle, listOf(face), -f.clearance)
+                    try { kernel.thread(f.id, eased, face, f.pitch) } finally { kernel.release(eased) }
+                }
+            }
         }
         is LoftFeature -> {
             if (f.sections.size < 2) throw KernelException("Pick areas in at least two sketches")

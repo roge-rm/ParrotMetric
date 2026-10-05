@@ -217,7 +217,7 @@ object DesignFile {
                 "type" to "coil", "plane" to plane(f.plane), "u" to f.u, "v" to f.v, "diameter" to f.diameter, "pitch" to f.pitch,
                 "turns" to f.turns, "section" to f.section, "square" to f.square, "operation" to f.operation.name,
             )
-            is ThreadFeature -> mapOf("type" to "thread", "face" to f.face, "pitch" to f.pitch)
+            is ThreadFeature -> mapOf("type" to "thread", "face" to f.face, "pitch" to f.pitch, "clearance" to f.clearance)
             is com.rm.parrotmetric.design.LipFeature -> mapOf(
                 "type" to "lip", "face" to f.face, "width" to f.width, "height" to f.height, "gap" to f.gap, "lid" to f.lid,
             )
@@ -320,7 +320,7 @@ object DesignFile {
                 id, name, plane(o.obj("plane")), o.num("u"), o.num("v"), o.num("diameter"), o.num("pitch"), o.num("turns"), o.num("section"),
                 o.bool("square"), Operation.valueOf(o.str("operation")),
             )
-            "thread" -> ThreadFeature(id, name, o.str("face"), o.num("pitch"))
+            "thread" -> ThreadFeature(id, name, o.str("face"), o.num("pitch"), o.numOr("clearance", 0.0))
             "lip" -> com.rm.parrotmetric.design.LipFeature(
                 id, name, o.str("face"), o.num("width"), o.num("height"), o.num("gap"), (o["lid"] as? Json.Str)?.value,
             )

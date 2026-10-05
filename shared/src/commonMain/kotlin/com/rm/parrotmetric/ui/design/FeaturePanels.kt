@@ -331,6 +331,7 @@ private fun ThreadSettings(editor: DesignEditor, d: DesignEditor.ThreadDraft) {
         }
     }
     Field(editor, d, "pitch", "Pitch", d.pitch, "mm", allowNegative = false) { d.pitch = it; editor.draftChanged() }
+    Field(editor, d, "clearance", "Clearance", d.clearance, "mm", allowNegative = false) { d.clearance = it; editor.draftChanged() }
 }
 
 @Composable

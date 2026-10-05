@@ -507,6 +507,26 @@ TEST_CASE("threads cut into a shaft and into a hole") {
     CHECK_THROWS(thread(7, block, "F3.end", 1.25));
 }
 
+TEST_CASE("moving a hole's face in widens it, and a shaft's narrows it") {
+    const double pi = 3.14159265358979;
+    NamedShape block = combine(5, primitive(3, top, Primitive::Box, 0, 0, 20, 20, 10), primitive(4, top, Primitive::Cylinder, 0, 0, 8, 10, 0), Combine::Cut);
+    NamedShape wider = offsetFaces(6, block, {"F4.side"}, -0.5);
+    CHECK(volume(wider) == Catch::Approx(volume(block) - pi * (4.5 * 4.5 - 16) * 10).epsilon(1e-4));
+    NamedShape shaft = primitive(1, top, Primitive::Cylinder, 0, 0, 10, 20, 0);
+    NamedShape thinner = offsetFaces(2, shaft, {"F1.side"}, -0.5);
+    CHECK(volume(thinner) == Catch::Approx(pi * 4.5 * 4.5 * 20).epsilon(1e-4));
+}
+
+TEST_CASE("a threaded shaft and an eased threaded hole round it don't overlap") {
+    NamedShape shaft = primitive(1, top, Primitive::Cylinder, 0, 0, 54, 12, 0);
+    NamedShape neck = thread(2, shaft, "F1.side", 3);
+    NamedShape ring = combine(5, primitive(3, top, Primitive::Cylinder, 0, 0, 60, 12, 0), primitive(4, top, Primitive::Cylinder, 0, 0, 54, 12, 0), Combine::Cut);
+    NamedShape eased = offsetFaces(6, ring, {"F4.side"}, -0.3);
+    NamedShape lid = thread(7, eased, "F4.side", 3);
+    INFO("neck in ring " << overlapVolume(neck, ring) << ", eased " << overlapVolume(neck, eased) << ", lid " << overlapVolume(neck, lid));
+    CHECK(overlapVolume(neck, lid) < 1e-6);
+}
+
 TEST_CASE("a loft between two squares is a box") {
     gp_Ax3 up(gp_Pnt(0, 0, 20), gp::DZ(), gp::DX());
     LoftProfile low{top, rectangle(10, 10), {{1, 2, 3, 4}, 5, 5}};
