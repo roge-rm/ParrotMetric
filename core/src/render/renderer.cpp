@@ -161,6 +161,9 @@ void main() {
 
 const char* kIdFragment = R"(#version 300 es
 precision highp float;
+// Ids use bits up to 23; a fragment shader's ints are mediump unless asked,
+// and many phone GPUs keep those to 16 bits, which loses the body and edge bits.
+precision highp int;
 flat in uint id;
 in vec3 world;
 uniform uint base;
