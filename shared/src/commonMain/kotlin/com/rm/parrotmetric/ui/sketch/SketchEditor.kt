@@ -593,6 +593,14 @@ class SketchEditor(
                 values[1]?.let { a ->
                     val m = ((a % 180) + 180) % 180
                     if (m == 0.0) addQuietly(Constraint.Horizontal(l)) else if (m == 90.0) addQuietly(Constraint.Vertical(l))
+                    else sketch.curves.filterIsInstance<Line>().lastOrNull { it !== l && (it.b === l.a || it.a === l.a) }?.let { prev ->
+                        // Any other angle is held against the line it carries on from.
+                        val turn = atan2(
+                            (sketch.x(prev.b) - sketch.x(prev.a)) * (sketch.y(l.b) - sketch.y(l.a)) - (sketch.y(prev.b) - sketch.y(prev.a)) * (sketch.x(l.b) - sketch.x(l.a)),
+                            (sketch.x(prev.b) - sketch.x(prev.a)) * (sketch.x(l.b) - sketch.x(l.a)) + (sketch.y(prev.b) - sketch.y(prev.a)) * (sketch.y(l.b) - sketch.y(l.a)),
+                        )
+                        addQuietly(Constraint.Angle(prev, l, turn))
+                    }
                 }
             }
             SketchTool.Rectangle -> when {
