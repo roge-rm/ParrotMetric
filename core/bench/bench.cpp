@@ -26,6 +26,7 @@
 #include <thread>
 
 #include "display/display_mesh.h"
+#include "model/operations.h"
 #include "io/exchange.h"
 #include "mesh/mesh_body.h"
 #include "mesh/repair.h"
@@ -81,6 +82,38 @@ int main(int argc, char** argv) {
         return 0;
     }
     std::printf("cores: %u\n", std::thread::hardware_concurrency());
+
+    // A vase: a smooth loft through four rings, hollowed out, then meshed for display at
+    // each detail level. Each step timed on its own; "vase" alone runs only this.
+    {
+        auto ring = [](double z, double r) {
+            pm::SketchCurve c;
+            c.kind = pm::SketchCurve::Circle;
+            c.id = 2;
+            c.r = r;
+            pm::RegionPick pick;
+            pick.curveIds = {2};
+            return pm::LoftProfile{gp_Ax3(gp_Pnt(0, 0, z), gp::DZ(), gp::DX()), {c}, pick};
+        };
+        const std::vector<pm::LoftProfile> rings = {ring(0, 22), ring(45, 38), ring(95, 16), ring(110, 20)};
+        pm::NamedShape vase;
+        double loft = best(2, [&] { vase = pm::loft(9, rings, false); });
+        pm::NamedShape hollow;
+        double shell = best(2, [&] { hollow = pm::shell(10, vase, {"F9.end"}, 2); });
+        std::printf("%-34s %9.1f\n", "vase: loft", loft);
+        std::printf("%-34s %9.1f\n", "vase: shell", shell);
+        const double levels[][2] = {{0.1, 0.4}, {0.05, 0.3}, {0.01, 0.25}};
+        const char* names[] = {"low", "medium", "high"};
+        for (int i = 0; i < 3; ++i) {
+            size_t triangles = 0;
+            double ms = best(2, [&] {
+                BRepTools::Clean(hollow.shape);
+                triangles = pm::Solid::fromShape(hollow.shape).display({levels[i][0], levels[i][1]}).indices.size() / 3;
+            });
+            std::printf("vase: display at %-17s %9.1f ms  %zu triangles\n", names[i], ms, triangles);
+        }
+        if (argc > 1 && std::strcmp(argv[1], "vase") == 0) return 0;
+    }
     pm::speedTest();
     std::printf("speed test: %.1f ms\n", best(3, [] { pm::speedTest(); }));
     std::printf("%-34s %9s %9s\n", "", "1 core ms", "all ms");
