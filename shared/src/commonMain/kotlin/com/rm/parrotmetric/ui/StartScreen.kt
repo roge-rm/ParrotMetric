@@ -19,6 +19,23 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -145,16 +162,64 @@ fun SettingsScreen(state: ModelState, actions: ModelActions, onBack: () -> Unit)
                 Modifier.padding(start = 6.dp), fontSize = 13.sp, color = Palette.muted,
             )
         }
-        if (state.canChooseFolder) {
+        if (state.canChooseFolder || state.canUseServer) {
+            var editing by remember { mutableStateOf(false) }
             Box(Modifier.size(6.dp))
             Text("Projects folder", fontSize = 14.sp, color = Palette.muted)
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(state.folderName ?: "None", Modifier.weight(1f).padding(start = 6.dp), fontSize = 15.sp, color = Palette.text, maxLines = 1)
-                androidx.compose.material3.TextButton(onClick = actions::chooseFolder) { Text(if (state.folderName == null) "Choose…" else "Change…", color = Palette.mint) }
-                if (state.folderName != null) androidx.compose.material3.TextButton(onClick = actions::forgetFolder) { Text("Stop using", color = Palette.muted) }
+            Text(state.folderName ?: "None", Modifier.padding(start = 6.dp, top = 4.dp), fontSize = 15.sp, color = Palette.text, maxLines = 1)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (state.canChooseFolder) TextButton(onClick = actions::chooseFolder) { Text("Choose folder…", color = Palette.mint) }
+                if (state.canUseServer) TextButton(onClick = { editing = !editing }) { Text("WebDAV server…", color = Palette.mint) }
+                if (state.folderName != null) TextButton(onClick = actions::forgetFolder) { Text("Stop using", color = Palette.muted) }
             }
+            if (editing) ServerForm(state, actions) { editing = false }
         }
         Box(Modifier.size(12.dp))
         BigButton("Back", primary = true, onClick = onBack)
     }
 }
+
+/** The address and login for a WebDAV server; closes once it's in use. */
+@Composable
+private fun ServerForm(state: ModelState, actions: ModelActions, close: () -> Unit) {
+    var url by remember { mutableStateOf(state.server?.url ?: "https://") }
+    var user by remember { mutableStateOf(state.server?.user ?: "") }
+    var password by remember { mutableStateOf(state.server?.password ?: "") }
+    var tried by remember { mutableStateOf(false) }
+    LaunchedEffect(state.connecting) {
+        if (tried && !state.connecting && state.serverProblem == null) close()
+    }
+    Column(Modifier.padding(start = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text("Folder address", fontSize = 13.sp, color = Palette.muted)
+        val focus = LocalFocusManager.current
+        val next = KeyboardActions(onNext = { focus.moveFocus(FocusDirection.Down) })
+        val connect = { tried = true; actions.useServer(url, user, password) }
+        FormField(url, { url = it }, KeyboardType.Uri, ImeAction.Next, next)
+        Text("User name", fontSize = 13.sp, color = Palette.muted)
+        FormField(user, { user = it }, KeyboardType.Text, ImeAction.Next, next)
+        Text("Password", fontSize = 13.sp, color = Palette.muted)
+        FormField(password, { password = it }, KeyboardType.Password, ImeAction.Done, KeyboardActions(onDone = { connect() }), PasswordVisualTransformation())
+        state.serverProblem?.let { Text(it, fontSize = 13.sp, color = Palette.orange) }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = connect, enabled = !state.connecting) {
+                Text(if (state.connecting) "Connecting…" else "Connect", color = Palette.mint)
+            }
+            TextButton(onClick = close) { Text("Cancel", color = Palette.muted) }
+        }
+    }
+}
+
+@Composable
+private fun FormField(
+    text: String, change: (String) -> Unit, type: KeyboardType, ime: ImeAction, keys: KeyboardActions,
+    look: VisualTransformation = VisualTransformation.None,
+) = BasicTextField(
+    text, change,
+    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Palette.surface).padding(12.dp),
+    textStyle = TextStyle(color = Palette.text, fontSize = 16.sp),
+    cursorBrush = SolidColor(Palette.mint),
+    singleLine = true,
+    keyboardOptions = KeyboardOptions(keyboardType = type, autoCorrectEnabled = false, imeAction = ime),
+    keyboardActions = keys,
+    visualTransformation = look,
+)

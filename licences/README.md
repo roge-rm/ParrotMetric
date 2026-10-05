@@ -10,5 +10,6 @@ ParrotMetric is under the GPL 3 (see LICENSE). It is built with these libraries,
 | zlib (desktop and browser builds) | zlib | zlib.txt |
 | stb_truetype, for text | MIT (or public domain) | stb-MIT.txt |
 | Noto Sans font, for text | SIL Open Font License 1.1 | noto-OFL-1.1.txt |
+| OkHttp and Okio (Android build), for WebDAV | Apache 2.0 | manifold-Apache-2.0.txt (the same licence text) |
 
-Their sources are in third_party/, as git submodules except stb_truetype (third_party/stb) and the Noto Sans fonts (third_party/fonts), which are kept in the repository. The OpenGL ES and EGL headers in third_party/khronos are the Khronos Group's, under the MIT and Apache 2.0 licences given in each file.
+Their sources are in third_party/, as git submodules except stb_truetype (third_party/stb) and the Noto Sans fonts (third_party/fonts), which are kept in the repository. OkHttp and Okio come from Maven Central. The OpenGL ES and EGL headers in third_party/khronos are the Khronos Group's, under the MIT and Apache 2.0 licences given in each file.

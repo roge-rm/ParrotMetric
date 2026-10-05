@@ -17,6 +17,8 @@ import androidx.compose.ui.window.rememberWindowState
 import com.rm.parrotmetric.Core
 import com.rm.parrotmetric.app.AppController
 import com.rm.parrotmetric.app.FileSink
+import com.rm.parrotmetric.app.Http
+import com.rm.parrotmetric.app.HttpReply
 import com.rm.parrotmetric.app.PlatformFiles
 import com.rm.parrotmetric.app.ProjectFile
 import com.rm.parrotmetric.app.ProjectFolder
@@ -118,8 +120,30 @@ private class DesktopFiles(private val data: File) : PlatformFiles {
 
     override fun folder(token: String): ProjectFolder? = File(token).takeIf { it.isDirectory }?.let(::LocalFolder)
 
+    override val http: Http = JdkHttp
+
     override val deviceName: String
         get() = runCatching { java.net.InetAddress.getLocalHost().hostName }.getOrNull()?.substringBefore('.')?.ifEmpty { null } ?: "this computer"
+}
+
+/** HTTP with the JDK's own client, which allows WebDAV's methods. */
+private object JdkHttp : Http {
+    private val client = java.net.http.HttpClient.newBuilder()
+        .connectTimeout(java.time.Duration.ofSeconds(15))
+        .followRedirects(java.net.http.HttpClient.Redirect.NORMAL)
+        .build()
+
+    override suspend fun send(method: String, url: String, headers: Map<String, String>, body: ByteArray?): HttpReply? =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val request = java.net.http.HttpRequest.newBuilder(java.net.URI(url))
+                    .timeout(java.time.Duration.ofSeconds(60))
+                    .method(method, body?.let { java.net.http.HttpRequest.BodyPublishers.ofByteArray(it) } ?: java.net.http.HttpRequest.BodyPublishers.noBody())
+                headers.forEach { (k, v) -> request.header(k, v) }
+                val reply = client.send(request.build(), java.net.http.HttpResponse.BodyHandlers.ofByteArray())
+                HttpReply(reply.statusCode(), reply.body())
+            }.getOrNull()
+        }
 }
 
 /** A projects folder on disk, as a sync client (Nextcloud, Syncthing, Dropbox) keeps. */

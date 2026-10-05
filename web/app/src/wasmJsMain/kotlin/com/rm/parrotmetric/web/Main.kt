@@ -29,6 +29,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.ComposeViewport
 import com.rm.parrotmetric.app.AppController
 import com.rm.parrotmetric.app.FileSink
+import com.rm.parrotmetric.app.Http
+import com.rm.parrotmetric.app.HttpReply
 import com.rm.parrotmetric.app.PlatformFiles
 import com.rm.parrotmetric.ui.LaunchSplash
 import com.rm.parrotmetric.ui.ModelScreen
@@ -36,6 +38,8 @@ import com.rm.parrotmetric.ui.SelectionBox
 import com.rm.parrotmetric.ui.ViewControls
 import com.rm.parrotmetric.ui.viewGestures
 import kotlinx.coroutines.channels.Channel
+import kotlin.coroutines.resume
+import kotlin.coroutines.suspendCoroutine
 
 // The page's side: the canvas the core draws on, files and storage.
 
@@ -85,6 +89,30 @@ private fun download(name: String, data: JsAny): Unit = js(
 private fun fetchBytes(url: String, then: (JsAny?) -> Unit): Unit =
     js("fetch(url).then((r) => r.arrayBuffer()).then((b) => then({ data: new Uint8Array(b) })).catch(() => then(null))")
 
+private fun newHeaders(): JsAny = js("({})")
+private fun setHeader(h: JsAny, k: String, v: String): Unit = js("h[k] = v")
+/** Sends a request; calls back with { code, data }, or null if it couldn't be sent. */
+private fun fetchRequest(method: String, url: String, headers: JsAny, body: JsAny?, then: (JsAny?) -> Unit): Unit = js(
+    """fetch(url, { method: method, headers: headers, body: body, cache: 'no-store' })
+        .then((r) => r.arrayBuffer().then((b) => then({ code: r.status, data: new Uint8Array(b) })))
+        .catch(() => then(null))""",
+)
+private fun replyCode(r: JsAny): Int = js("r.code")
+
+/** HTTP with fetch; the server has to allow this page's origin (CORS). */
+private object FetchHttp : Http {
+    override suspend fun send(method: String, url: String, headers: Map<String, String>, body: ByteArray?): HttpReply? {
+        val h = newHeaders()
+        headers.forEach { (k, v) -> setHeader(h, k, v) }
+        val data = body?.let { b -> newBytes(b.size).also { a -> for (i in b.indices) setByte(a, i, b[i].toInt() and 255) } }
+        return suspendCoroutine { done ->
+            fetchRequest(method, url, h, data) { r ->
+                done.resume(r?.let { HttpReply(replyCode(it), ByteArray(pickedSize(it)) { i -> pickedByte(it, i).toByte() }) })
+            }
+        }
+    }
+}
+
 private class Download(override val name: String) : FileSink {
     override suspend fun write(bytes: ByteArray): Boolean {
         val a = newBytes(bytes.size)
@@ -105,6 +133,8 @@ private object WebFiles : PlatformFiles {
     override suspend fun writeAutosave(text: String) = storageSet("parrotmetric.autosave", text)
     override fun readSettings() = storageGet("parrotmetric.settings")
     override suspend fun writeSettings(text: String) = storageSet("parrotmetric.settings", text)
+    override val http: Http = FetchHttp
+    override val deviceName get() = "browser"
 }
 
 /**

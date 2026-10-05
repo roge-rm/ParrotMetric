@@ -5,7 +5,7 @@ It also runs on Linux, on Windows and in a web browser.
 
 You draw sketches with constraints and dimensions, turn them into solids with extrude, revolve, sweep, loft and the rest, then round, cut, shell, pattern and join them into parts. Every step stays in the history, so you can go back and change an early one and everything after it rebuilds.
 
-It's made for designing things to 3D print. It works by touch first, but it also has proper mouse and keyboard controls for when you're at a desk. Everything runs on the device.
+It's made for designing things to 3D print. It works by touch first, but it also has proper mouse and keyboard controls for when you're at a desk. Everything runs on the device. The only time it goes online is if you give it a WebDAV server to keep your designs on.
 
 It's at 0.2.1. It's usable for real parts, but it isn't finished and there will be rough edges. Let me know what works, what doesn't, and what you'd like it to do.
 
@@ -109,6 +109,7 @@ The box has rounded corners, a hollow, vents and a lid on a hinge joint, with it
 - Its own design files (.pmet), which keep the whole history
 - Export to STL, 3MF (with colours), OBJ, STEP and IGES, per body or all together, at coarse, medium or fine detail
 - Import STEP and IGES as solids you can keep working on
+- A projects folder, so your designs are the same on every device: a folder a sync app looks after (Nextcloud, Syncthing and the like), or a folder on a WebDAV server such as Nextcloud. If a design was changed in two places at once, both versions are kept
 - Autosave every 30 seconds, and whenever it goes to the background or closes, so a crash or a phone call doesn't lose your work
 
 ### Controls
@@ -118,6 +119,16 @@ The box has rounded corners, a hollow, vents and a lid on a hinge joint, with it
 - Keyboard: a letter for most tools, Ctrl (or Alt) for file and edit, Esc or Backspace to back out, digits go into the first field, Tab moves between fields and Enter finishes. Press S to search for a tool and ? for the list of keys. Key badges show on the buttons when a keyboard is attached
 - Two layouts, one for phones and one for tablets, desktop and the browser, picked by the window size or set in Settings
 - Display detail set from a quick speed test the first time it runs, so it stays smooth on older devices (it runs well on a Fire HD 8), and you can change it in Settings
+
+---
+
+## Keeping designs in sync
+
+In Settings, under Projects folder, either choose a folder that a sync app keeps up to date, or enter a WebDAV server. Designs you make are saved there as .pmet files, and the start screen lists what's in it. When you come back to the app, it loads a newer copy if another device has changed the one you have open.
+
+For Nextcloud, the folder address looks like `https://your.server/remote.php/dav/files/USERNAME/ParrotMetric/` (make the folder first), and it's best to use an app password from Nextcloud's security settings.
+
+The browser version can only use a server that allows requests from the page's address (CORS). Most don't by default.
 
 ---
 
@@ -198,6 +209,7 @@ ParrotMetric stands on a lot of other people's work. The modelling is all theirs
 - **[Catch2](https://github.com/catchorg/Catch2)** runs the core's tests (not part of the app). Boost Software License.
 - The OpenGL ES and EGL headers are the **[Khronos Group](https://www.khronos.org/)**'s, under the MIT and Apache 2.0 licences in each file.
 - The app is written in **[Kotlin](https://kotlinlang.org/)** with **[Compose Multiplatform](https://www.jetbrains.com/compose-multiplatform/)** by JetBrains, and uses AndroidX and kotlinx.coroutines (Apache 2.0).
+- **[OkHttp](https://square.github.io/okhttp/)** by Square talks to WebDAV servers in the Android app. Apache 2.0.
 - The browser build is made with **[Emscripten](https://emscripten.org/)** and **[Binaryen](https://github.com/WebAssembly/binaryen)**.
 
 Their licences are in [licences/](licences/), and their sources are in third_party/ as git submodules, apart from stb and the fonts, which are kept in the repository. If you got ParrotMetric as an app, the same licences come with it.

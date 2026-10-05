@@ -105,6 +105,7 @@ dependencies {
     implementation(project(":shared"))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.core.ktx)
+    implementation(libs.okhttp)
 }
 
 // OCCT is built once per ABI into core/build/occt by core/scripts/build-occt.sh,

@@ -113,6 +113,12 @@ data class ModelState(
     val projects: List<com.rm.parrotmetric.app.ProjectFile> = emptyList(),
     /** Whether this platform can have a projects folder. */
     val canChooseFolder: Boolean = false,
+    /** Whether this platform can use a WebDAV server as the projects folder, and the last one used. */
+    val canUseServer: Boolean = false,
+    val server: com.rm.parrotmetric.app.DavLogin? = null,
+    /** While a server is being tried, and why it couldn't be used. */
+    val connecting: Boolean = false,
+    val serverProblem: String? = null,
 )
 
 /** Which screen layout: by the window's width, or always the phone one or the large-screen one. */
@@ -158,6 +164,8 @@ interface ModelActions {
     fun openProject(name: String) {}
     fun chooseFolder() {}
     fun forgetFolder() {}
+    /** Uses a folder on a WebDAV server as the projects folder, if it can be reached. */
+    fun useServer(url: String, user: String, password: String) {}
 }
 
 /**

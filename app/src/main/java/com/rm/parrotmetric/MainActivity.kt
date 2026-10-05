@@ -24,6 +24,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewModelScope
 import com.rm.parrotmetric.app.AppController
 import com.rm.parrotmetric.app.FileSink
+import com.rm.parrotmetric.app.Http
 import com.rm.parrotmetric.app.PlatformFiles
 import com.rm.parrotmetric.app.ProjectFile
 import com.rm.parrotmetric.app.ProjectFolder
@@ -52,6 +53,7 @@ class AppHolder : ViewModel() {
         override fun chooseFolder(then: (String?) -> Unit) = current.chooseFolder(then)
         override val hasFolders get() = true
         override fun folder(token: String) = current.folder(token)
+        override val http get() = current.http
         override val deviceName get() = current.deviceName
     }
 
@@ -146,6 +148,7 @@ class MainActivity : ComponentActivity() {
         }
 
         override val deviceName: String get() = android.os.Build.MODEL ?: "this device"
+        override val http: Http = AndroidHttp
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

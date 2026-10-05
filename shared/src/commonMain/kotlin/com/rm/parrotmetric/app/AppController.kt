@@ -50,6 +50,8 @@ interface PlatformFiles {
     val hasFolders: Boolean get() = false
     /** The folder a token from [chooseFolder] names, or null if it can't be reached any more. */
     fun folder(token: String): ProjectFolder? = null
+    /** HTTP, for a projects folder on a WebDAV server, or null if this platform can't. */
+    val http: Http? get() = null
     /** What to call this device in the name of a copy kept after a clash, such as "Pixel 5". */
     val deviceName: String get() = "this device"
 }
@@ -109,8 +111,11 @@ class AppController(
         )
         applyDetail()
         if (state.autoDetail == null) measureSpeed()
-        folder = settings["folder"]?.let { files.folder(it) }
-        state = state.copy(folderName = folder?.name, canChooseFolder = files.hasFolders)
+        folder = settings["folder"]?.let(::folderFor)
+        state = state.copy(
+            folderName = folder?.name, canChooseFolder = files.hasFolders, canUseServer = files.http != null,
+            server = settings["folder"]?.let(DavLogin::from),
+        )
         refreshProjects()
         design.onShown = { state = state.copy(selectedFaces = 0, selectedEdges = 0, selectedAreas = 0, selectedPlanes = 0, selectedCorners = 0) }
         design.onHistoryChanged = ::scheduleAutosave
@@ -122,6 +127,12 @@ class AppController(
                 if (unsaved || state.sketch != null) write()
             }
         }
+    }
+
+    /** The projects folder a token in the settings names: a server's, or one the platform chose. */
+    private fun folderFor(token: String): ProjectFolder? {
+        val login = DavLogin.from(token) ?: return files.folder(token)
+        return files.http?.let { WebDavFolder(login, it) }
     }
 
     private fun saveSettings() {
@@ -516,6 +527,28 @@ class AppController(
             saveSettings()
             state = state.copy(folderName = f.name)
             refreshProjects()
+        }
+
+        override fun useServer(url: String, user: String, password: String) {
+            val http = files.http ?: return
+            val login = DavLogin(url.trim(), user.trim(), password)
+            if (!login.url.startsWith("http://") && !login.url.startsWith("https://")) {
+                state = state.copy(serverProblem = "Start the address with https://")
+                return
+            }
+            state = state.copy(serverProblem = null, connecting = true)
+            scope.launch {
+                val f = WebDavFolder(login, http)
+                val problem = withContext(Dispatchers.Default) { f.problem() }
+                state = state.copy(connecting = false, serverProblem = problem)
+                if (problem != null) return@launch
+                folder = f
+                folderFile = null
+                settings["folder"] = login.token()
+                saveSettings()
+                state = state.copy(folderName = f.name, server = login)
+                refreshProjects()
+            }
         }
 
         override fun forgetFolder() {
