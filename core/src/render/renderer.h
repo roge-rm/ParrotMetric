@@ -3,6 +3,7 @@
 #include <chrono>
 #include <cstdint>
 #include <memory>
+#include <functional>
 #include <vector>
 
 #include "display/display_mesh.h"
@@ -80,6 +81,12 @@ public:
     void setBodies(std::vector<DisplayMesh> bodies, bool refit);
     void setSelection(const std::vector<Pick>& selection);
     Pick pick(float x, float y);
+    /**
+     * What a tap at (x, y) means, looking [reach] dp round it for what's hard
+     * to hit: a corner, then an edge, then the face under the point (or the
+     * nearest one). Only picks [accept] allows count.
+     */
+    Pick pickNear(float x, float y, float reach, const std::function<bool(const Pick&)>& accept);
     /**
      * What's drawn in the box from (x0, y0) to (x1, y1), screen pixels: with
      * crossing, anything with some of it in the box; else only what's wholly
@@ -171,7 +178,8 @@ private:
 
     // Camera. Z is up, as on a print bed; the camera orbits target_.
     float centre_[3] = {0, 0, 0};
-    float radius_ = 10;
+    // An empty design is framed for a part about 80 mm across, a usual size for a print.
+    float radius_ = 40;
     float target_[3] = {0, 0, 0};
     float yaw_ = -0.9f, pitch_ = 0.45f;
     float zoom_ = 1;  // 1 frames the whole model; larger is closer.

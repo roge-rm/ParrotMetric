@@ -139,6 +139,8 @@ interface ModelActions {
     fun export(request: com.rm.parrotmetric.ui.design.ExportRequest)
     fun clearSelection()
     fun fit()
+    /** Fits an open sketch in view if any of it has gone past the edges. */
+    fun keepSketchInView() {}
     /** The part of the view not under panels, so the model is centred and fitted there: pixels covered at each edge. */
     fun setCovered(left: Float, top: Float, right: Float, bottom: Float) {}
     fun viewFrom(yaw: Float, pitch: Float)
@@ -230,6 +232,7 @@ fun ModelScreen(
             state.screen != AppScreen.Model -> return false
             sketch != null -> when {
                 sketch.editing != null -> sketch.cancelDimension()
+                sketch.placed != null -> sketch.dropPlaced()
                 sketch.textEdit != null -> sketch.cancelText()
                 sketch.dropTyped() -> {}
                 sketch.pending.isNotEmpty() -> sketch.endDrawing()
@@ -277,6 +280,8 @@ fun ModelScreen(
                 name == "Ctrl+Enter" && sketch != null -> { actions.finishSketch(); true }
                 name == "Enter" && sketch != null -> when {
                     sketch.editing != null || sketch.textEdit != null -> false
+                    // In a size field, Enter sets the sizes.
+                    sketch.placed != null && !screenFocused -> false
                     sketch.applyTyped() -> true
                     sketch.pending.isNotEmpty() -> { sketch.endDrawing(); true }
                     else -> { actions.finishSketch(); true }
@@ -322,6 +327,10 @@ fun ModelScreen(
         .focusable()
     // Moving between pages drops the button that had focus, so keys come back here.
     LaunchedEffect(state.screen, Help.reading) { if (state.screen != AppScreen.Model) focus.requestFocus() }
+    // When a sketch's size or dimension fields close, the keys go back to the sketch.
+    val sketchFields = sketch != null && (sketch.editing != null || sketch.placed != null || sketch.textEdit != null)
+    LaunchedEffect(sketchFields) { if (sketch != null && !sketchFields) focus.requestFocus() }
+    LaunchedEffect(sketch?.resized) { if ((sketch?.resized ?: 0) > 0) actions.keepSketchInView() }
     // A press on the model takes keys back from any field.
     val refocus = Modifier.pointerInput(Unit) {
         awaitPointerEventScope {

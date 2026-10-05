@@ -39,6 +39,7 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -84,7 +85,8 @@ fun SketchStatus(editor: SketchEditor, modifier: Modifier = Modifier) {
     editor.version
     val free = editor.freedom.count
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Surface(color = Palette.surface.copy(alpha = 0.85f), contentColor = Palette.text, shape = RoundedCornerShape(15.dp)) {
+        // An empty sketch has nothing to set yet.
+        if (editor.sketch.curves.isNotEmpty() || editor.sketch.points.size > 1) Surface(color = Palette.surface.copy(alpha = 0.85f), contentColor = Palette.text, shape = RoundedCornerShape(15.dp)) {
             Row(Modifier.height(30.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(9.dp).clip(RoundedCornerShape(5.dp)).background(if (free == 0) Palette.mint else Palette.sketch))
                 Spacer(Modifier.width(7.dp))
@@ -123,7 +125,8 @@ fun SketchBottom(editor: SketchEditor, expanded: Boolean = false) {
             editor.textEdit != null -> TextEntry(editor, editor.textEdit!!)
             constraining -> ConstrainSheet(editor) { constraining = false }
             else -> {
-                ChipRow(editor, expanded) { constraining = true }
+                val placed = editor.placed
+                if (placed != null) PlacedSizes(editor, placed) else ChipRow(editor, expanded) { constraining = true }
                 ToolGrid(editor, expanded)
             }
         }
@@ -311,18 +314,80 @@ private fun androidx.compose.foundation.layout.RowScope.ToolRow(editor: SketchEd
                     color = if (active) Palette.sketch.copy(alpha = 0.16f) else Color.Transparent,
                     contentColor = if (active) Palette.sketch else Palette.text,
                 ) {
-                    Box {
+                    androidx.compose.foundation.layout.BoxWithConstraints {
                         Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                             Icon(icon, null, Modifier.size(24.dp), tint = Palette.sketch)
                             Spacer(Modifier.height(4.dp))
                             Text(label, fontSize = 11.sp, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium, maxLines = 1)
                         }
-                        if (com.rm.parrotmetric.ui.LocalKeyboard.current) toolKeys[tool]?.let {
+                        // A narrow tool has no room for its key beside the icon.
+                        if (com.rm.parrotmetric.ui.LocalKeyboard.current && maxWidth >= 72.dp) toolKeys[tool]?.let {
                             com.rm.parrotmetric.ui.KeyBadge(it, Modifier.align(Alignment.TopEnd).padding(4.dp))
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * The sizes of the shape just placed, as drawn. Set makes them dimensions;
+ * drawing on, or another tool, leaves the shape free. With a keyboard the
+ * first size takes the typing straight away.
+ */
+@Composable
+private fun PlacedSizes(editor: SketchEditor, sizes: List<PlacedSize>) {
+    val values = remember(sizes) {
+        sizes.map { size ->
+            // A drawn size is rough, so one decimal is plenty and leaves room on a phone.
+            val v = round(size.initial * 10) / 10
+            val text = if (v == kotlin.math.floor(v)) v.toLong().toString() else v.toString()
+            mutableStateOf(TextFieldValue(text, TextRange(0, text.length)))
+        }
+    }
+    val first = remember { FocusRequester() }
+    val keyboard = com.rm.parrotmetric.ui.LocalKeyboard.current
+    LaunchedEffect(sizes) { if (keyboard) first.requestFocus() }
+    val set = { editor.setPlaced(values.map { it.value.text }) }
+    // Typing replaces the drawn size: the number is selected just after a tap puts the cursor in it.
+    var focused by remember(sizes) { mutableStateOf(-1) }
+    LaunchedEffect(focused) {
+        val i = focused
+        if (i < 0) return@LaunchedEffect
+        delay(60)
+        values[i].value.let { values[i].value = it.copy(selection = TextRange(0, it.text.length)) }
+    }
+    Surface(color = Palette.surface, shape = RoundedCornerShape(22.dp)) {
+        Row(Modifier.fillMaxWidth().padding(start = 14.dp, end = 6.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            sizes.forEachIndexed { i, size ->
+                Text(size.label, fontSize = 13.sp, color = Palette.muted)
+                Spacer(Modifier.width(6.dp))
+                Row(
+                    Modifier.weight(1f).height(40.dp).clip(RoundedCornerShape(12.dp)).background(Palette.ground).padding(horizontal = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    BasicTextField(
+                        values[i].value,
+                        onValueChange = { values[i].value = it },
+                        modifier = Modifier.weight(1f).then(if (i == 0) Modifier.focusRequester(first) else Modifier)
+                            .onFocusChanged { f -> if (f.isFocused) focused = i else if (focused == i) focused = -1 },
+                        textStyle = TextStyle(color = Palette.text, fontSize = 17.sp, fontFamily = FontFamily.Monospace),
+                        cursorBrush = SolidColor(Palette.mint),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Ascii, autoCorrectEnabled = false,
+                            imeAction = if (i == sizes.lastIndex) ImeAction.Done else ImeAction.Next,
+                        ),
+                        keyboardActions = KeyboardActions(onDone = { set() }),
+                    )
+                }
+                Spacer(Modifier.width(10.dp))
+            }
+            Surface(onClick = { set() }, shape = RoundedCornerShape(16.dp), color = Palette.mint, contentColor = Palette.ink) {
+                Text("Set", Modifier.padding(horizontal = 16.dp, vertical = 10.dp), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            }
+            IconButton(onClick = editor::dropPlaced) { Icon(Icons.close, "Leave it free", tint = Palette.muted) }
         }
     }
 }
@@ -401,8 +466,9 @@ private fun TextEntry(editor: SketchEditor, edit: TextEdit) {
                 keyboardActions = KeyboardActions(onDone = { editor.commitText(text.text, height, bold, degrees) }),
                 decorationBox = { inner -> if (text.text.isEmpty()) Text("Text", color = Palette.faint, fontSize = 20.sp); inner() },
             )
-            com.rm.parrotmetric.ui.design.NumberRow("Height", height, "mm", allowNegative = false) { height = it }
-            com.rm.parrotmetric.ui.design.NumberRow("Angle", degrees, "°", allowNegative = true) { degrees = it }
+            val set = { editor.commitText(text.text, height, bold, degrees) }
+            com.rm.parrotmetric.ui.design.NumberRow("Height", height, "mm", allowNegative = false, onDone = { set() }) { height = it }
+            com.rm.parrotmetric.ui.design.NumberRow("Angle", degrees, "°", allowNegative = true, onDone = { set() }) { degrees = it }
             com.rm.parrotmetric.ui.design.Toggle("Bold", bold) { bold = it }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Surface(onClick = editor::cancelText, modifier = Modifier.weight(1f).height(50.dp), shape = RoundedCornerShape(18.dp), color = Palette.raised, contentColor = Palette.text) {

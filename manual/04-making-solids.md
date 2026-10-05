@@ -35,7 +35,7 @@ A spring or a spiral, with no sketch needed. Set the plane it stands on, the **D
 
 ## Shapes
 
-**Box**, **Cylinder**, **Sphere**, **Torus** and **Cone** make a shape from sizes, without a sketch. Pick the plane it sits on, its sizes and where its centre is.
+**Box**, **Cylinder**, **Sphere**, **Torus** and **Cone** make a shape from sizes, without a sketch. Pick the plane it sits on, its sizes and where its centre is. It sits on the side the plane faces, and **Grow the other way** puts it on the other side.
 
 ## New body, join, cut or intersect
 

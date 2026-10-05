@@ -224,6 +224,8 @@ private fun PrimitiveSettings(editor: DesignEditor, d: DesignEditor.PrimitiveDra
     }
     Field(editor, d, "u", "Centre x", d.u, "mm", allowNegative = true) { d.u = it; editor.draftChanged() }
     Field(editor, d, "v", "Centre y", d.v, "mm", allowNegative = true) { d.v = it; editor.draftChanged() }
+    // Each shape sits on its plane, on the side it faces.
+    Toggle("Grow the other way", d.flip) { d.flip = it; editor.draftChanged() }
     OperationRow(d.operation) {
         d.operation = it
         editor.draftChanged()
@@ -420,13 +422,15 @@ internal fun Field(
 
 /** A labelled number field that takes sums and units, applied on Done from the keyboard or when it loses focus. */
 @Composable
-fun NumberRow(label: String, value: Double, unit: String, allowNegative: Boolean, onChange: (Double) -> Unit) =
-    NumberRow(label, value, unit, allowNegative, null, emptyMap()) { v, _ -> onChange(v) }
+fun NumberRow(label: String, value: Double, unit: String, allowNegative: Boolean, onDone: (() -> Unit)? = null, onChange: (Double) -> Unit) =
+    NumberRow(label, value, unit, allowNegative, null, emptyMap(), onDone) { v, _ -> onChange(v) }
 
 /** As above, showing [expression] when there is one and reading parameter [names]. */
 @Composable
 fun NumberRow(
     label: String, value: Double, unit: String, allowNegative: Boolean, expression: String?, names: Map<String, Double>,
+    /** What Enter does once the number is in, where the field isn't in a panel. */
+    onDone: (() -> Unit)? = null,
     onChange: (Double, String?) -> Unit,
 ) {
     fun text(v: Double): String {
@@ -488,7 +492,7 @@ fun NumberRow(
                 cursorBrush = SolidColor(Palette.mint),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, imeAction = ImeAction.Done, autoCorrectEnabled = false),
-                keyboardActions = KeyboardActions(onDone = { apply() }),
+                keyboardActions = KeyboardActions(onDone = { apply(); if (!bad) onDone?.invoke() }),
             )
             Text(unit, fontSize = 14.sp, color = Palette.muted)
         }

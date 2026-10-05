@@ -1392,7 +1392,8 @@ JNIEXPORT jint JNICALL Java_com_rm_parrotmetric_Core_shownTriangles(JNIEnv*, job
  */
 JNIEXPORT jintArray JNICALL Java_com_rm_parrotmetric_Core_tap(JNIEnv* env, jobject, jfloat x, jfloat y) {
     std::lock_guard<std::mutex> g(lock);
-    pm::Pick p = pickable(renderer.pick(x, y));
+    // A finger covers thin edges and corners, so it reaches a little way for them.
+    pm::Pick p = pickable(renderer.pickNear(x, y, 12, [](const pm::Pick& q) { return pickable(q).kind != pm::Pick::None; }));
     if (p.kind == pm::Pick::None) {
         selection.clear();
     } else {
@@ -1407,7 +1408,7 @@ JNIEXPORT jintArray JNICALL Java_com_rm_parrotmetric_Core_tap(JNIEnv* env, jobje
 /** A click: selects what's under the point in place of the selection, or with add, adds it or takes it out. */
 JNIEXPORT jintArray JNICALL Java_com_rm_parrotmetric_Core_click(JNIEnv* env, jobject, jfloat x, jfloat y, jboolean add) {
     std::lock_guard<std::mutex> g(lock);
-    pm::Pick p = pickable(renderer.pick(x, y));
+    pm::Pick p = pickable(renderer.pickNear(x, y, 5, [](const pm::Pick& q) { return pickable(q).kind != pm::Pick::None; }));
     auto it = std::find(selection.begin(), selection.end(), p);
     if (!add) {
         selection.clear();

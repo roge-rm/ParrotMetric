@@ -254,7 +254,7 @@ object DesignFile {
             )
             is PrimitiveFeature -> mapOf(
                 "type" to "primitive", "kind" to f.kind.name, "plane" to plane(f.plane), "u" to f.u, "v" to f.v,
-                "a" to f.a, "b" to f.b, "c" to f.c, "operation" to f.operation.name,
+                "a" to f.a, "b" to f.b, "c" to f.c, "operation" to f.operation.name, "flip" to f.flip,
             )
             is RevolveFeature -> mapOf(
                 "type" to "revolve", "sketch" to f.sketchId, "regions" to writeRegions(f.regions),
@@ -353,7 +353,7 @@ object DesignFile {
             )
             "primitive" -> PrimitiveFeature(
                 id, name, PrimitiveKind.valueOf(o.str("kind")), plane(o["plane"] as Json.Obj), o.num("u"), o.num("v"),
-                o.num("a"), o.num("b"), o.num("c"), Operation.valueOf(o.str("operation")),
+                o.num("a"), o.num("b"), o.num("c"), Operation.valueOf(o.str("operation")), o.bool("flip"),
             )
             "revolve" -> {
                 val axis = when (val a = o.str("axis")) {

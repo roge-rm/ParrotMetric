@@ -12,12 +12,10 @@ On the start screen, tap **New design**. The model screen opens with nothing in 
 ## A sketch
 
 1. Tap **Sketch**, then **Top**. The view turns to look straight down at the top plane.
-2. Tap **Rectangle**, then tap two corners. Don't worry about the size yet.
-3. Tap **Dimension**, then tap the bottom edge. Type `60` and tap **Set**.
-4. The rectangle may now be bigger than the screen. The fit button at the top brings it all into view.
-5. Tap a side edge, type `40` and tap **Set**.
-6. Tap **Circle**, then tap a centre inside the rectangle and a point for its size. With **Dimension**, tap the circle and give it a diameter of `8`.
-7. Tap **Finish**.
+2. Tap **Rectangle**, then tap two corners. Its width and height show at the bottom.
+3. Type `60` for the width and `40` for the height, and tap **Set**.
+4. Tap **Circle**, then tap a centre inside the rectangle and a point for its size. Type `8` for the diameter and tap **Set**.
+5. Tap **Finish**.
 
 The count at the top of a sketch shows how much is still free to move. It doesn't have to be fully set, but a sketch that is stays the way you meant it when you change a size.
 

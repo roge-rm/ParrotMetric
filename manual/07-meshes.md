@@ -5,7 +5,7 @@ A mesh is a shape made of triangles, like most files for 3D printing. ParrotMetr
 
 ## Bringing one in
 
-**Open…** with an STL, 3MF or OBJ file adds it to the design you're in as a mesh body, or starts a new design from the start screen. It's a step in the history like any other.
+**Import** under **Create**, or **Open…** in the menu, with an STL, 3MF or OBJ file adds it to the design you're in as a mesh body. From the start screen it starts a new design. It's a step in the history like any other.
 
 On the way in it's repaired: points that should be shared are joined, faces are turned the right way out and small holes are closed. If it still isn't closed up, it says so, since some tools need a closed mesh.
 

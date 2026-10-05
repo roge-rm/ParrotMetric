@@ -290,7 +290,14 @@ class Rebuilder(private val kernel: Kernel) {
         }
         is PrimitiveFeature -> {
             val plane = resolvePlane(f.plane, bodies, f, planes)
-            applyTool(f, kernel.primitive(f.id, plane, f.kind.ordinal, f.u, f.v, f.a, f.b, f.c), f.operation, bodies, planes, made)
+            var tool = kernel.primitive(f.id, plane, f.kind.ordinal, f.u, f.v, f.a, f.b, f.c)
+            if (f.flip) {
+                // Mirrored through its plane, so it grows the other way.
+                val flipped = kernel.transform(f.id, tool, Transforms.mirror(plane.origin, plane.normal), "f")
+                kernel.release(tool)
+                tool = flipped
+            }
+            applyTool(f, tool, f.operation, bodies, planes, made)
         }
         is RevolveFeature -> {
             val sketch = sketchOf(f.sketchId, all)

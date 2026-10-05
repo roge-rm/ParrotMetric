@@ -50,7 +50,7 @@ object Tools {
 
         ToolDef("extrude", "Extrude", Icons.extrude, ToolGroup.Create, key = "E", suggest = ::areas) { it.design.startExtrude() },
         ToolDef("revolve", "Revolve", Icons.revolve, ToolGroup.Create, key = "Shift+E", suggest = ::areas) { it.design.startRevolve() },
-        ToolDef("open", "Open", Icons.open, ToolGroup.Create) { it.actions.openFile() },
+        ToolDef("open", "Import", Icons.open, ToolGroup.Create) { it.actions.openFile() },
         ToolDef("sweep", "Sweep", Icons.sweep, ToolGroup.Create, cluster = "Sweep and loft", suggest = { it.selectedAreas > 0 }) { it.design.startSweep() },
         ToolDef("loft", "Loft", Icons.loft, ToolGroup.Create, cluster = "Sweep and loft") { it.design.startLoft() },
         ToolDef("pipe", "Pipe", Icons.pipe, ToolGroup.Create, cluster = "Sweep and loft") { it.design.startPipe() },

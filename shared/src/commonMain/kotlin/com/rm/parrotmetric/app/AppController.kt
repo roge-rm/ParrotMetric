@@ -139,7 +139,7 @@ class AppController(
      * Frames an open sketch's points in the part of the view panels don't
      * cover, with some room round them. False if it has no points to frame.
      */
-    private fun fitSketch(sketch: SketchEditor, camera: CameraState): Boolean {
+    private fun fitSketch(sketch: SketchEditor, camera: CameraState, onlyIfOutside: Boolean = false): Boolean {
         val s = sketch.sketch
         if (s.points.isEmpty()) return false
         val projection = com.rm.parrotmetric.ui.sketch.PlaneProjection(camera, sketch.plane)
@@ -150,6 +150,7 @@ class AppController(
         val w = camera.width - l - r
         val h = camera.height - t - b
         if (w <= 0f || h <= 0f) return false
+        if (onlyIfOutside && x0 >= l && y0 >= t && x1 <= camera.width - r && y1 <= camera.height - b) return true
         val dx = l + w / 2 - (x0 + x1) / 2
         val dy = t + h / 2 - (y0 + y1) / 2
         // A lone point only needs centring.
@@ -601,6 +602,12 @@ class AppController(
             design.selectionChanged()
         }
 
+        override fun keepSketchInView() {
+            val sketch = state.sketch ?: return
+            val camera = state.camera ?: return
+            fitSketch(sketch, camera, onlyIfOutside = true)
+        }
+
         override fun fit() {
             val sketch = state.sketch
             val camera = state.camera
@@ -629,7 +636,9 @@ class AppController(
             editor.endDrawing()
             val pending = newSketch
             if (pending != null) {
-                if (editor.sketch.curves.isNotEmpty()) {
+                // Kept if anything was drawn: points alone are what Hole uses.
+                val s = editor.sketch
+                if (s.curves.isNotEmpty() || s.points.any { it !== s.origin }) {
                     design.checkpoint()
                     design.addSketch(pending.second, pending.first, editor.sketch)
                 }

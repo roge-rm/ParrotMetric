@@ -84,6 +84,9 @@ class DimensionEdit(
     val action: ((Double) -> String?)? = null,
 )
 
+/** A size of a shape just placed, offered as a dimension: its label, its size as drawn, and the dimension for a size. */
+class PlacedSize(val label: String, val initial: Double, val make: (Double) -> Constraint.Dimension)
+
 /** A constraint that fits the selection, offered in the Constrain sheet. */
 class ConstraintChoice(val label: String, val make: () -> Constraint)
 
@@ -149,6 +152,7 @@ class SketchEditor(
 
     fun selectTool(t: SketchTool) {
         endDrawing()
+        placed = null
         dimensionPicks.clear()
         editing = null
         if (t != SketchTool.Select) selection.clear()
@@ -523,6 +527,8 @@ class SketchEditor(
         val drawing = tool
         typed = null
         commit(Snap(target.first, target.second))
+        // The typed sizes become its dimensions below, so it isn't offered them again.
+        placed = null
         val made = sketch.curves.drop(before)
         fun hold(d: Constraint.Dimension, i: Int) {
             val text = t.texts[i].trim()
@@ -563,9 +569,58 @@ class SketchEditor(
         return true
     }
 
+    // Sizes of the shape just placed.
+
+    /** Goes up when a size set here may have moved the sketch out of view. */
+    var resized by mutableIntStateOf(0)
+        private set
+
+    /** The sizes of the shape just placed, offered until the next touch or tool. */
+    var placed by mutableStateOf<List<PlacedSize>?>(null)
+        private set
+
+    private fun offer(vararg sizes: PlacedSize) {
+        placed = sizes.toList()
+    }
+
+    fun dropPlaced() {
+        placed = null
+    }
+
+    /** Sets the placed shape's sizes from [texts], one per size, as dimensions. False, with a message, if one can't be. */
+    fun setPlaced(texts: List<String>): Boolean {
+        val sizes = placed ?: return false
+        val values = texts.map { Expression.evaluate(it, names()) }
+        if (values.any { it == null || it <= 0 }) {
+            message = "That isn't a number"
+            return false
+        }
+        checkpoint()
+        for ((i, size) in sizes.withIndex()) {
+            val d = size.make(values[i]!!).also { if (Expression.usesNames(texts[i])) it.expression = texts[i].trim() }
+            val why = when (sketch.add(d)) {
+                Sketch.Added.Yes -> null
+                Sketch.Added.AlreadySet -> "That's already set by other constraints"
+                Sketch.Added.Conflicts -> "That doesn't fit the other constraints"
+            }
+            if (why != null) {
+                // Back to how it was drawn, still offering its sizes.
+                undo()
+                placed = sizes
+                message = why
+                return false
+            }
+        }
+        placed = null
+        resized++
+        changed()
+        return true
+    }
+
     // Drawing.
 
     private fun commit(s: Snap) {
+        placed = null
         when (tool) {
             SketchTool.Point -> {
                 if (s.point != null) return
@@ -583,6 +638,7 @@ class SketchEditor(
                     checkpoint()
                     val p = place(s)
                     val line = sketch.addLine(start, p, construction)
+                    offer(PlacedSize("Length", sketch.length(line)) { Constraint.Length(line, it) })
                     if (s.alignedWith === start) addQuietly(if (s.horizontal) Constraint.Horizontal(line) else Constraint.Vertical(line))
                     placedForPending.clear()
                     // Closing the chain on its first point ends it.
@@ -611,6 +667,10 @@ class SketchEditor(
                             sketch.addLine(p3, p4, construction), sketch.addLine(p4, p1, construction),
                         )
                         sides.forEachIndexed { i, l -> addQuietly(if (i % 2 == 0) Constraint.Horizontal(l) else Constraint.Vertical(l)) }
+                        offer(
+                            PlacedSize("Width", sketch.length(sides[0])) { Constraint.Length(sides[0], it) },
+                            PlacedSize("Height", sketch.length(sides[1])) { Constraint.Length(sides[1], it) },
+                        )
                         // A construction diagonal keeps the centre in the middle.
                         addQuietly(Constraint.Midpoint(centre, sketch.addLine(p1, p3, construction = true)))
                         finishShape()
@@ -632,6 +692,10 @@ class SketchEditor(
                             sketch.addLine(p3, p4, construction), sketch.addLine(p4, first, construction),
                         )
                         sides.forEachIndexed { i, l -> addQuietly(if (i % 2 == 0) Constraint.Horizontal(l) else Constraint.Vertical(l)) }
+                        offer(
+                            PlacedSize("Width", sketch.length(sides[0])) { Constraint.Length(sides[0], it) },
+                            PlacedSize("Height", sketch.length(sides[1])) { Constraint.Length(sides[1], it) },
+                        )
                         finishShape()
                     }
                 }
@@ -650,6 +714,10 @@ class SketchEditor(
                         addQuietly(Constraint.Perpendicular(sides[0], sides[1]))
                         addQuietly(Constraint.Parallel(sides[0], sides[2]))
                         addQuietly(Constraint.Parallel(sides[1], sides[3]))
+                        offer(
+                            PlacedSize("Length", sketch.length(sides[0])) { Constraint.Length(sides[0], it) },
+                            PlacedSize("Width", sketch.length(sides[1])) { Constraint.Length(sides[1], it) },
+                        )
                         finishShape()
                     }
                 }
@@ -666,6 +734,7 @@ class SketchEditor(
                         checkpoint()
                         val c = sketch.addCircle(centre, r, construction)
                         s.point?.let { addQuietly(Constraint.OnCircle(it, c)) }
+                        offer(diameterOf(c))
                         finishShape()
                     }
                 }
@@ -684,6 +753,7 @@ class SketchEditor(
                         addQuietly(Constraint.Midpoint(centre, sketch.addLine(first, p, construction = true)))
                         addQuietly(Constraint.OnCircle(first, c))
                         addQuietly(Constraint.OnCircle(p, c))
+                        offer(diameterOf(c))
                         finishShape()
                     }
                 }
@@ -697,6 +767,7 @@ class SketchEditor(
                         val centre = sketch.addPoint(c.first, c.second)
                         val circle = sketch.addCircle(centre, hypot(sketch.x(a) - c.first, sketch.y(a) - c.second), construction)
                         for (q in listOf(a, b, p)) addQuietly(Constraint.OnCircle(q, circle))
+                        offer(diameterOf(circle))
                         finishShape()
                     }
                 }
@@ -717,7 +788,7 @@ class SketchEditor(
                         val centre = sketch.addPoint(c.first, c.second)
                         // Arcs run anticlockwise from start to end, so pick the way that passes the third point.
                         val passes = anticlockwiseBetween(c, sketch.x(a), sketch.y(a), s.u, s.v, sketch.x(b), sketch.y(b))
-                        if (passes) sketch.addArc(centre, a, b, construction) else sketch.addArc(centre, b, a, construction)
+                        offer(radiusOf(if (passes) sketch.addArc(centre, a, b, construction) else sketch.addArc(centre, b, a, construction)))
                         finishShape()
                     }
                 }
@@ -736,7 +807,7 @@ class SketchEditor(
                         checkpoint()
                         val end = s.point ?: sketch.addPoint(sketch.x(centre) + r * cos(a), sketch.y(centre) + r * sin(a))
                         if (end === start) return
-                        sketch.addArc(centre, start, end, construction)
+                        offer(radiusOf(sketch.addArc(centre, start, end, construction)))
                         finishShape()
                     }
                 }
@@ -757,6 +828,7 @@ class SketchEditor(
                     val centre = sketch.addPoint(c.first, c.second)
                     val arc = if (left) sketch.addArc(centre, start, end, construction) else sketch.addArc(centre, end, start, construction)
                     addQuietly(Constraint.TangentJoin(from, arc, start))
+                    offer(radiusOf(arc))
                     finishShape()
                 }
             }
@@ -780,7 +852,8 @@ class SketchEditor(
                     val r = hypot(s.u - sketch.x(centre), s.v - sketch.y(centre))
                     if (r < 1e-6) return
                     checkpoint()
-                    polygon(centre, r, atan2(s.v - sketch.y(centre), s.u - sketch.x(centre)))
+                    val circle = polygon(centre, r, atan2(s.v - sketch.y(centre), s.u - sketch.x(centre)))
+                    offer(radiusOf(circle))
                     finishShape()
                 }
             }
@@ -809,15 +882,20 @@ class SketchEditor(
                 else -> {
                     val p1 = pending[0]; val p2 = pending[1]
                     val (a, b, half) = slotCentres(slotStyle, sketch.x(p1), sketch.y(p1), sketch.x(p2), sketch.y(p2), s.u, s.v) ?: return
-                    when (slotStyle) {
+                    val made = when (slotStyle) {
                         SlotStyle.Centres -> slot(p1, p2, half)
                         SlotStyle.Overall -> {
                             // The ends placed were only to measure from.
                             for (p in placedForPending) if (sketch.constraints.none { p in it.points() }) sketch.removePoint(p)
                             slot(sketch.addPoint(a.first, a.second), sketch.addPoint(b.first, b.second), half)
                         }
-                        SlotStyle.Middle -> addQuietly(Constraint.Midpoint(p1, slot(sketch.addPoint(a.first, a.second), p2, half)))
+                        SlotStyle.Middle -> slot(sketch.addPoint(a.first, a.second), p2, half).also { addQuietly(Constraint.Midpoint(p1, it.first)) }
                     }
+                    val (middle, end) = made
+                    offer(
+                        PlacedSize("Length", sketch.length(middle)) { Constraint.Length(middle, it) },
+                        PlacedSize("Width", 2 * sketch.radius(end)) { Constraint.Radius(end, true, it) },
+                    )
                     finishShape()
                 }
             }
@@ -825,6 +903,10 @@ class SketchEditor(
         }
         changed()
     }
+
+    private fun diameterOf(c: Circle) = PlacedSize("Diameter", 2 * sketch.radius(c)) { Constraint.Radius(c, true, it) }
+    private fun radiusOf(c: Circle) = PlacedSize("Radius", sketch.radius(c)) { Constraint.Radius(c, false, it) }
+    private fun radiusOf(a: Arc) = PlacedSize("Radius", sketch.radius(a)) { Constraint.Radius(a, false, it) }
 
     /** A shape is done: the points placed for it stay, and the next starts afresh. */
     private fun finishShape() {
@@ -836,7 +918,7 @@ class SketchEditor(
      * A regular polygon: its corners on a construction circle, or with
      * [PolygonStyle.Outside] its sides touching it, and its sides equal.
      */
-    private fun polygon(centre: Point, r: Double, toward: Double) {
+    private fun polygon(centre: Point, r: Double, toward: Double): Circle {
         val n = polygonSides.coerceIn(3, 64)
         val outside = polygonStyle == PolygonStyle.Outside
         val circle = sketch.addCircle(centre, r, construction = true)
@@ -847,10 +929,11 @@ class SketchEditor(
         val sides = (0 until n).map { i -> sketch.addLine(corners[i], corners[(i + 1) % n], construction) }
         for (i in 1 until n) addQuietly(Constraint.Equal(sides[0], sides[i]))
         if (outside) for (side in sides) addQuietly(Constraint.TangentLine(side, circle))
+        return circle
     }
 
-    /** A slot round two centres: an arc at each end joined by two straight sides. Returns the construction line between the centres. */
-    private fun slot(a: Point, b: Point, half: Double): Line {
+    /** A slot round two centres: an arc at each end joined by two straight sides. Returns the construction line between the centres, and an end. */
+    private fun slot(a: Point, b: Point, half: Double): Pair<Line, Arc> {
         val ax = sketch.x(a); val ay = sketch.y(a); val bx = sketch.x(b); val by = sketch.y(b)
         val len = hypot(bx - ax, by - ay)
         val nx = -(by - ay) / len * half; val ny = (bx - ax) / len * half
@@ -866,7 +949,7 @@ class SketchEditor(
         addQuietly(Constraint.TangentJoin(side1, endB, b1))
         addQuietly(Constraint.TangentJoin(side2, endB, b2))
         addQuietly(Constraint.Equal(endA, endB))
-        return middle
+        return middle to endA
     }
 
     /** Which way a line or arc ending at [p] heads as it leaves p, and which curve it is; for a tangent arc. The newest wins. */
@@ -1208,6 +1291,7 @@ class SketchEditor(
             return false
         }
         cancelDimension()
+        resized++
         changed()
         return true
     }
@@ -1531,6 +1615,7 @@ class SketchEditor(
     private fun restore(s: Sketch.Snapshot) {
         sketch.restore(s)
         typed = null
+        placed = null
         pending.clear()
         placedForPending.clear()
         selection.clear()

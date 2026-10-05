@@ -608,6 +608,35 @@ class DesignEditor(
         val d = EmbossDraft(null)
         embossFace(d)
         openArea(d)
+        // Text drawn through a part is inside it, where its areas can't be tapped.
+        if (d.regions.isEmpty()) wholeSketch(d)
+    }
+
+    /** The newest sketch's areas, leaving out holes such as the middle of a letter. */
+    private fun wholeSketch(d: AreaDraft) {
+        for (f in design.active.filterIsInstance<SketchFeature>().reversed()) {
+            val regions = finder.find(f.sketch.profileCurves())
+            if (regions.isEmpty()) continue
+            // An area inside an odd number of other outlines is a hole in one of them.
+            val solid = regions.filter { r -> regions.count { o -> o !== r && insideLoop(o.loops[0], r.insideU, r.insideV) } % 2 == 0 }
+            d.sketchId = f.id
+            d.regions = solid.map { RegionRef(it.curveIds, it.insideU, it.insideV) }
+            rebuild()
+            return
+        }
+    }
+
+    /** Whether (u, v) is inside a loop of x, y pairs. */
+    private fun insideLoop(loop: FloatArray, u: Double, v: Double): Boolean {
+        var inside = false
+        var j = loop.size - 2
+        for (i in 0 until loop.size step 2) {
+            val xi = loop[i].toDouble(); val yi = loop[i + 1].toDouble()
+            val xj = loop[j].toDouble(); val yj = loop[j + 1].toDouble()
+            if ((yi > v) != (yj > v) && u < (xj - xi) * (v - yi) / (yj - yi) + xi) inside = !inside
+            j = i
+        }
+        return inside
     }
 
     private fun embossFace(d: EmbossDraft) {
@@ -1729,7 +1758,8 @@ class DesignEditor(
         })
         var c by mutableStateOf(editing?.c ?: 20.0)
         var operation by mutableStateOf(editing?.operation ?: Operation.NewBody)
-        override fun feature() = com.rm.parrotmetric.design.PrimitiveFeature(id, name, kind, plane, u, v, a, b, c, operation)
+        var flip by mutableStateOf(editing?.flip ?: false)
+        override fun feature() = com.rm.parrotmetric.design.PrimitiveFeature(id, name, kind, plane, u, v, a, b, c, operation, flip)
         override fun missing() = ""
     }
 

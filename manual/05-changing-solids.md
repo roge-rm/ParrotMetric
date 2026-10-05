@@ -25,7 +25,7 @@ Edges that join smoothly are taken together, so one tap can pick the whole way r
 ## Ribs and emboss
 
 - **Rib** grows a wall from an open line in a sketch until it meets the body, like a support inside a box. **Web** is the same but lies flat in the sketch's plane. Set the **Thickness**, and **Grow the other way** if it goes the wrong way.
-- **Emboss** raises or sinks sketch areas into a face, flat or curved. Pick the areas and the face, choose **Raised** or **Sunk** and the depth. Text on a round part follows the curve.
+- **Emboss** raises or sinks sketch areas into a face, flat or curved. Pick the areas and the face, choose **Raised** or **Sunk** and the depth. Text on a round part follows the curve. With no areas picked it uses all of the newest sketch, leaving the middles of letters open, which suits text drawn through the middle of a part where you can't tap it.
 
 ## Mirror and pattern
 

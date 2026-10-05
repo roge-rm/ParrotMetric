@@ -29,6 +29,8 @@ Tap to place each point. Points snap to the ends and middles of what's already t
 
 The styles of each tool show above the tools while it's in hand.
 
+As soon as a shape is placed, its sizes show at the bottom as you drew them: a rectangle's width and height, a circle's diameter, an arc's radius, a line's length, and so on. Type the sizes you want and tap **Set**, and they become dimensions. To leave it free, just carry on drawing.
+
 **Construction** makes new curves construction curves, drawn dashed. They help you place things but don't make areas. With curves picked, it switches those instead.
 
 ## Dimensions

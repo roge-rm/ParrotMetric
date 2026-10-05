@@ -48,7 +48,7 @@ A step that can't be built turns red and says why, and the steps after it still 
 
 ## Tool panels
 
-A tool's panel has its choices along the top and its sizes below, with **Done** and **Cancel**. The preview updates as you change things.
+A tool's panel has its choices along the top and its sizes below, with **Done** and **Cancel**. Most tools show a preview that updates as you change things. Fillet, Chamfer and the tools for faces show the body without the change while their panel is open, so you can keep picking edges and faces on it.
 
 Any size can be a sum, like `20+5` or `wall*2`, using your parameters (see Parameters and configurations). Sizes are in millimetres and angles in degrees.
 

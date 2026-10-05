@@ -335,6 +335,9 @@ void Renderer::setBodies(std::vector<DisplayMesh> bodies, bool refit) {
             d2 += (hi[k] - lo[k]) * (hi[k] - lo[k]);
         }
         radius_ = std::max(std::sqrt(d2) * 0.5f, 0.1f);
+    } else {
+        centre_[0] = centre_[1] = centre_[2] = 0;
+        radius_ = 40;
     }
     if (refit) fit();
 }
@@ -779,6 +782,41 @@ Pick Renderer::pick(float x, float y) {
     glReadPixels(ix, iy, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, px);
     glBindFramebuffer(GL_FRAMEBUFFER, targetFramebuffer);
     return fromId(uint32_t(px[0]) | uint32_t(px[1]) << 8 | uint32_t(px[2]) << 16);
+}
+
+Pick Renderer::pickNear(float x, float y, float reach, const std::function<bool(const Pick&)>& accept) {
+    drawIds();
+    int r = std::max(0, int(reach * density_));
+    int cx = std::clamp(int(x), 0, width_ - 1), cy = std::clamp(height_ - 1 - int(y), 0, height_ - 1);
+    int x0 = std::max(0, cx - r), x1 = std::min(width_ - 1, cx + r);
+    int y0 = std::max(0, cy - r), y1 = std::min(height_ - 1, cy + r);
+    int w = x1 - x0 + 1, h = y1 - y0 + 1;
+    std::vector<uint8_t> px(size_t(w) * size_t(h) * 4);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glReadPixels(x0, y0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, px.data());
+    glBindFramebuffer(GL_FRAMEBUFFER, targetFramebuffer);
+    // The nearest corner, edge and face; corners only from closer in, so an edge's end still picks the edge.
+    Pick best[3], centre;
+    int bestD[3] = {INT32_MAX, INT32_MAX, INT32_MAX};
+    int reach2 = r * r, cornerReach2 = reach2 * 4 / 10;
+    for (int row = 0; row < h; ++row)
+        for (int col = 0; col < w; ++col) {
+            const uint8_t* q = px.data() + (size_t(row) * size_t(w) + size_t(col)) * 4;
+            uint32_t v = uint32_t(q[0]) | uint32_t(q[1]) << 8 | uint32_t(q[2]) << 16;
+            if (v == 0) continue;
+            int dx = x0 + col - cx, dy = y0 + row - cy, d2 = dx * dx + dy * dy;
+            if (d2 > reach2) continue;
+            Pick p = fromId(v);
+            if (!accept(p)) continue;
+            if (d2 == 0) centre = p;
+            int slot = p.kind == Pick::Vertex ? 0 : p.kind == Pick::Edge ? 1 : 2;
+            if (slot == 0 && d2 > cornerReach2) continue;
+            if (d2 < bestD[slot]) bestD[slot] = d2, best[slot] = p;
+        }
+    if (best[0].kind != Pick::None) return best[0];
+    if (best[1].kind != Pick::None) return best[1];
+    if (centre.kind != Pick::None) return centre;
+    return best[2];
 }
 
 std::vector<Pick> Renderer::pickBox(float x0, float y0, float x1, float y1, bool crossing) {

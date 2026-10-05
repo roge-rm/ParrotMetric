@@ -81,6 +81,8 @@ data class PrimitiveFeature(
     val b: Double,
     val c: Double,
     val operation: Operation,
+    /** Grown behind its plane instead of in front. */
+    val flip: Boolean = false,
 ) : Feature() {
     override fun key() = this
 }
