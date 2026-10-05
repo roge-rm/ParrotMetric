@@ -42,6 +42,8 @@ interface Kernel {
     fun patchEdges(id: Int, body: Long, edges: List<String>): Long = throw KernelException("Not here")
     /** Surfaces sewn into one, a solid if they close round. */
     fun stitch(id: Int, bodies: List<Long>): Long = throw KernelException("Not here")
+    /** Several shapes held as one, to use as one tool; null where a kernel can't. */
+    fun gather(bodies: List<Long>): Long? = null
     /** A surface made thick: to one side, or both. */
     fun thicken(id: Int, body: Long, thickness: Double, both: Boolean): Long = throw KernelException("Not here")
     /** The body with faces taken away and the gap closed. */

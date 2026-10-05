@@ -47,6 +47,8 @@ enum class Combine { Join, Cut, Intersect };
 
 /** Joins, cuts or intersects target with tool. */
 NamedShape combine(int id, const NamedShape& target, const NamedShape& tool, Combine how);
+/** Several shapes held as one, names kept, to use as one tool. */
+NamedShape gather(const std::vector<NamedShape>& parts);
 
 /** Rounds the named edges. New faces are F<id>.r(<edge name>). */
 NamedShape fillet(int id, const NamedShape& body, const std::vector<std::string>& edges, double radius);

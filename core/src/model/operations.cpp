@@ -362,6 +362,13 @@ NamedShape combine(int id, const NamedShape& target, const NamedShape& tool, Com
         op->SetRunParallel(useCores());
         op->Build();
         if (!op->IsDone()) throw std::runtime_error("The bodies couldn't be combined");
+        if (!BRepCheck_Analyzer(op->Shape()).IsValid()) {
+            // Surfaces that cross at a shallow angle, as crossed helical grooves do, can come out broken;
+            // a small fuzzy tolerance usually sorts them out.
+            op->SetFuzzyValue(1e-4);
+            op->Build();
+            if (!op->IsDone()) throw std::runtime_error("The bodies couldn't be combined");
+        }
         NamedShape out = carryNames({&target, &tool}, *op, op->Shape(), prefix(id));
         if (volume(out.shape) < 1e-9) throw std::runtime_error(how == Combine::Cut ? "The cut removes the whole body" : "The bodies don't overlap");
         return out;
@@ -1391,7 +1398,9 @@ NamedShape coil(int id, const gp_Ax3& plane, double u, double v, double diameter
         at.SetTranslation(gp_Vec(u, v, 0));
         gp_Trsf place = placeOn(plane) * at;
         gp_Ax3 frame(gp_Pnt(0, 0, 0).Transformed(place), gp::DZ().Transformed(place), gp::DX().Transformed(place));
-        const double r = diameter / 2;
+        // A helix lying exactly on a cylinder's face makes booleans with it fail, as with a groove cut
+        // round a knob at the knob's size, so it sits a hair outside.
+        const double r = diameter / 2 + 1e-3;
         // The wire's section, starting at the helix's start (r along x, at the height of half the wire),
         // in the plane through the axis.
         const double z0 = section / 2;
@@ -1616,6 +1625,20 @@ NamedShape patchEdges(int id, const NamedShape& body, const std::vector<std::str
     } catch (const Standard_Failure&) {
         throw std::runtime_error("The patch couldn't be made");
     }
+}
+
+NamedShape gather(const std::vector<NamedShape>& parts) {
+    BRep_Builder b;
+    TopoDS_Compound all;
+    b.MakeCompound(all);
+    NamedShape out;
+    for (const auto& p : parts) {
+        b.Add(all, p.shape);
+        for (NCollection_DataMap<TopoDS_Shape, std::string, TopTools_ShapeMapHasher>::Iterator it(p.names); it.More(); it.Next())
+            out.names.Bind(it.Key(), it.Value());
+    }
+    out.shape = all;
+    return out;
 }
 
 NamedShape stitch(int id, const std::vector<NamedShape>& parts) {

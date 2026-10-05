@@ -174,7 +174,7 @@ object Manual {
             ManualBlock(ManualKind.Heading, "Mirror and pattern"),
             ManualBlock(ManualKind.Bullet, "**Mirror** copies across a plane or a flat face."),
             ManualBlock(ManualKind.Bullet, "**Pattern** makes copies **In a row** (and a second row for a grid), **Round an axis**, or **Along a path**."),
-            ManualBlock(ManualKind.Para, "Both work on **Bodies**, or on **Features**: the steps that made something, like a hole and its fillet, which are done again at each copy. Copies of bodies can be joined to the original with **Join to the original**."),
+            ManualBlock(ManualKind.Para, "Both work on **Bodies**, or on **Features**: the steps that made something, like a hole and its fillet, which are done again at each copy. A mirror or pattern of features can itself be picked, so a groove mirrored the other way round can be patterned round a knob for a diamond knurl. Copies of bodies can be joined to the original with **Join to the original**."),
             ManualBlock(ManualKind.Para, "Along a path, the copies are spread evenly along it or **Spaced** a set distance apart. **Turn with the path** turns each one to follow the path, and **Start from the other end** starts from the path's other end."),
             ManualBlock(ManualKind.Heading, "Bodies"),
             ManualBlock(ManualKind.Bullet, "**Combine** joins, cuts or intersects bodies with each other. Pick the body to keep first. **Keep the others** keeps the bodies used as tools."),

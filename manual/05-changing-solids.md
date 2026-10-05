@@ -34,7 +34,7 @@ Edges that join smoothly are taken together, so one tap can pick the whole way r
 - **Mirror** copies across a plane or a flat face.
 - **Pattern** makes copies **In a row** (and a second row for a grid), **Round an axis**, or **Along a path**.
 
-Both work on **Bodies**, or on **Features**: the steps that made something, like a hole and its fillet, which are done again at each copy. Copies of bodies can be joined to the original with **Join to the original**.
+Both work on **Bodies**, or on **Features**: the steps that made something, like a hole and its fillet, which are done again at each copy. A mirror or pattern of features can itself be picked, so a groove mirrored the other way round can be patterned round a knob for a diamond knurl. Copies of bodies can be joined to the original with **Join to the original**.
 
 Along a path, the copies are spread evenly along it or **Spaced** a set distance apart. **Turn with the path** turns each one to follow the path, and **Start from the other end** starts from the path's other end.
 

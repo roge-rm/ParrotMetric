@@ -2022,6 +2022,21 @@ JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_stitch(JNIEnv* env, jobjec
     }
 }
 
+JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_gather(JNIEnv* env, jobject, jlongArray bodies) {
+    try {
+        auto h = longs(env, bodies);
+        std::vector<pm::NamedShape> parts;
+        {
+            std::lock_guard<std::mutex> g(lock);
+            for (jlong x : h) parts.push_back(solidOf(x));
+        }
+        return keep(pm::gather(parts));
+    } catch (const std::exception& e) {
+        fail(env, e.what());
+        return 0;
+    }
+}
+
 JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_thicken(JNIEnv* env, jobject, jint id, jlong body, jdouble thickness, jboolean both) {
     try {
         std::unique_lock<std::mutex> g(lock);

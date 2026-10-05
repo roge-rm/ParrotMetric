@@ -96,6 +96,7 @@ class CoreKernel(private val core: NativeCore) : Kernel {
     }
     override fun patchEdges(id: Int, body: Long, edges: List<String>) = call { core.patchEdges(id, body, edges.toTypedArray()) }
     override fun stitch(id: Int, bodies: List<Long>) = call { core.stitch(id, bodies.toLongArray()) }
+    override fun gather(bodies: List<Long>) = call { core.gather(bodies.toLongArray()) }
     override fun emboss(id: Int, body: Long, face: String, plane: SketchPlane, curves: List<ProfileCurve>, regions: List<RegionRef>, depth: Double, sink: Boolean): Long {
         val c = Curves(curves)
         val p = Picks(regions)

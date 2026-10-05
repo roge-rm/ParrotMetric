@@ -727,3 +727,13 @@ TEST_CASE("areas are raised from and sunk into a round face") {
     CHECK(before - volume(sunk) < 17);
     CHECK_THROWS(emboss(4, rod, "F1.end", front, square, {{{1, 2, 3, 4}, 0, -15}}, 1, false));
 }
+
+TEST_CASE("a coil on a cylinder's side cuts a groove") {
+    // The coil's middle on the cylinder's face: half the wire inside.
+    NamedShape cyl = primitive(1, top, Primitive::Cylinder, 0, 0, 30, 15, 0);
+    NamedShape c = coil(2, top, 0, 0, 30, 60, 0.3, 1.5, false);
+    double o = overlapVolume(cyl, c);
+    CHECK(o > 15);
+    NamedShape cut = combine(3, cyl, c, Combine::Cut);
+    CHECK(volume(cut) == Catch::Approx(volume(cyl) - o).epsilon(1e-6));
+}

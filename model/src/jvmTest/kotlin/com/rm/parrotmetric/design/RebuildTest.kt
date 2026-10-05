@@ -116,7 +116,7 @@ private class FakeKernel : Kernel {
     override fun transform(id: Int, body: Long, m: DoubleArray, tag: String): Long {
         calls += "transform $id $tag"
         val b = bodies.getValue(body)
-        return if (m[0] < 0) make(Box(-b.to, -b.from, b.faces)) else make(Box(b.from + m[3], b.to + m[3], b.faces))
+        return if (m[0] < 0) make(Box(m[3] - b.to, m[3] - b.from, b.faces)) else make(Box(b.from + m[3], b.to + m[3], b.faces))
     }
 
     override fun split(id: Int, body: Long, origin: Vec3, normal: Vec3): List<Long> {
@@ -677,6 +677,22 @@ class RebuildTest {
         assertTrue("transform ${pattern.id} f${boss.id}.0" in k.calls)
         r.clear()
         assertTrue(k.bodies.isEmpty())
+    }
+
+    @Test
+    fun aPatternRepeatsWhatAMirrorOfFeaturesPlaced() {
+        val k = FakeKernel()
+        val d = Design()
+        extrude(d, sketchAt(d, 0.0, 10.0), Operation.NewBody)
+        val boss = extrude(d, sketchAt(d, 5.0, 3.0), Operation.Join)
+        val mirror = MirrorFeature(d.newId(), "Mirror", emptyList(), PlaneRef.Fixed(SketchPlane.Right), false, features = listOf(boss.id)).also { d.add(it) }
+        val pattern = PatternFeature(d.newId(), "Pattern", emptyList(), false, Axis3.X, 2, 30.0, 0.0, null, 1, 0.0, join = false, features = listOf(mirror.id))
+        d.add(pattern)
+        val built = Rebuilder(k).rebuild(d.active)
+        assertTrue(built.errors.isEmpty(), built.errors.toString())
+        // The mirrored boss at -8, and again 30 along.
+        assertEquals(listOf(-8.0, 22.0), built.bodies.drop(1).map { k.bodies.getValue(it.handle).from })
+        assertTrue("transform ${pattern.id} f${boss.id}.0" in k.calls, k.calls.toString())
     }
 
     @Test

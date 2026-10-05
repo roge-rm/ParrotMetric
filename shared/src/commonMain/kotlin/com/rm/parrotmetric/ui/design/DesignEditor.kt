@@ -1090,7 +1090,9 @@ class DesignEditor(
         return all.subList(0, i).filter {
             it is ExtrudeFeature || it is RevolveFeature || it is HoleFeature || it is com.rm.parrotmetric.design.SweepFeature ||
                 it is com.rm.parrotmetric.design.PipeFeature || it is com.rm.parrotmetric.design.CoilFeature ||
-                it is com.rm.parrotmetric.design.LoftFeature || it is com.rm.parrotmetric.design.PrimitiveFeature
+                it is com.rm.parrotmetric.design.LoftFeature || it is com.rm.parrotmetric.design.PrimitiveFeature ||
+                (it is com.rm.parrotmetric.design.MirrorFeature && it.features.isNotEmpty()) ||
+                (it is com.rm.parrotmetric.design.PatternFeature && it.features.isNotEmpty())
         }
     }
 

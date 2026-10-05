@@ -21,6 +21,7 @@ interface NativeCore {
     fun patch(id: Int, plane: DoubleArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, pickCounts: IntArray, pickIds: IntArray, pickPoints: DoubleArray): Long
     fun patchEdges(id: Int, body: Long, edges: Array<String>): Long
     fun stitch(id: Int, bodies: LongArray): Long
+    fun gather(bodies: LongArray): Long
     fun emboss(id: Int, body: Long, face: String, plane: DoubleArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, pickCounts: IntArray, pickIds: IntArray, pickPoints: DoubleArray, depth: Double, sink: Boolean): Long
     fun thicken(id: Int, body: Long, thickness: Double, both: Boolean): Long
     fun rib(id: Int, body: Long, plane: DoubleArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, thickness: Double, flip: Boolean, web: Boolean): Long
