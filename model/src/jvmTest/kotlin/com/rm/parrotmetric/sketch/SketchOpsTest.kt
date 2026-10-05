@@ -186,6 +186,14 @@ class SketchOpsTest {
         // The origin, once a construction circle is round it.
         s.addCircle(s.origin, 5.0, construction = true)
         assertEquals(setOf(a, b, c, lone, s.origin), s.holePoints().toSet())
+        // A rounded corner's kept point isn't one.
+        val r = Sketch()
+        val p0 = r.addPoint(0.0, 0.0); val p1 = r.addPoint(20.0, 0.0); val p2 = r.addPoint(20.0, 10.0)
+        r.addLine(p0, p1); r.addLine(p1, p2)
+        r.add(Constraint.Length(r.curves.first() as Line, 20.0))
+        assertNull(SketchOps.filletCorner(r, p1, 2.0))
+        assertTrue(p1 in r.points)
+        assertTrue(r.holePoints().isEmpty())
     }
 
     @Test

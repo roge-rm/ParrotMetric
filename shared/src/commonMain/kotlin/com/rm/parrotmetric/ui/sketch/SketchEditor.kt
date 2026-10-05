@@ -616,6 +616,9 @@ class SketchEditor(
             }
             else -> {}
         }
+        // What was just drawn stays in view, so typing a run of lines doesn't walk off the screen.
+        resizedPoints = made.flatMap { it.points() }.distinct()
+        resized++
         changed()
         followAim()
         return true

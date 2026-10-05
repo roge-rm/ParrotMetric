@@ -1172,7 +1172,8 @@ class DesignEditor(
     fun holeSketches(): List<SketchFeature> = design.active.filterIsInstance<SketchFeature>().filter { f ->
         val s = f.sketch
         // Lone points, or construction on its own: a sketch with drawn outlines is for something else.
-        s.points.any { p -> p !== s.origin && s.curves.none { p in it.points() } } || (s.holePoints().isNotEmpty() && s.curves.all { it.construction })
+        val at = s.holePoints()
+        at.any { p -> s.curves.none { p in it.points() } } || (at.isNotEmpty() && s.curves.all { it.construction })
     }.reversed()
 
     /** Opens a feature's panel to change it. */

@@ -232,10 +232,12 @@ class Sketch {
     /**
      * Where holes go: points that aren't part of a drawn curve, so lone points
      * and the corners and centres of construction curves. The origin only when
-     * construction uses it, as a construction circle round it does.
+     * construction uses it, as a construction circle round it does. Not a
+     * rounded corner's point, held where two drawn lines would meet.
      */
     fun holePoints(): List<Point> = points.filter { p ->
-        (p !== origin || curves.any { it.construction && p in it.points() }) && curves.none { !it.construction && p in it.points() }
+        (p !== origin || curves.any { it.construction && p in it.points() }) && curves.none { !it.construction && p in it.points() } &&
+            constraints.count { it is Constraint.OnLine && it.p === p && !it.line.construction } < 2
     }
 
     /**
