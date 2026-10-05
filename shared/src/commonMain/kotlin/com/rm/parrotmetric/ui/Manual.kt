@@ -304,7 +304,7 @@ object Manual {
             ManualBlock(ManualKind.Bullet, "**Ctrl+N**, **Ctrl+O**, **Ctrl+S**, **Ctrl+Shift+S** and **Ctrl+E** are new, open, save, save as and export. **Ctrl+Z** undoes, and **Ctrl+Shift+Z** or **Ctrl+Y** redoes. Alt works in place of Ctrl, for keyboards without one."),
             ManualBlock(ManualKind.Bullet, "**1** to **6** look from the front, back, top, bottom, left and right, and **0** goes back to the home view. **V** fits everything in view."),
             ManualBlock(ManualKind.Bullet, "**Esc** or **Backspace** backs out of a tool or a sketch tool."),
-            ManualBlock(ManualKind.Bullet, "In a tool's panel, typing a number goes into its first size. **Tab** moves to the next one, and **Enter** is **Done**."),
+            ManualBlock(ManualKind.Bullet, "In a tool's panel, typing a number, or the name of a parameter, goes into its first size. **Tab** moves to the next one, and **Enter** is **Done**."),
             ManualBlock(ManualKind.Heading, "In a sketch"),
             ManualBlock(ManualKind.Bullet, "**L** line, **R** rectangle, **C** circle, **A** arc, **G** polygon, **Shift+L** slot, **Shift+S** spline, **Shift+C** ellipse, **Shift+P** point and **Shift+T** text. Pressing a tool's letter again switches between its styles."),
             ManualBlock(ManualKind.Bullet, "**D** dimension, **T** trim, **E** extend, **B** break, **O** offset, **F** round corner, **Shift+F** cut corner, **M** move, **Shift+M** mirror and **X** construction. **H** and **V** make what's picked horizontal or vertical. **Delete** takes away what's picked."),

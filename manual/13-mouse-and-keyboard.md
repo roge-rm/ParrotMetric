@@ -19,7 +19,7 @@ Press **?** for the list of every key, **S** to find a tool by typing its name a
 - **Ctrl+N**, **Ctrl+O**, **Ctrl+S**, **Ctrl+Shift+S** and **Ctrl+E** are new, open, save, save as and export. **Ctrl+Z** undoes, and **Ctrl+Shift+Z** or **Ctrl+Y** redoes. Alt works in place of Ctrl, for keyboards without one.
 - **1** to **6** look from the front, back, top, bottom, left and right, and **0** goes back to the home view. **V** fits everything in view.
 - **Esc** or **Backspace** backs out of a tool or a sketch tool.
-- In a tool's panel, typing a number goes into its first size. **Tab** moves to the next one, and **Enter** is **Done**.
+- In a tool's panel, typing a number, or the name of a parameter, goes into its first size. **Tab** moves to the next one, and **Enter** is **Done**.
 
 ## In a sketch
 

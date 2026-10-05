@@ -248,7 +248,15 @@ class Rebuilder(private val kernel: Kernel) {
                     val (forward, back) = throughAll(f, plane, bodies)
                     kernel.extrude(f.id, plane, sketch.curves(), f.regions, forward, back, f.taper, f.thin)
                 }
-                else -> kernel.extrude(f.id, plane, sketch.curves(), f.regions, f.forward, f.back, f.taper, f.thin)
+                else -> {
+                    val out = kernel.extrude(f.id, plane, sketch.curves(), f.regions, f.forward, f.back, f.taper, f.thin)
+                    // A one-sided cut from a sketch on a face goes into the body, whichever way the face looks.
+                    val oneSide = f.back == 0.0 && f.forward > 0
+                    if (oneSide && f.operation != Operation.NewBody && f.operation != Operation.Join && bodies.none { kernel.overlaps(it.handle, out) }) {
+                        kernel.release(out)
+                        kernel.extrude(f.id, plane, sketch.curves(), f.regions, 0.0, f.forward, f.taper, f.thin)
+                    } else out
+                }
             }
             applyTool(f, tool, f.operation, bodies, planes, made)
         }

@@ -94,6 +94,8 @@ interface Viewport {
 data class HistoryEntry(
     val id: Int, val name: String, val kind: Kind, val error: String?, val active: Boolean,
     val warning: String? = null, val off: Boolean = false,
+    /** The tool that makes this kind of step, for its icon, or null. */
+    val tool: String? = null,
 ) {
     enum class Kind { Sketch, Create, Modify, Construct, Import }
 }
@@ -161,8 +163,18 @@ class DesignEditor(
                 else -> HistoryEntry.Kind.Modify
             }
             val off = f.id in design.suppressed
-            HistoryEntry(f.id, f.name, kind, if (off) null else errors[f.id], i < design.marker, if (off) null else warnings[f.id], off)
+            HistoryEntry(f.id, f.name, kind, if (off) null else errors[f.id], i < design.marker, if (off) null else warnings[f.id], off, toolFor(f))
         }
+    }
+
+    /** The tool a step comes from, by the tool ids in Tools: mostly its class name, such as ShellFeature for "shell". */
+    private fun toolFor(f: Feature): String? = when (f) {
+        is com.rm.parrotmetric.design.PrimitiveFeature -> f.kind.name.lowercase()
+        is com.rm.parrotmetric.design.OffsetFaceFeature -> "presspull"
+        is com.rm.parrotmetric.design.ConvertFeature -> "tosolid"
+        is com.rm.parrotmetric.design.MeshEditFeature -> f.kind.name.lowercase()
+        is PlaneFeature -> "plane.offset"
+        else -> f::class.simpleName?.removeSuffix("Feature")?.lowercase()
     }
 
     /** Every body there is now, labels and handles, hidden ones too. */

@@ -37,6 +37,12 @@ class Design {
     val configurations = mutableListOf<Configuration>()
     var configuration: String? = null
 
+    /** Whether the parameters or features turned off differ from what the configuration in use keeps. */
+    val configurationChanged: Boolean get() {
+        val c = configurations.firstOrNull { it.name == configuration } ?: return false
+        return c.parameters != parameters.associate { it.name to it.expression } || c.suppressed != suppressed.toSet()
+    }
+
     /** Keeps the parameters and features turned off as they are now, as [name], and uses it. */
     fun saveConfiguration(name: String) {
         val c = Configuration(name, parameters.associate { it.name to it.expression }, suppressed.toSet())

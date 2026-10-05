@@ -33,6 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -177,7 +178,10 @@ fun PartsSheet(editor: DesignEditor, close: () -> Unit) {
 
 @Composable
 private fun NameDialog(title: String, start: String, dismiss: () -> Unit, done: (String) -> Unit) {
-    var text by remember { mutableStateOf(start) }
+    // The suggested name is selected, so typing replaces it, and Enter is Done.
+    var text by remember { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(start, androidx.compose.ui.text.TextRange(0, start.length))) }
+    val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+    androidx.compose.runtime.LaunchedEffect(Unit) { focus.requestFocus() }
     AlertDialog(
         onDismissRequest = dismiss,
         containerColor = Palette.surface,
@@ -185,13 +189,15 @@ private fun NameDialog(title: String, start: String, dismiss: () -> Unit, done: 
         text = {
             BasicTextField(
                 text, { text = it },
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Palette.ground).padding(12.dp),
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Palette.ground).padding(12.dp).focusRequester(focus),
                 textStyle = TextStyle(color = Palette.text, fontSize = 17.sp),
                 cursorBrush = SolidColor(Palette.mint),
                 singleLine = true,
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
+                keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { done(text.text) }),
             )
         },
-        confirmButton = { TextButton(onClick = { done(text) }) { Text("Done", color = Palette.mint) } },
+        confirmButton = { TextButton(onClick = { done(text.text) }) { Text("Done", color = Palette.mint) } },
         dismissButton = { TextButton(onClick = dismiss) { Text("Cancel", color = Palette.muted) } },
     )
 }
@@ -215,7 +221,7 @@ fun ParametersSheet(editor: DesignEditor, close: () -> Unit) {
                 color = if (c == current) Palette.mint.copy(alpha = 0.2f) else Palette.raised,
                 contentColor = if (c == current) Palette.mint else Palette.text,
             ) { Text(c, Modifier.padding(horizontal = 12.dp, vertical = 8.dp), fontSize = 13.sp, fontWeight = FontWeight.SemiBold) }
-            if (current != null) TextButton(onClick = { editor.saveConfiguration(current) }) { Text("Update $current", color = Palette.mint, fontSize = 13.sp) }
+            if (current != null && editor.design.configurationChanged) TextButton(onClick = { editor.saveConfiguration(current) }) { Text("Update $current", color = Palette.mint, fontSize = 13.sp) }
             TextButton(onClick = { naming = true }) { Text(if (configs.isEmpty()) "Save as a configuration" else "Save as new", color = Palette.mint, fontSize = 13.sp) }
             if (current != null) IconButton(onClick = { editor.removeConfiguration(current) }) {
                 Icon(Icons.delete, "Remove $current", Modifier.size(18.dp), tint = Palette.muted)
@@ -245,7 +251,9 @@ fun ParametersSheet(editor: DesignEditor, close: () -> Unit) {
         if (n.isNotEmpty()) editor.saveConfiguration(n)
         naming = false
     }
-    if (adding) NameDialog("New parameter", "width", { adding = false }) { name ->
+    // The usual sizes first, then numbered ones.
+    val suggested = (listOf("width", "depth", "height", "wall") + (1..99).map { "p$it" }).first { n -> list.none { it.name == n } }
+    if (adding) NameDialog("New parameter", suggested, { adding = false }) { name ->
         val n = name.trim()
         when {
             !com.rm.parrotmetric.sketch.Expression.isName(n) -> editor.message = "A name is letters, digits and _, starting with a letter"

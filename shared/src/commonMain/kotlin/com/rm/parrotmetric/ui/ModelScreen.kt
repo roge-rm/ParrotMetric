@@ -319,7 +319,9 @@ fun ModelScreen(
                     else -> escape()
                 }
             }
-            if (sketch == null && design.panel != null && c != null && startsNumber(c) && chain.startFirst(c)) {
+            // A digit, or the first letter of a parameter's name, starts the panel's first size.
+            val startsSize = c != null && (startsNumber(c) || design.design.parameters.any { it.name.startsWith(c) })
+            if (sketch == null && design.panel != null && startsSize && chain.startFirst(c!!)) {
                 started = c
                 return@onKeyEvent true
             }
@@ -590,7 +592,7 @@ private fun HistoryBar(design: DesignEditor, actions: ModelActions) {
                         .height(36.dp).padding(start = 9.dp, end = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(group.icon, null, Modifier.size(15.dp), tint = if (entry.error != null) Palette.orange else group.colour)
+                    Icon(entry.tool?.let { Tools.byId(it) }?.icon ?: group.icon, null, Modifier.size(15.dp), tint = if (entry.error != null) Palette.orange else group.colour)
                     Spacer(Modifier.width(6.dp))
                     Text(
                         entry.name, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Palette.text, maxLines = 1,
