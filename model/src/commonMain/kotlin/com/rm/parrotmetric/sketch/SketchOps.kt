@@ -404,6 +404,17 @@ object SketchOps {
         return null
     }
 
+    /** An expression for the opposite of [e], as simple as it can be: "-wall" gives "wall". */
+    fun negated(e: String): String {
+        val t = e.trim()
+        if (t.startsWith("-")) {
+            val rest = t.substring(1).trim()
+            if (rest.all { it.isLetterOrDigit() || it == '_' || it == '.' }) return rest
+            if (rest.startsWith("(") && rest.endsWith(")") && rest.count { it == '(' } == 1) return rest
+        }
+        return "-($t)"
+    }
+
     /**
      * Copies curves a distance away: lines alongside, circles and arcs with
      * the same centre. Positive moves away from the middle of what's copied.
@@ -474,7 +485,7 @@ object SketchOps {
         // Each line is held its distance from the one it came from, typed as a parameter if it was,
         // so changing the distance moves it; round a smooth outline one of these sets them all.
         for ((old, new) in made) if (old is Line && new is Line) {
-            s.add(Constraint.PointLineDistance(new.a, old, abs(distance)).also { it.expression = expression })
+            s.add(Constraint.PointLineDistance(new.a, old, abs(distance)).also { it.expression = expression?.let { e -> if (distance < 0) negated(e) else e } })
         }
         s.solve()
         return null

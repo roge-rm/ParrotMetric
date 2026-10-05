@@ -61,6 +61,9 @@ import kotlinx.coroutines.delay
 import kotlin.math.round
 
 /** The top of the screen while sketching: its name and plane, fit, undo, redo and Finish. */
+
+/** Buttons that leave the keys with the sketch, so a typed number or Enter still goes to it. */
+private val keepKeys = Modifier.focusProperties { canFocus = false }
 @Composable
 fun SketchTopBar(editor: SketchEditor, onFit: () -> Unit, onFinish: () -> Unit) {
     editor.version
@@ -71,7 +74,6 @@ fun SketchTopBar(editor: SketchEditor, onFit: () -> Unit, onFinish: () -> Unit) 
             Text(editor.plane.name, fontSize = 12.sp, color = Palette.muted, maxLines = 1)
         }
         // These leave the keys with the sketch, so its letter keys still work after a click.
-        val keepKeys = Modifier.focusProperties { canFocus = false }
         IconButton(onClick = onFit, keepKeys) { Icon(Icons.fit, "Fit the sketch in view", tint = Palette.text) }
         IconButton(onClick = editor::undo, keepKeys, enabled = editor.canUndo) { Icon(Icons.undo, "Undo", tint = if (editor.canUndo) Palette.text else Palette.faint) }
         IconButton(onClick = editor::redo, keepKeys, enabled = editor.canRedo) { Icon(Icons.redo, "Redo", tint = if (editor.canRedo) Palette.text else Palette.faint) }
@@ -239,7 +241,7 @@ private fun BarButton(a: SketchAction, showName: Boolean = false, tint: Color = 
         Surface(
             onClick = { a.run?.invoke() },
             enabled = enabled,
-            modifier = Modifier.height(44.dp),
+            modifier = keepKeys.height(44.dp),
             shape = RoundedCornerShape(14.dp),
             color = if (a.active) Palette.yellow.copy(alpha = 0.18f) else Color.Transparent,
             contentColor = if (enabled) Palette.text else Palette.faint,
@@ -266,7 +268,7 @@ private fun BarGroup(label: String, icon: ImageVector, actions: List<SketchActio
             Surface(
                 onClick = { open = true },
                 enabled = enabled,
-                modifier = Modifier.height(44.dp),
+                modifier = keepKeys.height(44.dp),
                 shape = RoundedCornerShape(14.dp),
                 color = if (active || open) Palette.yellow.copy(alpha = 0.18f) else Color.Transparent,
                 contentColor = if (enabled) Palette.text else Palette.faint,
@@ -327,7 +329,7 @@ private fun ToolGrid(editor: SketchEditor, expanded: Boolean) {
                 ToolRow(editor, main)
                 Surface(
                     onClick = { showMore = !showMore },
-                    modifier = Modifier.weight(1f).height(64.dp),
+                    modifier = keepKeys.weight(1f).height(64.dp),
                     shape = RoundedCornerShape(20.dp),
                     color = if (showMore) Palette.sketch.copy(alpha = 0.16f) else Color.Transparent,
                     contentColor = Palette.text,
@@ -376,6 +378,7 @@ private fun PolygonSides(editor: SketchEditor) {
         for (n in listOf(3, 4, 5, 6, 8, 12)) {
             Surface(
                 onClick = { editor.polygonSides = n },
+                modifier = keepKeys,
                 shape = RoundedCornerShape(12.dp),
                 color = if (editor.polygonSides == n) Palette.line else Color.Transparent,
                 contentColor = Palette.text,
@@ -391,6 +394,7 @@ private fun ChoiceRow(options: List<String>, chosen: Int, onPick: (Int) -> Unit)
         options.forEachIndexed { i, label ->
             Surface(
                 onClick = { onPick(i) },
+                modifier = keepKeys,
                 shape = RoundedCornerShape(12.dp),
                 color = if (i == chosen) Palette.line else Color.Transparent,
                 contentColor = Palette.text,
@@ -416,7 +420,7 @@ private fun androidx.compose.foundation.layout.RowScope.ToolRow(editor: SketchEd
                 Surface(
                     // Tapping the tool in hand again ends what it's drawing.
                     onClick = { if (active && tool != SketchTool.Select) editor.endDrawing() else editor.selectTool(tool) },
-                    modifier = Modifier.weight(1f).height(64.dp),
+                    modifier = keepKeys.weight(1f).height(64.dp),
                     shape = RoundedCornerShape(20.dp),
                     color = if (active) Palette.sketch.copy(alpha = 0.16f) else Color.Transparent,
                     contentColor = if (active) Palette.sketch else Palette.text,

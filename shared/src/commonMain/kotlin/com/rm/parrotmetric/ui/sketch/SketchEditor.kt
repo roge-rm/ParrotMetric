@@ -84,6 +84,8 @@ class DimensionEdit(
     val label: String,
     /** For a number that isn't a dimension, such as an offset: does the job, returning null or why it couldn't. */
     val action: ((Double) -> String?)? = null,
+    /** Less than 0 means something, as an offset's side does. */
+    val signed: Boolean = false,
 )
 
 /** A size of a shape just placed, offered as a dimension: its label, its size as drawn, and the dimension for a size. */
@@ -565,7 +567,7 @@ class SketchEditor(
         for (i in t.texts.indices) {
             val v = values[i]
             if (t.texts[i].isNotBlank() && (v == null || (v <= 0 && !t.angle[i]))) {
-                message = "That isn't a number"
+                message = if (v == null) "That isn't a number" else "It has to be more than 0"
                 return true
             }
         }
@@ -645,7 +647,7 @@ class SketchEditor(
         val sizes = placed ?: return false
         val values = texts.map { Expression.evaluate(it, names()) }
         if (values.any { it == null || it <= 0 }) {
-            message = "That isn't a number"
+            message = if (values.any { it == null }) "That isn't a number" else "It has to be more than 0"
             return false
         }
         checkpoint()
@@ -1322,8 +1324,12 @@ class SketchEditor(
         val edit = editing ?: return false
         val typed = Expression.evaluate(text, names())
         val expression = if (Expression.usesNames(text)) text.trim() else null
-        if (typed == null || typed <= 0 && !edit.isAngle) {
+        if (typed == null) {
             message = "That isn't a number"
+            return false
+        }
+        if (typed <= 0 && !edit.isAngle && !edit.signed) {
+            message = "It has to be more than 0"
             return false
         }
         val value = if (edit.isAngle) typed * PI / 180 else typed
@@ -1441,7 +1447,7 @@ class SketchEditor(
     fun startOffset() {
         val curves = selectedCurves
         if (curves.isEmpty()) return
-        editing = DimensionEdit(null, null, 2.0, false, "Offset", action = { d -> SketchOps.offset(sketch, curves, d, typedExpression).also { if (it == null) selection.clear() } })
+        editing = DimensionEdit(null, null, 2.0, false, "Offset", action = { d -> SketchOps.offset(sketch, curves, d, typedExpression).also { if (it == null) selection.clear() } }, signed = true)
     }
 
     fun startCornerChamfer() {

@@ -292,6 +292,8 @@ fun ModelScreen(
                     sketch.applyTyped() -> true
                     sketch.pending.isNotEmpty() -> { sketch.endDrawing(); true }
                     strayNumber -> { strayNumber = false; true }
+                    // Something else has the keys, such as a menu.
+                    !screenFocused -> false
                     else -> { actions.finishSketch(); true }
                 }
                 name == "Enter" && design.panel != null -> {

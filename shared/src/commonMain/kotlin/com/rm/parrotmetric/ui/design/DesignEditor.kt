@@ -875,6 +875,14 @@ class DesignEditor(
         joinOnFace(d)
     }
 
+    private fun usesSketch(f: Feature, id: Int) = when (f) {
+        is ExtrudeFeature -> f.sketchId == id
+        is RevolveFeature -> f.sketchId == id
+        is HoleFeature -> f.sketchId == id
+        is com.rm.parrotmetric.design.SweepFeature -> f.sketchId == id
+        else -> false
+    }
+
     /** A new step from a sketch on a body's face joins that body unless told otherwise; decided once, on its first areas. */
     private fun joinOnFace(d: AreaDraft) {
         if (!d.fresh) return
@@ -885,8 +893,8 @@ class DesignEditor(
     private fun openArea(d: AreaDraft) {
         panel = d
         selectionChanged()
-        // Nothing picked: the newest sketch's area, when it has just the one.
-        if (d.regions.isEmpty()) design.active.lastOrNull { it is SketchFeature }?.let { f ->
+        // Nothing picked: the newest sketch's area, when it has just the one and nothing uses it yet.
+        if (d.regions.isEmpty()) design.active.lastOrNull { it is SketchFeature }?.takeIf { f -> design.active.none { usesSketch(it, f.id) } }?.let { f ->
             val only = finder.find((f as SketchFeature).sketch.profileCurves()).singleOrNull() ?: return@let
             d.sketchId = f.id
             d.regions = listOf(RegionRef(only.curveIds, only.insideU, only.insideV))
@@ -1280,6 +1288,7 @@ class DesignEditor(
                 d.regions = picked.filter { it.first == picked[0].first }.mapNotNull { (_, r) ->
                     regions.getOrNull(r)?.let { RegionRef(it.curveIds, it.insideU, it.insideV) }
                 }
+                joinOnFace(d)
                 rebuild()
             }
             is EdgeDraft -> d.edges = viewport.selectedEdges()

@@ -186,6 +186,13 @@ class SketchOpsTest {
     }
 
     @Test
+    fun anInwardOffsetKeepsItsParameterAsAPositiveSize() {
+        assertEquals("wall", SketchOps.negated("-wall"))
+        assertEquals("(a+b)", SketchOps.negated("-(a+b)"))
+        assertEquals("-(a-b)", SketchOps.negated("a-b"))
+    }
+
+    @Test
     fun aWholeOutlineIsFoundFromOneOfItsPieces() {
         val s = Sketch()
         val a = s.addPoint(0.0, 0.0); val b = s.addPoint(20.0, 0.0); val c = s.addPoint(20.0, 10.0); val d = s.addPoint(0.0, 10.0)
