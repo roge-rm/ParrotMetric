@@ -68,6 +68,7 @@ class DesignFileTest {
             com.rm.parrotmetric.design.HoleFeature(d.newId(), "Hole", 1, 4.0, 0.0, com.rm.parrotmetric.design.HoleKind.Countersink, 8.0, 0.0, listOf("Body 2")),
             com.rm.parrotmetric.design.LipFeature(d.newId(), "Lip", "F2.end", 1.0, 2.0, 0.2, "Body 2"),
             com.rm.parrotmetric.design.LipFeature(d.newId(), "Lip 2", "F2.end", 1.0, 2.0, 0.2, null),
+            com.rm.parrotmetric.design.SnapFitFeature(d.newId(), "Snap fit", 1, com.rm.parrotmetric.design.SnapFitSizes(9.0, 5.0, 1.2, 0.8, 1.4, 0.3), "Body 2"),
             com.rm.parrotmetric.design.MirrorFeature(d.newId(), "Mirror", listOf("Body 1"), top, true),
             com.rm.parrotmetric.design.PatternFeature(d.newId(), "Pattern", emptyList(), false, com.rm.parrotmetric.design.Axis3.X, 3, 10.0, 0.0, com.rm.parrotmetric.design.Axis3.Y, 2, 5.0, false),
             com.rm.parrotmetric.design.CombineFeature(d.newId(), "Combine", "Body 1", listOf("Body 2"), Operation.Cut, true),

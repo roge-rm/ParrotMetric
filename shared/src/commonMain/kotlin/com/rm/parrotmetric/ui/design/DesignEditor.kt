@@ -189,6 +189,7 @@ class DesignEditor(
         is com.rm.parrotmetric.design.RibFeature -> if (f.web) "web" else "rib"
         is com.rm.parrotmetric.design.EmbossFeature -> "emboss"
         is HoleFeature -> "hole"
+        is com.rm.parrotmetric.design.SnapFitFeature -> "snapfit"
         is com.rm.parrotmetric.design.ThreadFeature -> "thread"
         is com.rm.parrotmetric.design.LipFeature -> "lip"
         is MirrorFeature -> "mirror"
@@ -1096,6 +1097,26 @@ class DesignEditor(
         rebuild()
     }
 
+    fun startSnapFit() {
+        panel = SnapFitDraft(null).also { snapBase(it) }
+        rebuild()
+    }
+
+    /** Sketches with points on a body's face, where clips can go, newest first. */
+    fun snapSketches(): List<SketchFeature> = holeSketches().filter { it.plane is PlaneRef.OnFace }
+
+    /** Picks the sketch the clips come from, and with it the body they stand on. */
+    fun pickSnapSketch(d: SnapFitDraft, id: Int) {
+        d.sketchId = id
+        snapBase(d)
+        if (d.catchIn == d.base) d.catchIn = null
+        draftChanged()
+    }
+
+    private fun snapBase(d: SnapFitDraft) {
+        d.base = ((d.sketchId?.let { design.feature(it) } as? SketchFeature)?.plane as? PlaneRef.OnFace)?.let { baseOf(it.face) }
+    }
+
     fun startMirror() = openBodies(MirrorDraft(null))
     fun startPattern() = openBodies(PatternDraft(null))
     fun startCombine() = openBodies(CombineDraft(null))
@@ -1124,14 +1145,14 @@ class DesignEditor(
         d.planes = choices
     }
 
-    /** Pairs of shown bodies that overlap, and by how much (mm³). */
+    /** Pairs of shown bodies that overlap, and by how much (mm³); less than 0.1 mm³ is faces touching, too small to print. */
     suspend fun interference(): List<Triple<String, String, Double>> = withContext(Dispatchers.Default) {
         lock.withLock {
             val shown = shownBodies
             val out = mutableListOf<Triple<String, String, Double>>()
             for (i in shown.indices) for (j in i + 1 until shown.size) {
                 val v = kernel.overlapVolume(shown[i].handle, shown[j].handle)
-                if (v > 1e-6) out += Triple(shown[i].label, shown[j].label, v)
+                if (v > 0.1) out += Triple(shown[i].label, shown[j].label, v)
             }
             out
         }
@@ -1189,6 +1210,7 @@ class DesignEditor(
             is com.rm.parrotmetric.design.OffsetFaceFeature -> FaceDraft(f, FaceTool.PressPull)
             is com.rm.parrotmetric.design.DeleteFaceFeature -> FaceDraft(f, FaceTool.Delete)
             is HoleFeature -> HoleDraft(f)
+            is com.rm.parrotmetric.design.SnapFitFeature -> SnapFitDraft(f).also { snapBase(it) }
             is MirrorFeature -> MirrorDraft(f)
             is PatternFeature -> PatternDraft(f)
             is CombineFeature -> CombineDraft(f)
@@ -1554,6 +1576,26 @@ class DesignEditor(
         var hole by mutableStateOf(false)
         override fun feature(): Feature? = face?.let { com.rm.parrotmetric.design.ThreadFeature(id, name, it, pitch, clearance) }
         override fun missing() = "Tap the round face of a shaft or hole"
+    }
+
+    inner class SnapFitDraft(editing: com.rm.parrotmetric.design.SnapFitFeature?) : FeatureDraft() {
+        val id = editing?.id ?: newId()
+        private val name = editing?.name ?: nextName("Snap fit", design.features.count { it is com.rm.parrotmetric.design.SnapFitFeature })
+        var sketchId by mutableStateOf(editing?.sketchId ?: snapSketches().firstOrNull()?.id)
+        private val start = editing?.sizes ?: com.rm.parrotmetric.design.SnapFitSizes()
+        var length by mutableStateOf(start.length)
+        var width by mutableStateOf(start.width)
+        var thickness by mutableStateOf(start.thickness)
+        var overhang by mutableStateOf(start.overhang)
+        var catchHeight by mutableStateOf(start.catchHeight)
+        var gap by mutableStateOf(start.gap)
+        var catchIn by mutableStateOf(editing?.catchIn)
+        /** The body the clips stand on, so the catches aren't offered in it. */
+        var base by mutableStateOf<String?>(null)
+        override fun feature(): Feature? = sketchId?.let {
+            com.rm.parrotmetric.design.SnapFitFeature(id, name, it, com.rm.parrotmetric.design.SnapFitSizes(length, width, thickness, overhang, catchHeight, gap), catchIn)
+        }
+        override fun missing() = "Sketch points on the face the clips stand on first"
     }
 
     inner class LipDraft(editing: com.rm.parrotmetric.design.LipFeature?) : FeatureDraft() {

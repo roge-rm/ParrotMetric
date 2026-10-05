@@ -151,6 +151,17 @@ object Parametrics {
                 "clearance" -> f.copy(clearance = v)
                 else -> f
             }
+            is SnapFitFeature -> f.copy(sizes = f.sizes.let { z ->
+                when (field) {
+                    "length" -> z.copy(length = v)
+                    "width" -> z.copy(width = v)
+                    "thickness" -> z.copy(thickness = v)
+                    "overhang" -> z.copy(overhang = v)
+                    "catchHeight" -> z.copy(catchHeight = v)
+                    "gap" -> z.copy(gap = v)
+                    else -> z
+                }
+            })
             is LipFeature -> when (field) {
                 "width" -> f.copy(width = v)
                 "height" -> f.copy(height = v)

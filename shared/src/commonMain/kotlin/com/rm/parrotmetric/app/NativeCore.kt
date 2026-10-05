@@ -39,6 +39,8 @@ interface NativeCore {
     /** plane: origin then normal. */
     fun split(id: Int, body: Long, plane: DoubleArray): LongArray
     fun holeTool(id: Int, plane: DoubleArray, points: DoubleArray, diameter: Double, depth: Double, kind: Int, topDiameter: Double, topDepth: Double): Long
+    /** Snap-fit clips, or with [catchPart] the recesses they rest in, at points on a plane, hooks pointing away from [middle]. */
+    fun snapFitTool(id: Int, plane: DoubleArray, points: DoubleArray, middle: DoubleArray, length: Double, width: Double, thickness: Double, overhang: Double, catchHeight: Double, gap: Double, catchPart: Boolean, tag: String): Long
     /** What repairing a mesh file would change, as a line to show, or empty. */
     fun repairReport(data: ByteArray, format: Int): String
     fun convertToSolid(id: Int, body: Long): Long

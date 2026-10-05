@@ -339,3 +339,32 @@ data class LipFeature(
 ) : Feature() {
     override fun key() = this
 }
+
+/**
+ * A snap-fit clip's sizes (mm): the beam [length] out of the face, [width]
+ * and [thickness]; the hook [overhang] out at its tip, its catch
+ * [catchHeight] from the tip; and the [gap] round the hook in its catch.
+ */
+data class SnapFitSizes(
+    val length: Double = 8.0,
+    val width: Double = 6.0,
+    val thickness: Double = 1.5,
+    val overhang: Double = 1.0,
+    val catchHeight: Double = 1.5,
+    val gap: Double = 0.2,
+)
+
+/**
+ * Snap-fit clips at the hole points of a sketch on a face, standing out of
+ * it, each hook pointing away from the middle of the body the face is on;
+ * with [catchIn] naming a body, a recess cut in it for each hook.
+ */
+data class SnapFitFeature(
+    override val id: Int,
+    override val name: String,
+    val sketchId: Int,
+    val sizes: SnapFitSizes,
+    val catchIn: String?,
+) : Feature() {
+    override fun key() = this
+}

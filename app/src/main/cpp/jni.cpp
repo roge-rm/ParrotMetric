@@ -790,6 +790,29 @@ JNIEXPORT jlongArray JNICALL Java_com_rm_parrotmetric_Core_split(JNIEnv* env, jo
 }
 
 /** The shape holes take out: plane (nine numbers), points as u v pairs, kind 0 simple, 1 counterbore, 2 countersink. */
+JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_snapFitTool(JNIEnv* env, jobject, jint id, jdoubleArray plane, jdoubleArray points,
+                                                                 jdoubleArray middle, jdouble length, jdouble width, jdouble thickness,
+                                                                 jdouble overhang, jdouble catchHeight, jdouble gap, jboolean catchPart, jstring tag) {
+    try {
+        auto p = doubles(env, plane);
+        auto pts = doubles(env, points);
+        auto m = doubles(env, middle);
+        std::vector<std::pair<double, double>> at;
+        for (size_t i = 0; i + 1 < pts.size(); i += 2) at.push_back({pts[i], pts[i + 1]});
+        const char* c = env->GetStringUTFChars(tag, nullptr);
+        std::string t(c);
+        env->ReleaseStringUTFChars(tag, c);
+        pm::Body out;
+        out.solid = pm::snapFitTool(id, planeOf(p.data()), at, gp_Pnt(m[0], m[1], m[2]), length, width, thickness, overhang, catchHeight, gap,
+                                    catchPart, t);
+        std::lock_guard<std::mutex> g(lock);
+        return store.add(std::move(out));
+    } catch (const std::exception& e) {
+        fail(env, e.what());
+        return 0;
+    }
+}
+
 JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_holeTool(JNIEnv* env, jobject, jint id, jdoubleArray plane, jdoubleArray points,
                                                               jdouble diameter, jdouble depth, jint kind, jdouble topDiameter, jdouble topDepth) {
     try {

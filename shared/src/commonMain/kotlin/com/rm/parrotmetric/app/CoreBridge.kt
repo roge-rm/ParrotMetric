@@ -3,6 +3,7 @@ package com.rm.parrotmetric.app
 import com.rm.parrotmetric.design.Kernel
 import com.rm.parrotmetric.design.KernelPath
 import com.rm.parrotmetric.design.KernelException
+import com.rm.parrotmetric.design.SnapFitSizes
 import com.rm.parrotmetric.design.Operation
 import com.rm.parrotmetric.design.RegionRef
 import com.rm.parrotmetric.sketch.ProfileCurve
@@ -118,6 +119,13 @@ class CoreKernel(private val core: NativeCore) : Kernel {
         call { core.split(id, body, doubleArrayOf(origin.x, origin.y, origin.z, normal.x, normal.y, normal.z)).toList() }
     override fun holeTool(id: Int, plane: SketchPlane, at: List<Pair<Double, Double>>, diameter: Double, depth: Double, kind: Int, topDiameter: Double, topDepth: Double) =
         call { core.holeTool(id, plane.numbers(), at.flatMap { listOf(it.first, it.second) }.toDoubleArray(), diameter, depth, kind, topDiameter, topDepth) }
+    override fun snapFitTool(id: Int, plane: SketchPlane, at: List<Pair<Double, Double>>, middle: Vec3, sizes: SnapFitSizes, catchPart: Boolean, tag: String) =
+        call {
+            core.snapFitTool(
+                id, plane.numbers(), at.flatMap { listOf(it.first, it.second) }.toDoubleArray(), doubleArrayOf(middle.x, middle.y, middle.z),
+                sizes.length, sizes.width, sizes.thickness, sizes.overhang, sizes.catchHeight, sizes.gap, catchPart, tag,
+            )
+        }
     override fun convertToSolid(id: Int, body: Long) = call { core.convertToSolid(id, body) }
     override fun centre(body: Long) = call { core.bodyCentre(body).let { Vec3(it[0], it[1], it[2]) } }
     override fun primitive(id: Int, plane: SketchPlane, kind: Int, u: Double, v: Double, a: Double, b: Double, c: Double) =

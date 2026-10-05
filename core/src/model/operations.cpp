@@ -1967,4 +1967,50 @@ std::vector<int> tangentChain(const TopoDS_Shape& shape, int edge) {
     return out;
 }
 
+NamedShape snapFitTool(int id, const gp_Ax3& plane, const std::vector<std::pair<double, double>>& at, const gp_Pnt& middle,
+                       double length, double width, double thickness, double overhang, double catchHeight, double gap, bool catchPart,
+                       const std::string& tag) {
+    if (at.empty()) throw std::runtime_error("Put points in the sketch where the clips go");
+    if (length <= 0 || width <= 0 || thickness <= 0 || overhang <= 0 || catchHeight <= 0) throw std::runtime_error("Sizes have to be more than 0");
+    if (catchHeight >= length) throw std::runtime_error("The catch has to be shorter than the clip");
+    try {
+        const gp_Vec n(plane.Direction());
+        TopoDS_Compound all;
+        BRep_Builder b;
+        b.MakeCompound(all);
+        for (const auto& [u, v] : at) {
+            gp_Pnt o = plane.Location().Translated(gp_Vec(plane.XDirection()) * u + gp_Vec(plane.YDirection()) * v);
+            // The hook points away from the middle of the part, along the face.
+            gp_Vec away(middle, o);
+            away -= n * away.Dot(n);
+            gp_Vec a = away.Magnitude() > 1e-6 ? away.Normalized() : gp_Vec(plane.XDirection());
+            gp_Vec side = n.Crossed(a);
+            auto at3 = [&](double across, double up, double sideways) {
+                return o.Translated(a * across + n * up + side * sideways);
+            };
+            TopoDS_Shape part;
+            if (!catchPart) {
+                // The beam stands out of the face with its outside on the point; the hook's flat catch faces the face, its slope the tip.
+                TopoDS_Shape beam = BRepPrimAPI_MakeBox(gp_Ax2(at3(-thickness, 0, -width / 2), gp_Dir(n), gp_Dir(a)), thickness, width, length).Shape();
+                TopoDS_Wire tri = polygon({at3(0, length - catchHeight, -width / 2), at3(overhang, length - catchHeight, -width / 2), at3(0, length, -width / 2)});
+                TopoDS_Shape hook = BRepPrimAPI_MakePrism(BRepBuilderAPI_MakeFace(tri).Face(), side * width).Shape();
+                part = BRepAlgoAPI_Fuse(beam, hook).Shape();
+            } else {
+                // Where the hook rests, with the gap round it.
+                part = BRepPrimAPI_MakeBox(gp_Ax2(at3(-gap, length - catchHeight - gap, -width / 2 - gap), gp_Dir(n), gp_Dir(a)),
+                                           overhang + 2 * gap, width + 2 * gap, catchHeight + 2 * gap).Shape();
+            }
+            b.Add(all, part);
+        }
+        NamedShape out;
+        out.shape = all;
+        int k = 0;
+        for (TopExp_Explorer f(all, TopAbs_FACE); f.More(); f.Next())
+            if (!out.names.IsBound(f.Current())) out.names.Bind(f.Current(), prefix(id) + "." + tag + std::to_string(k++));
+        return out;
+    } catch (const Standard_Failure&) {
+        throw std::runtime_error("The clip couldn't be made");
+    }
+}
+
 }  // namespace pm

@@ -250,6 +250,17 @@ NamedShape lipTool(int id, const NamedShape& body, const std::string& face, doub
  */
 std::vector<int> tangentChain(const TopoDS_Shape& shape, int edge);
 
+/**
+ * Snap-fit clips at points (u, v) on a face's plane: a beam [length] out of
+ * the face, [thickness] by [width], its outside on the point, with a hook
+ * [overhang] out at its tip whose flat catch is [catchHeight] from the tip.
+ * Each hook points away from [middle], along the face. With [catchPart], the
+ * recess the hooks rest in instead, [gap] bigger all round. Faces F<id>.<tag><n>.
+ */
+NamedShape snapFitTool(int id, const gp_Ax3& plane, const std::vector<std::pair<double, double>>& at, const gp_Pnt& middle,
+                       double length, double width, double thickness, double overhang, double catchHeight, double gap, bool catchPart,
+                       const std::string& tag);
+
 /** Whether two solids share any volume or meet over a face, so that joining them makes one solid. */
 bool overlaps(const NamedShape& a, const NamedShape& b);
 

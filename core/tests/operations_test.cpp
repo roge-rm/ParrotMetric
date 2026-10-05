@@ -220,6 +220,21 @@ TEST_CASE("an edge's tangent chain goes round a rounded outline and no further")
     CHECK(chain == topEdges);
 }
 
+TEST_CASE("snap-fit clips hang from a face with hooks pointing out, and their catches are a gap bigger") {
+    // A lid's underside at z = 0 facing down; clips at x = 18 and x = -18, the lid's middle at the origin.
+    gp_Ax3 under(gp_Pnt(0, 0, 0), gp_Dir(0, 0, -1), gp_Dir(1, 0, 0));
+    NamedShape clips = snapFitTool(1, under, {{18, 0}, {-18, 0}}, gp_Pnt(0, 0, 0), 8, 6, 1.5, 1, 1.5, 0.2, false, "c");
+    // Each: beam 1.5 x 6 x 8, hook a triangle 1 by 1.5, 6 wide.
+    CHECK(volume(clips) == Catch::Approx(2 * (1.5 * 6 * 8 + 0.5 * 1 * 1.5 * 6)).epsilon(1e-6));
+    auto box = bounds(clips);
+    CHECK(box[0] == Catch::Approx(-19).margin(1e-6));  // the left hook reaches out to -18 - 1
+    CHECK(box[3] == Catch::Approx(19).margin(1e-6));
+    CHECK(box[2] == Catch::Approx(-8).margin(1e-6));   // hanging down
+    NamedShape catches = snapFitTool(1, under, {{18, 0}}, gp_Pnt(0, 0, 0), 8, 6, 1.5, 1, 1.5, 0.2, true, "k");
+    CHECK(volume(catches) == Catch::Approx(1.4 * 6.4 * 1.9).epsilon(1e-6));
+    CHECK_THROWS_WITH(snapFitTool(1, under, {}, gp_Pnt(0, 0, 0), 8, 6, 1.5, 1, 1.5, 0.2, false, "c"), Catch::Matchers::Equals("Put points in the sketch where the clips go"));
+}
+
 TEST_CASE("a shell keeps the inside corner of an L sharp") {
     // An L, 40 by 30 with arms 15 wide, 20 high and open at the top.
     std::vector<SketchCurve> l = {line(1, 0, 0, 40, 0), line(2, 40, 0, 40, 15), line(3, 40, 15, 15, 15),

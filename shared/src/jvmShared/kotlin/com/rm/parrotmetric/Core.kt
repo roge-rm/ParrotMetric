@@ -40,6 +40,7 @@ object Core : NativeCore {
     /** plane: origin then normal. */
     override external fun split(id: Int, body: Long, plane: DoubleArray): LongArray
     override external fun holeTool(id: Int, plane: DoubleArray, points: DoubleArray, diameter: Double, depth: Double, kind: Int, topDiameter: Double, topDepth: Double): Long
+    override external fun snapFitTool(id: Int, plane: DoubleArray, points: DoubleArray, middle: DoubleArray, length: Double, width: Double, thickness: Double, overhang: Double, catchHeight: Double, gap: Double, catchPart: Boolean, tag: String): Long
     /** What repairing a mesh file would change, as a line to show, or empty. */
     override external fun repairReport(data: ByteArray, format: Int): String
     override external fun convertToSolid(id: Int, body: Long): Long

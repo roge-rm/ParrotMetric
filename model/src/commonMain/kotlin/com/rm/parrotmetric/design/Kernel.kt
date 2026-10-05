@@ -63,6 +63,12 @@ interface Kernel {
     fun split(id: Int, body: Long, origin: Vec3, normal: Vec3): List<Long>
     /** The shape holes at these plane points take out; kind is HoleKind's ordinal. */
     fun holeTool(id: Int, plane: SketchPlane, at: List<Pair<Double, Double>>, diameter: Double, depth: Double, kind: Int, topDiameter: Double, topDepth: Double): Long
+    /**
+     * Snap-fit clips standing out of a plane at points (u, v) on it, hooks pointing away from
+     * [middle]; with [catchPart], the recesses they rest in. Faces F<id>.<tag><n>.
+     */
+    fun snapFitTool(id: Int, plane: SketchPlane, at: List<Pair<Double, Double>>, middle: Vec3, sizes: SnapFitSizes, catchPart: Boolean, tag: String): Long =
+        throw KernelException("Not here")
     fun convertToSolid(id: Int, body: Long): Long
     /** The middle of a body. */
     fun centre(body: Long): Vec3

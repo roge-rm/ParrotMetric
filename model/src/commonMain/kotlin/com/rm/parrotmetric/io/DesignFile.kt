@@ -218,6 +218,12 @@ object DesignFile {
                 "turns" to f.turns, "section" to f.section, "square" to f.square, "operation" to f.operation.name,
             )
             is ThreadFeature -> mapOf("type" to "thread", "face" to f.face, "pitch" to f.pitch, "clearance" to f.clearance)
+            is com.rm.parrotmetric.design.SnapFitFeature -> f.sizes.let { z ->
+                mapOf(
+                    "type" to "snapFit", "sketch" to f.sketchId, "length" to z.length, "width" to z.width, "thickness" to z.thickness,
+                    "overhang" to z.overhang, "catchHeight" to z.catchHeight, "gap" to z.gap, "catchIn" to f.catchIn,
+                )
+            }
             is com.rm.parrotmetric.design.LipFeature -> mapOf(
                 "type" to "lip", "face" to f.face, "width" to f.width, "height" to f.height, "gap" to f.gap, "lid" to f.lid,
             )
@@ -321,6 +327,11 @@ object DesignFile {
                 o.bool("square"), Operation.valueOf(o.str("operation")),
             )
             "thread" -> ThreadFeature(id, name, o.str("face"), o.num("pitch"), o.numOr("clearance", 0.0))
+            "snapFit" -> com.rm.parrotmetric.design.SnapFitFeature(
+                id, name, o.int("sketch"),
+                com.rm.parrotmetric.design.SnapFitSizes(o.num("length"), o.num("width"), o.num("thickness"), o.num("overhang"), o.num("catchHeight"), o.num("gap")),
+                (o["catchIn"] as? Json.Str)?.value,
+            )
             "lip" -> com.rm.parrotmetric.design.LipFeature(
                 id, name, o.str("face"), o.num("width"), o.num("height"), o.num("gap"), (o["lid"] as? Json.Str)?.value,
             )

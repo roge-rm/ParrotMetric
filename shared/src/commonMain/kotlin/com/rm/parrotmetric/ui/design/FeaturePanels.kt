@@ -79,6 +79,7 @@ fun FeaturePanel(editor: DesignEditor, maxHeight: androidx.compose.ui.unit.Dp = 
                 is DesignEditor.EdgeDraft -> EdgeSettings(editor, d)
                 is DesignEditor.FaceDraft -> FaceSettings(editor, d)
                 is DesignEditor.HoleDraft -> HoleSettings(editor, d)
+                is DesignEditor.SnapFitDraft -> SnapFitSettings(editor, d)
                 is DesignEditor.MirrorDraft -> MirrorSettings(editor, d)
                 is DesignEditor.PatternDraft -> PatternSettings(editor, d)
                 is DesignEditor.CombineDraft -> CombineSettings(editor, d)
@@ -292,6 +293,33 @@ private fun CoilSettings(editor: DesignEditor, d: DesignEditor.CoilDraft) {
         d.operation = it
         editor.draftChanged()
     }
+}
+
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun SnapFitSettings(editor: DesignEditor, d: DesignEditor.SnapFitDraft) {
+    Header("Snap fit", Icons.snapFit, Palette.modify, null)
+    val sketches = editor.snapSketches()
+    if (sketches.size > 1) Segmented(sketches.map { it.name }, sketches.indexOfFirst { it.id == d.sketchId }.coerceAtLeast(0)) {
+        editor.pickSnapSketch(d, sketches[it].id)
+    }
+    Field(editor, d, "length", "Length", d.length, "mm", allowNegative = false) { d.length = it; editor.draftChanged() }
+    Field(editor, d, "width", "Width", d.width, "mm", allowNegative = false) { d.width = it; editor.draftChanged() }
+    Field(editor, d, "thickness", "Thickness", d.thickness, "mm", allowNegative = false) { d.thickness = it; editor.draftChanged() }
+    Field(editor, d, "overhang", "Overhang", d.overhang, "mm", allowNegative = false) { d.overhang = it; editor.draftChanged() }
+    Field(editor, d, "catchHeight", "Hook", d.catchHeight, "mm", allowNegative = false) { d.catchHeight = it; editor.draftChanged() }
+    val others = editor.allBodies().map { it.label }.filter { it != d.base }
+    if (others.isEmpty()) return
+    Text("Catch in", fontSize = 13.sp, color = Palette.muted)
+    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        for (l in listOf<String?>(null) + others) Surface(
+            onClick = { d.catchIn = l; editor.draftChanged() },
+            shape = RoundedCornerShape(12.dp),
+            color = if (d.catchIn == l) Palette.line else Palette.ground,
+            contentColor = Palette.text,
+        ) { Text(l?.let { editor.bodyTitle(it) } ?: "Nothing", Modifier.padding(horizontal = 10.dp, vertical = 7.dp), fontSize = 13.sp) }
+    }
+    if (d.catchIn != null) Field(editor, d, "gap", "Gap", d.gap, "mm", allowNegative = false) { d.gap = it; editor.draftChanged() }
 }
 
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)

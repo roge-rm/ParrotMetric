@@ -138,6 +138,11 @@ private class FakeKernel : Kernel {
         calls += "coil $id"
         return make(Box(u - diameter / 2, u + diameter / 2, listOf("F$id.c0")))
     }
+    override fun snapFitTool(id: Int, plane: SketchPlane, at: List<Pair<Double, Double>>, middle: Vec3, sizes: SnapFitSizes, catchPart: Boolean, tag: String): Long {
+        calls += "snapFitTool $id ${at.size} $catchPart $tag"
+        return make(Box(10.0, 10.0 + sizes.length, listOf("F$id.${tag}0")))
+    }
+
     override fun lipTool(id: Int, body: Long, face: String, inside: Double, outside: Double, height: Double, tag: String): Long {
         calls += "lipTool $id $face $inside $outside $height $tag"
         val b = bodies.getValue(body)
@@ -283,6 +288,22 @@ class RebuildTest {
         // Too deep for the lid.
         d.replace(LipFeature(5, "Lip", "F${base.id}.end", 1.0, 7.0, 0.2, "Body 2"))
         assertTrue(Rebuilder(k).rebuild(d.active).errors.values.single().startsWith("The groove would go right through"))
+    }
+
+    @Test
+    fun snapFitClipsJoinTheirFaceAndCatchesCutTheOtherBody() {
+        val k = FakeKernel()
+        val d = Design()
+        val base = extrude(d, sketchAt(d, 0.0, 10.0), Operation.NewBody)
+        extrude(d, sketchAt(d, 10.0, 10.0), Operation.NewBody)
+        val pts = Sketch().also { it.addPoint(1.0, 1.0); it.addPoint(2.0, 1.0) }
+        val sk = SketchFeature(d.newId(), "Sketch", PlaneRef.OnFace("F${base.id}.end", Vec3(1.0, 0.0, 0.0)), pts).also { d.add(it) }
+        d.add(SnapFitFeature(d.newId(), "Snap fit", sk.id, SnapFitSizes(), "Body 2"))
+        val built = Rebuilder(k).rebuild(d.active)
+        assertTrue(built.errors.isEmpty(), built.errors.toString())
+        assertTrue(k.calls.any { it.startsWith("snapFitTool") && it.endsWith(" 2 false c") }, k.calls.toString())
+        assertTrue(k.calls.any { it.startsWith("snapFitTool") && it.endsWith(" 2 true k") }, k.calls.toString())
+        assertEquals(2, k.calls.count { it.startsWith("combine") })
     }
 
     @Test

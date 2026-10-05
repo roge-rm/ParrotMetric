@@ -74,7 +74,8 @@ object Tools {
         ToolDef("emboss", "Emboss", Icons.emboss, ToolGroup.Modify, suggest = { it.selectedAreas > 0 && it.selectedFaces > 0 }) { it.design.startEmboss() },
         ToolDef("hole", "Hole", Icons.hole, ToolGroup.Modify, key = "H", mesh = true, cluster = "Holes and threads") { it.design.startHole() },
         ToolDef("thread", "Thread", Icons.thread, ToolGroup.Modify, cluster = "Holes and threads") { it.design.startThread() },
-        ToolDef("lip", "Lip", Icons.lip, ToolGroup.Modify, suggest = ::faces, cluster = "Faces") { it.design.startLip() },
+        ToolDef("lip", "Lip", Icons.lip, ToolGroup.Modify, suggest = ::faces, cluster = "Lids") { it.design.startLip() },
+        ToolDef("snapfit", "Snap fit", Icons.snapFit, ToolGroup.Modify, cluster = "Lids") { it.design.startSnapFit() },
         ToolDef("draft", "Draft", Icons.draft, ToolGroup.Modify, key = "Shift+D", suggest = ::faces, cluster = "Faces") { it.design.startDraft() },
         ToolDef("planecut", "Plane cut", Icons.cut, ToolGroup.Modify, solid = false, mesh = true, cluster = "Split and cut") { it.design.startPlaneCut() },
         ToolDef("reduce", "Reduce", Icons.meshEdit, ToolGroup.Modify, solid = false, mesh = true, cluster = "Triangles") {

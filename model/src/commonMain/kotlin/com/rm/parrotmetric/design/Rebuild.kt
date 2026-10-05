@@ -273,6 +273,40 @@ class Rebuilder(private val kernel: Kernel) {
             val plane = resolvePlane(f.plane, bodies, f, planes)
             applyTool(f, kernel.coil(f.id, plane, f.u, f.v, f.diameter, f.pitch, f.turns, f.section, f.square), f.operation, bodies, planes, made)
         }
+        is SnapFitFeature -> {
+            val sketch = sketchOf(f.sketchId, all)
+            val plane = planes[f.sketchId] ?: throw KernelException("Its sketch couldn't be built")
+            val s = sketch.sketch
+            val at = s.holePoints().map { s.x(it) to s.y(it) }
+            if (at.isEmpty()) throw KernelException("Put points in its sketch where the clips go")
+            val face = (sketch.plane as? PlaneRef.OnFace)?.face ?: throw KernelException("Sketch the clips on the face they stand on")
+            val base = bodyWithFace(face, bodies) ?: throw KernelException("The face the clips stand on isn't there any more")
+            val catchBody = f.catchIn?.let { l -> bodies.firstOrNull { it.label == l } ?: throw KernelException("The body for the catches isn't there any more") }
+            if (catchBody == base) throw KernelException("The catches go in another body")
+            val middle = kernel.centre(base.handle)
+            val clips = kernel.snapFitTool(f.id, plane, at, middle, f.sizes, false, "c")
+            val catches = try {
+                catchBody?.let { kernel.snapFitTool(f.id, plane, at, middle, f.sizes, true, "k") }
+            } catch (e: KernelException) {
+                kernel.release(clips)
+                throw e
+            }
+            val out = mutableListOf<BodyState>()
+            try {
+                for (b in bodies) out += when {
+                    b == base -> BodyState(b.label, kernel.combine(f.id, b.handle, clips, Operation.Join))
+                    b == catchBody && catches != null -> BodyState(b.label, kernel.combine(f.id, b.handle, catches, Operation.Cut))
+                    else -> b.also { kernel.retain(it.handle) }
+                }
+            } catch (e: KernelException) {
+                out.forEach { kernel.release(it.handle) }
+                throw e
+            } finally {
+                kernel.release(clips)
+                catches?.let { kernel.release(it) }
+            }
+            Step(f.key(), out, planes, null, made)
+        }
         is LipFeature -> {
             val rim = ref(f, f.face, false, bodies)
             val base = bodyWithFace(rim, bodies) ?: throw KernelException("The rim isn't there any more")
