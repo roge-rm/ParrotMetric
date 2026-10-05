@@ -7,7 +7,7 @@ You draw sketches with constraints and dimensions, turn them into solids with ex
 
 It's made for designing things to 3D print. It works by touch first, but it also has proper mouse and keyboard controls for when you're at a desk. Everything runs on the device. The only time it goes online is if you give it a WebDAV server to keep your designs on.
 
-It's at 0.3.3. It's usable for real parts, but it isn't finished and there will be rough edges. Let me know what works, what doesn't, and what you'd like it to do.
+It's at 0.3.4. It's usable for real parts, but it isn't finished and there will be rough edges. Let me know what works, what doesn't, and what you'd like it to do.
 
 There's a manual in [manual/](manual/README.md), and the same words are under Help in the app.
 
@@ -141,15 +141,15 @@ Each release has:
 
 | File | For |
 |---|---|
-| parrotmetric-0.3.3-64bit.apk | Most Android phones and tablets |
-| parrotmetric-0.3.3-32bit.apk | Older 32-bit devices, like the Fire HD 8 |
-| parrotmetric_0.3.3_amd64.deb | Debian, Ubuntu and the like on a PC |
-| parrotmetric_0.3.3_arm64.deb | Raspberry Pi OS (64-bit) and other arm64 Linux |
-| parrotmetric-0.3.3-x86_64.AppImage | Any recent Linux on a PC |
-| parrotmetric-0.3.3-aarch64.AppImage | Any recent arm64 Linux |
-| parrotmetric-0.3.3-setup.exe | 64-bit Windows, installed |
-| parrotmetric-0.3.3-windows-x64.zip | Windows, without installing |
-| parrotmetric-0.3.3-web.tar.gz | The browser version, to put on any web server |
+| parrotmetric-0.3.4-64bit.apk | Most Android phones and tablets |
+| parrotmetric-0.3.4-32bit.apk | Older 32-bit devices, like the Fire HD 8 |
+| parrotmetric_0.3.4_amd64.deb | Debian, Ubuntu and the like on a PC |
+| parrotmetric_0.3.4_arm64.deb | Raspberry Pi OS (64-bit) and other arm64 Linux |
+| parrotmetric-0.3.4-x86_64.AppImage | Any recent Linux on a PC |
+| parrotmetric-0.3.4-aarch64.AppImage | Any recent arm64 Linux |
+| parrotmetric-0.3.4-setup.exe | 64-bit Windows, installed |
+| parrotmetric-0.3.4-windows-x64.zip | Windows, without installing |
+| parrotmetric-0.3.4-web.tar.gz | The browser version, to put on any web server |
 
 The AppImages and the Windows builds bring their own Java. The .deb packages use the system's Java 21, which your package manager pulls in.
 
