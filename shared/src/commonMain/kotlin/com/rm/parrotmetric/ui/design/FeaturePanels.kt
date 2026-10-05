@@ -547,8 +547,23 @@ fun NumberRow(
     }
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun Segmented(options: List<String>, selected: Int, onSelect: (Int) -> Unit) {
+    // More than fit across: they wrap onto more lines.
+    if (options.size > 4) {
+        androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            options.forEachIndexed { i, label ->
+                Surface(
+                    onClick = { onSelect(i) },
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (i == selected) Palette.line else Palette.ground,
+                    contentColor = if (i == selected) Palette.text else Palette.muted,
+                ) { Text(label, Modifier.padding(horizontal = 10.dp, vertical = 7.dp), fontSize = 13.sp, maxLines = 1) }
+            }
+        }
+        return
+    }
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Palette.ground).padding(3.dp)) {
         options.forEachIndexed { i, label ->
             Surface(

@@ -242,6 +242,12 @@ gp_Ax3 facePlane(const NamedShape& body, const std::string& face);
  */
 NamedShape lipTool(int id, const NamedShape& body, const std::string& face, double inside, double outside, double height, const std::string& tag);
 
+/**
+ * The edges that run on smoothly from an edge, end to end, as a rounded
+ * rectangle's outline does: their numbers in OCCT map order, the edge's own first.
+ */
+std::vector<int> tangentChain(const TopoDS_Shape& shape, int edge);
+
 /** Whether two solids share any volume or meet over a face, so that joining them makes one solid. */
 bool overlaps(const NamedShape& a, const NamedShape& b);
 

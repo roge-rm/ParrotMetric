@@ -11,6 +11,10 @@
 #include <GProp_GProps.hxx>
 
 #include <algorithm>
+#include <BRepBndLib.hxx>
+#include <Bnd_Box.hxx>
+#include <TopExp.hxx>
+#include <TopTools_IndexedMapOfShape.hxx>
 #include <cmath>
 
 #include "model/operations.h"
@@ -184,6 +188,36 @@ TEST_CASE("a lip stands round the opening of a shell, and its groove is wider") 
     }
     REQUIRE(!floor.empty());
     CHECK_THROWS_WITH(lipTool(6, withPost, floor, 0, 1, 2, "l"), Catch::Matchers::Equals("Pick the top of a wall, round an opening"));
+}
+
+TEST_CASE("an edge's tangent chain goes round a rounded outline and no further") {
+    NamedShape box = extrude(1, top, rectangle(40, 20), {{{1, 2, 3, 4}, 5, 5}}, 10, 0);
+    // Round the four upright edges.
+    std::vector<std::string> upright;
+    for (const auto& n : box.edgeNames()) {
+        Bnd_Box b;
+        for (const auto& e : box.findEdges(n)) BRepBndLib::Add(e, b);
+        double x0, y0, z0, x1, y1, z1;
+        b.Get(x0, y0, z0, x1, y1, z1);
+        if (z1 - z0 > 9 && std::find(upright.begin(), upright.end(), n) == upright.end()) upright.push_back(n);
+    }
+    REQUIRE(upright.size() == 4);
+    NamedShape rounded = fillet(2, box, upright, 3);
+    TopTools_IndexedMapOfShape edges;
+    TopExp::MapShapes(rounded.shape, TopAbs_EDGE, edges);
+    // The top outline: four lines and four arcs at z = 10.
+    std::vector<int> topEdges;
+    for (int i = 1; i <= edges.Extent(); ++i) {
+        Bnd_Box b;
+        BRepBndLib::Add(edges(i), b);
+        double x0, y0, z0, x1, y1, z1;
+        b.Get(x0, y0, z0, x1, y1, z1);
+        if (z0 > 10 - 1e-3) topEdges.push_back(i - 1);
+    }
+    REQUIRE(topEdges.size() == 8);
+    auto chain = tangentChain(rounded.shape, topEdges[0]);
+    std::sort(chain.begin(), chain.end());
+    CHECK(chain == topEdges);
 }
 
 TEST_CASE("a shell keeps the inside corner of an L sharp") {

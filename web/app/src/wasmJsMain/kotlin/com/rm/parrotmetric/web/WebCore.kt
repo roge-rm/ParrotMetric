@@ -591,6 +591,14 @@ object WebCore : NativeCore {
         return call(63, args).ints()!!
     }
 
+    override fun clickChain(x: Float, y: Float, add: Boolean): IntArray {
+        val args = Args()
+        args.float(x)
+        args.float(y)
+        args.boolean(add)
+        return call(64, args).ints()!!
+    }
+
     override fun selectBox(x0: Float, y0: Float, x1: Float, y1: Float, crossing: Boolean, add: Boolean): IntArray {
         val args = Args()
         args.float(x0)
@@ -599,27 +607,27 @@ object WebCore : NativeCore {
         args.float(y1)
         args.boolean(crossing)
         args.boolean(add)
-        return call(64, args).ints()!!
+        return call(65, args).ints()!!
     }
 
     override fun clearSelection() {
         val args = Args()
-        call(65, args)
+        call(66, args)
     }
 
     override fun selectedEdges(): Array<String> {
         val args = Args()
-        return call(66, args).strings()!!
+        return call(67, args).strings()!!
     }
 
     override fun selectedFaces(): Array<String> {
         val args = Args()
-        return call(67, args).strings()!!
+        return call(68, args).strings()!!
     }
 
     override fun selectedRegions(): IntArray {
         val args = Args()
-        return call(68, args).ints()!!
+        return call(69, args).ints()!!
     }
 
     override fun select(edges: Array<String>, regions: IntArray, faces: Array<String>, corners: Array<String>) {
@@ -628,7 +636,7 @@ object WebCore : NativeCore {
         args.ints(regions)
         args.strings(faces)
         args.strings(corners)
-        call(69, args)
+        call(70, args)
     }
 
     override fun findRegions(kinds: IntArray, ids: IntArray, numbers: DoubleArray): FloatArray {
@@ -636,50 +644,50 @@ object WebCore : NativeCore {
         args.ints(kinds)
         args.ints(ids)
         args.doubles(numbers)
-        return call(70, args).floats()!!
+        return call(71, args).floats()!!
     }
 
     override fun surfaceCreated() {
         val args = Args()
-        call(71, args)
+        call(72, args)
     }
 
     override fun surfaceChanged(width: Int, height: Int) {
         val args = Args()
         args.int(width)
         args.int(height)
-        call(72, args)
+        call(73, args)
     }
 
     override fun drawFrame(): Boolean {
         val args = Args()
-        return call(73, args).boolean()
+        return call(74, args).boolean()
     }
 
     override fun setDensity(density: Float) {
         val args = Args()
         args.float(density)
-        call(74, args)
+        call(75, args)
     }
 
     override fun orbit(dx: Float, dy: Float) {
         val args = Args()
         args.float(dx)
         args.float(dy)
-        call(75, args)
+        call(76, args)
     }
 
     override fun pan(dx: Float, dy: Float) {
         val args = Args()
         args.float(dx)
         args.float(dy)
-        call(76, args)
+        call(77, args)
     }
 
     override fun zoom(factor: Float) {
         val args = Args()
         args.float(factor)
-        call(77, args)
+        call(78, args)
     }
 
     override fun zoomAt(factor: Float, x: Float, y: Float) {
@@ -687,12 +695,12 @@ object WebCore : NativeCore {
         args.float(factor)
         args.float(x)
         args.float(y)
-        call(78, args)
+        call(79, args)
     }
 
     override fun fit() {
         val args = Args()
-        call(79, args)
+        call(80, args)
     }
 
     override fun setCovered(left: Float, top: Float, right: Float, bottom: Float) {
@@ -701,18 +709,18 @@ object WebCore : NativeCore {
         args.float(top)
         args.float(right)
         args.float(bottom)
-        call(80, args)
+        call(81, args)
     }
 
     override fun viewFrom(yaw: Float, pitch: Float) {
         val args = Args()
         args.float(yaw)
         args.float(pitch)
-        call(81, args)
+        call(82, args)
     }
 
     override fun cameraState(): FloatArray {
         val args = Args()
-        return call(82, args).floats()!!
+        return call(83, args).floats()!!
     }
 }

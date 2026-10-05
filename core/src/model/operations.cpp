@@ -1861,4 +1861,53 @@ NamedShape lipTool(int id, const NamedShape& body, const std::string& face, doub
     }
 }
 
+std::vector<int> tangentChain(const TopoDS_Shape& shape, int edge) {
+    TopTools_IndexedMapOfShape edges;
+    TopExp::MapShapes(shape, TopAbs_EDGE, edges);
+    if (edge < 0 || edge >= edges.Extent()) return {};
+    TopTools_IndexedDataMapOfShapeListOfShape byVertex;
+    TopExp::MapShapesAndAncestors(shape, TopAbs_VERTEX, TopAbs_EDGE, byVertex);
+    // Which way an edge runs where it reaches a vertex.
+    auto along = [](const TopoDS_Edge& e, const TopoDS_Vertex& v) {
+        BRepAdaptor_Curve c(e);
+        gp_Pnt p;
+        gp_Vec d;
+        c.D1(BRep_Tool::Parameter(v, e), p, d);
+        return d;
+    };
+    std::vector<int> out{edge}, todo{edge};
+    std::vector<bool> seen(size_t(edges.Extent()), false);
+    seen[size_t(edge)] = true;
+    try {
+        while (!todo.empty()) {
+            int k = todo.back();
+            todo.pop_back();
+            TopoDS_Edge e = TopoDS::Edge(edges(k + 1));
+            if (BRep_Tool::Degenerated(e)) continue;
+            TopoDS_Vertex ends[2];
+            TopExp::Vertices(e, ends[0], ends[1]);
+            for (const auto& v : ends) {
+                if (v.IsNull() || !byVertex.Contains(v)) continue;
+                gp_Vec a = along(e, v);
+                if (a.Magnitude() < 1e-12) continue;
+                for (const TopoDS_Shape& s : byVertex.FindFromKey(v)) {
+                    int j = edges.FindIndex(s) - 1;
+                    if (j < 0 || seen[size_t(j)]) continue;
+                    TopoDS_Edge o = TopoDS::Edge(s);
+                    if (BRep_Tool::Degenerated(o)) continue;
+                    gp_Vec b = along(o, v);
+                    if (b.Magnitude() < 1e-12) continue;
+                    // Running on smoothly, within 2 degrees.
+                    if (a.Crossed(b).Magnitude() > std::sin(2 * M_PI / 180) * a.Magnitude() * b.Magnitude()) continue;
+                    seen[size_t(j)] = true;
+                    out.push_back(j);
+                    todo.push_back(j);
+                }
+            }
+        }
+    } catch (const Standard_Failure&) {
+    }
+    return out;
+}
+
 }  // namespace pm

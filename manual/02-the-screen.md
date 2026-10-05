@@ -23,7 +23,7 @@ With a mouse, the middle button moves the view, and right drag or Shift and midd
 
 Tap a face, an edge or a corner to pick it, and tap it again to drop it. Tap empty space to clear what's picked. Inside a finished sketch, tap an area to pick it, which is what Extrude and other tools use.
 
-With a mouse, a click picks just that thing and Shift or Ctrl and a click adds to what's picked. Drag on empty space to pick everything in a box: dragging to the right picks what's fully inside it, and dragging to the left also picks what it touches. A right-click opens a menu with **Repeat** for the last tool, the tools that suit what's picked, **Hide**, **Fit the view** and **Clear selection**.
+With a mouse, a click picks just that thing and Shift or Ctrl and a click adds to what's picked. A double-click on an edge picks it and the edges running on smoothly from it, such as all of a rounded outline. Drag on empty space to pick everything in a box: dragging to the right picks what's fully inside it, and dragging to the left also picks what it touches. A right-click opens a menu with **Repeat** for the last tool, the tools that suit what's picked, **Hide**, **Fit the view** and **Clear selection**.
 
 ## The parts list
 

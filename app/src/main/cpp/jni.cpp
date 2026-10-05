@@ -1442,6 +1442,27 @@ JNIEXPORT jintArray JNICALL Java_com_rm_parrotmetric_Core_click(JNIEnv* env, job
 }
 
 /**
+ * A double click: the edge under the point and those running on smoothly
+ * from it, in place of the selection or with add, added to it. Anything
+ * else under the point is selected as a click would.
+ */
+JNIEXPORT jintArray JNICALL Java_com_rm_parrotmetric_Core_clickChain(JNIEnv* env, jobject, jfloat x, jfloat y, jboolean add) {
+    std::lock_guard<std::mutex> g(lock);
+    pm::Pick p = pickable(renderer.pickNear(x, y, 5, [](const pm::Pick& q) { return pickable(q).kind != pm::Pick::None; }));
+    if (!add) selection.clear();
+    auto pick = [](const pm::Pick& q) {
+        if (std::find(selection.begin(), selection.end(), q) == selection.end()) selection.push_back(q);
+    };
+    if (p.kind == pm::Pick::Edge && p.body < shownBodies.size() && shownBodies[p.body].solid && !shown[p.body].sketch) {
+        for (int e : pm::tangentChain(shownBodies[p.body].solid->shape, int(p.index))) pick({pm::Pick::Edge, p.body, uint32_t(e)});
+    } else if (p.kind != pm::Pick::None) {
+        pick(p);
+    }
+    renderer.setSelection(selection);
+    return selectionCounts(env);
+}
+
+/**
  * Selects what's in a screen box: with crossing, anything partly in it;
  * else what's wholly inside. In place of the selection, or added with add.
  */

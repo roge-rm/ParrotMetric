@@ -89,6 +89,7 @@ object Core : NativeCore {
     override external fun tap(x: Float, y: Float): IntArray
     /** A click: selects what's under the point in place of the selection, or with add, adds or removes it. Counts as [tap]. GL thread. */
     override external fun click(x: Float, y: Float, add: Boolean): IntArray
+    override external fun clickChain(x: Float, y: Float, add: Boolean): IntArray
     /** Selects what's in a screen box: partly in it with crossing, else wholly inside. Counts as [tap]. GL thread. */
     override external fun selectBox(x0: Float, y0: Float, x1: Float, y1: Float, crossing: Boolean, add: Boolean): IntArray
     override external fun clearSelection()

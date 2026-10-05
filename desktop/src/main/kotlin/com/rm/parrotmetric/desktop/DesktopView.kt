@@ -153,6 +153,7 @@ fun DesktopViewport(view: DesktopView, onMenu: (Float, Float) -> Unit, collectin
             override fun fit() = view.gl { Core.fit() }
             override fun tap(x: Float, y: Float, double: Boolean) = view.tap(x, y, double)
             override fun click(x: Float, y: Float, add: Boolean) = view.select { Core.click(x, y, add || collecting()) }
+            override fun clickChain(x: Float, y: Float, add: Boolean) = view.select { Core.clickChain(x, y, add || collecting()) }
             override fun box(rect: androidx.compose.ui.geometry.Rect, crossing: Boolean, add: Boolean) =
                 view.select { Core.selectBox(rect.left, rect.top, rect.right, rect.bottom, crossing, add) }
             override fun menu(x: Float, y: Float) = onMenu(x, y)

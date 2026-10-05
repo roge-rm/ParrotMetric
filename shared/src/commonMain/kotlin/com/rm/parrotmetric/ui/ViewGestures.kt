@@ -32,6 +32,8 @@ interface ViewControls {
     fun tap(x: Float, y: Float, double: Boolean)
     /** A mouse click: selects what's under it in place of the selection, or with add, adds or removes it. */
     fun click(x: Float, y: Float, add: Boolean)
+    /** A double click: like a click, but an edge brings the edges running on smoothly from it. */
+    fun clickChain(x: Float, y: Float, add: Boolean) = click(x, y, add)
     /** A box dragged with the mouse: from left to right takes what's wholly inside, from right to left anything it crosses. */
     fun box(rect: Rect, crossing: Boolean, add: Boolean)
     /** A right click: the menu for the selection, at (x, y). */
@@ -58,6 +60,8 @@ fun Modifier.viewGestures(controls: ViewControls, onBox: (Rect?) -> Unit = {}): 
         var lastSpread = 0f
         var dragging = false
         var lastTap = 0L
+        var lastClick = 0L
+        var lastClickAt = Offset.Zero
         var lastMiddle = 0L
         // The mouse button held (1 left, 2 right, 3 middle) and what its drag does.
         var mouse = false
@@ -127,8 +131,13 @@ fun Modifier.viewGestures(controls: ViewControls, onBox: (Rect?) -> Unit = {}): 
                             button == 1 -> if (dragging) {
                                 onBox(null)
                                 controls.box(Rect(start, at), crossing = at.x < start.x, add = adding)
+                            } else if (now - lastClick < 350 && (at - lastClickAt).getDistance() < 6f) {
+                                controls.clickChain(at.x, at.y, adding)
+                                lastClick = 0
                             } else {
                                 controls.click(at.x, at.y, adding)
+                                lastClick = now
+                                lastClickAt = at
                             }
                             button == 2 -> if (!dragging) controls.menu(at.x, at.y)
                             button == 3 -> if (!dragging) {
