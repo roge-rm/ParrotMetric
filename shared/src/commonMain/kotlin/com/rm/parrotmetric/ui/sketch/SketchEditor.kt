@@ -103,7 +103,7 @@ class SketchEditor(
     val sketch: Sketch,
     private val finder: RegionFinder,
     /** The edges of the face it's on, for Project; null for a sketch that isn't on a face. */
-    val outline: (() -> List<ProfileCurve>?)? = null,
+    val outline: (() -> com.rm.parrotmetric.sketch.ProjectedOutline?)? = null,
     /** The design's parameters, for dimensions typed with names. */
     private val names: () -> Map<String, Double> = { emptyMap() },
     /** The design's construction points, which Project brings in as fixed points. */
@@ -1361,40 +1361,26 @@ class SketchEditor(
         version++
     }
 
-    /** Brings the face's edges into the sketch as fixed curves to draw against. */
+    /**
+     * Brings the face's edges, or where bodies cross the sketch's plane, into
+     * the sketch as fixed curves to draw against. They stay tied to what they
+     * came from, and follow it when the design is built again.
+     */
     fun projectOutline() {
         // Construction points, flattened onto the sketch's plane.
         val lone = points().map { p -> val d = p - plane.origin; d.dot(plane.x) to d.dot(plane.y) }
-        val curves = outline?.invoke() ?: if (lone.isEmpty()) run { message = "The face's edges couldn't be found"; return } else emptyList()
+        val found = outline?.invoke()
+        if (found == null && lone.isEmpty()) {
+            message = "The face's edges couldn't be found"
+            return
+        }
         checkpoint()
-        fun fixedPoint(u: Double, v: Double): Point {
-            sketch.points.firstOrNull { it !== sketch.origin && hypot(sketch.x(it) - u, sketch.y(it) - v) < 1e-6 }?.let { return it }
-            return sketch.addPoint(u, v).also { addQuietly(Constraint.Fixed(it, u, v)) }
-        }
-        for (c in curves) when (c.kind) {
-            ProfileCurve.Kind.Line -> sketch.addLine(fixedPoint(c.x1, c.y1), fixedPoint(c.x2, c.y2))
-            ProfileCurve.Kind.Circle -> sketch.addCircle(fixedPoint(c.x1, c.y1), c.r).also { addQuietly(Constraint.Radius(it, true, 2 * c.r)) }
-            ProfileCurve.Kind.Arc -> sketch.addArc(
-                fixedPoint(c.x1, c.y1),
-                fixedPoint(c.x1 + c.r * cos(c.a0), c.y1 + c.r * sin(c.a0)),
-                fixedPoint(c.x1 + c.r * cos(c.a1), c.y1 + c.r * sin(c.a1)),
-            )
-            ProfileCurve.Kind.Bezier -> {}
-        }
-        // Curved pieces of the same curve become one spline through points along them.
-        for ((_, pieces) in curves.filter { it.kind == ProfileCurve.Kind.Bezier }.groupBy { it.id }) {
-            val along = mutableListOf<Pair<Double, Double>>()
-            for (b in pieces) for (k in 0..3) {
-                if (k == 0 && along.isNotEmpty()) continue
-                val t = k / 3.0; val w = 1 - t
-                along += (w * w * w * b.x1 + 3 * w * w * t * b.cx1 + 3 * w * t * t * b.cx2 + t * t * t * b.x2) to
-                    (w * w * w * b.y1 + 3 * w * w * t * b.cy1 + 3 * w * t * t * b.cy2 + t * t * t * b.y2)
+        if (found != null && found.curves.isNotEmpty()) sketch.links += SketchOps.project(sketch, found.curves, found.section, found.bodies)
+        for ((u, v) in lone) {
+            if (sketch.points.none { it !== sketch.origin && hypot(sketch.x(it) - u, sketch.y(it) - v) < 1e-6 }) {
+                sketch.addPoint(u, v).also { addQuietly(Constraint.Fixed(it, u, v)) }
             }
-            val ps = along.map { (u, v) -> fixedPoint(u, v) }
-            val closed = ps.size > 3 && ps.first() === ps.last()
-            if (ps.distinct().size >= 2) sketch.addSpline(if (closed) ps else ps.distinct(), construction = false)
         }
-        for ((u, v) in lone) fixedPoint(u, v)
         changed()
     }
 

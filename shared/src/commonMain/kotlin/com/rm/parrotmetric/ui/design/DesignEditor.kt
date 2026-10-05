@@ -485,6 +485,9 @@ class DesignEditor(
         return ref to SketchPlane("On a face", ref.origin(Vec3(d[0], d[1], d[2]), n), x, n.cross(x))
     }
 
+    /** The labels of the bodies shown now, as a projection through them remembers them. */
+    fun shownLabels(): List<String> = shownBodies.map { it.label }
+
     /** For projecting into a sketch on a plane: where the shown bodies cross it. */
     fun sectionThrough(plane: SketchPlane): List<ProfileCurve>? = try {
         // Each body a hair behind the plane, so a sketch on a body's flat top still finds its

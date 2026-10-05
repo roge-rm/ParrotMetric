@@ -124,7 +124,7 @@ object Manual {
             ManualBlock(ManualKind.Bullet, "**Pattern** copies them in a row, **X apart** and **Y apart**, and with **Rows** more than 1, repeats the row **Rows apart**, square to it. The copies stay tied to what was copied: move it and they follow, and the first step across and up are sizes you can change to respace them all. **Pattern round** copies them round a point."),
             ManualBlock(ManualKind.Bullet, "**Delete** takes away what's picked."),
             ManualBlock(ManualKind.Heading, "Bringing things in"),
-            ManualBlock(ManualKind.Bullet, "**Project** brings a face's edges into a sketch drawn on that face, or where the bodies cross the sketch's plane, as fixed curves to draw against."),
+            ManualBlock(ManualKind.Bullet, "**Project** brings a face's edges into a sketch drawn on that face, or where the bodies cross the sketch's plane, as fixed curves to draw against. They stay tied to what they came from: change the part they came from, such as a board you're making a case for, and they move with it, along with anything sized from them. If its edges change shape, say a hole is added, the sketch says so and you project again."),
             ManualBlock(ManualKind.Bullet, "**Add drawing** brings in an SVG or DXF file's curves, at their size in the file in millimetres."),
             ManualBlock(ManualKind.Bullet, "A picture to trace over goes in with **Canvas**, under **Construct**."),
         )),

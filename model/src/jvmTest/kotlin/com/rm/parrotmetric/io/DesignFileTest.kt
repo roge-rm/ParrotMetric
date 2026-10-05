@@ -135,6 +135,25 @@ class DesignFileTest {
     }
 
     @Test
+    fun whatASketchProjectedStaysTiedToItsSource() {
+        val d = Design()
+        val sk = Sketch()
+        val curves = listOf(
+            com.rm.parrotmetric.sketch.ProfileCurve(com.rm.parrotmetric.sketch.ProfileCurve.Kind.Line, 0, 0.0, 0.0, 10.0, 0.0),
+            com.rm.parrotmetric.sketch.ProfileCurve(com.rm.parrotmetric.sketch.ProfileCurve.Kind.Circle, 0, 5.0, 5.0, r = 1.0),
+        )
+        sk.links += com.rm.parrotmetric.sketch.SketchOps.project(sk, curves, true, listOf("Body 1", "Body 2"))
+        d.add(SketchFeature(d.newId(), "Sketch 1", PlaneRef.Fixed(SketchPlane.Top), sk))
+        val back = Design()
+        DesignFile.read(DesignFile.write(d, "x"), back)
+        val link = (back.features[0] as SketchFeature).sketch.links.single()
+        assertEquals(true, link.section)
+        assertEquals(listOf("Body 1", "Body 2"), link.bodies)
+        assertEquals(sk.links[0].points.map { it.id }, link.points.map { it.id })
+        assertEquals(1, link.circles.size)
+    }
+
+    @Test
     fun otherFilesAreTurnedAway() {
         assertFailsWith<IllegalArgumentException> { DesignFile.read("{\"format\":\"something\"}", Design()) }
         assertFailsWith<IllegalArgumentException> { DesignFile.read("not json", Design()) }

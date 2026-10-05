@@ -739,8 +739,9 @@ class AppController(
     }
 
     /** For Project: a face's edges for a sketch on a face, else where the bodies cross the sketch's plane. */
-    private fun outlineFor(ref: PlaneRef, plane: SketchPlane): (() -> List<ProfileCurve>?) =
-        if (ref is PlaneRef.OnFace) ({ design.outlineOf(ref, plane) }) else ({ design.sectionThrough(plane) })
+    private fun outlineFor(ref: PlaneRef, plane: SketchPlane): (() -> com.rm.parrotmetric.sketch.ProjectedOutline?) =
+        if (ref is PlaneRef.OnFace) ({ design.outlineOf(ref, plane)?.let { com.rm.parrotmetric.sketch.ProjectedOutline(it, false, emptyList()) } })
+        else ({ design.sectionThrough(plane)?.let { com.rm.parrotmetric.sketch.ProjectedOutline(it, true, design.shownLabels()) } })
 
     private fun openSketch(editor: SketchEditor) {
         core.clearSelection()

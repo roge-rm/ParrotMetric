@@ -146,8 +146,9 @@ class Rebuilder(private val kernel: Kernel) {
     private fun build(f: Feature, bodies: List<BodyState>, planes: Map<Int, SketchPlane>, made: Int, all: List<Feature>): Step = when (f) {
         is SketchFeature -> {
             val plane = resolvePlane(f.plane, bodies, f, planes)
+            val followed = follow(f, plane, bodies)
             keep(bodies)
-            Step(f.key(), bodies, planes + (f.id to plane), null, made)
+            Step(f.key(), bodies, planes + (f.id to plane), if (followed) null else "What it projected changed shape. Open it and project again.", made)
         }
         is PlaneFeature -> {
             val base = resolvePlane(f.base, bodies, f, planes)
@@ -876,6 +877,32 @@ class Rebuilder(private val kernel: Kernel) {
         step.tool = tool
         step.toolOp = op
         return step
+    }
+
+    /**
+     * Moves what the sketch projected to where its edges are now: its face's
+     * outline, or where the bodies it went through cross its plane. False if
+     * they've changed shape, when it's left as it was.
+     */
+    private fun follow(f: SketchFeature, plane: SketchPlane, bodies: List<BodyState>): Boolean {
+        var ok = true
+        for (link in f.sketch.links) {
+            val curves = if (link.section) {
+                val through = bodies.filter { it.label in link.bodies }
+                if (through.isEmpty()) continue
+                // Each body a hair behind the plane, so a sketch on a body's flat top still finds its
+                // outline; else a hair in front, for a body standing on the plane.
+                fun at(b: BodyState, offset: Double) = kernel.section(listOf(b.handle), plane.copy(origin = plane.origin + plane.normal * offset))
+                val found = through.map { b -> at(b, -0.01)?.ifEmpty { at(b, 0.01) } ?: return true }
+                found.flatten()
+            } else {
+                val face = (f.plane as? PlaneRef.OnFace)?.face ?: continue
+                val body = bodies.firstOrNull { face in kernel.faceNames(it.handle) } ?: continue
+                kernel.faceOutline(body.handle, face, plane) ?: return true
+            }
+            if (!com.rm.parrotmetric.sketch.SketchOps.reproject(f.sketch, link, curves)) ok = false
+        }
+        return ok
     }
 
     /** Whether two solids share some volume, not just a face. */

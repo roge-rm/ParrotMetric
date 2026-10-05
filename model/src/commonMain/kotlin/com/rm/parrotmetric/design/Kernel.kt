@@ -76,6 +76,10 @@ interface Kernel {
     fun splitBy(id: Int, body: Long, tool: Long): List<Long>
     /** How much two bodies overlap, mm³. */
     fun overlapVolume(a: Long, b: Long): Double = 0.0
+    /** Where bodies cross a plane, flattened onto it; null where that can't be worked out here. */
+    fun section(bodies: List<Long>, plane: com.rm.parrotmetric.sketch.SketchPlane): List<com.rm.parrotmetric.sketch.ProfileCurve>? = null
+    /** A named face's edges flattened onto a plane; null where that can't be worked out here. */
+    fun faceOutline(body: Long, face: String, plane: com.rm.parrotmetric.sketch.SketchPlane): List<com.rm.parrotmetric.sketch.ProfileCurve>? = null
     /** Where a named corner of a body is (PointRef.Corner), or null if it hasn't got it. */
     fun corner(body: Long, name: String): Vec3? = null
     /**

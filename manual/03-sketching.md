@@ -74,6 +74,6 @@ With **Select** in hand, drag points or curves to move them. Tap a curve twice q
 
 ## Bringing things in
 
-- **Project** brings a face's edges into a sketch drawn on that face, or where the bodies cross the sketch's plane, as fixed curves to draw against.
+- **Project** brings a face's edges into a sketch drawn on that face, or where the bodies cross the sketch's plane, as fixed curves to draw against. They stay tied to what they came from: change the part they came from, such as a board you're making a case for, and they move with it, along with anything sized from them. If its edges change shape, say a hole is added, the sketch says so and you project again.
 - **Add drawing** brings in an SVG or DXF file's curves, at their size in the file in millimetres.
 - A picture to trace over goes in with **Canvas**, under **Construct**.

@@ -216,6 +216,34 @@ class SketchOpsTest {
         near(-4.0, xs.min(), 1e-5); near(69.0, xs.max(), 1e-5)
     }
 
+    private fun board(w: Double) = listOf(
+        ProfileCurve(ProfileCurve.Kind.Line, 0, 0.0, 0.0, w, 0.0),
+        ProfileCurve(ProfileCurve.Kind.Line, 0, w, 0.0, w, 30.0),
+        ProfileCurve(ProfileCurve.Kind.Line, 0, w, 30.0, 0.0, 30.0),
+        ProfileCurve(ProfileCurve.Kind.Line, 0, 0.0, 30.0, 0.0, 0.0),
+        ProfileCurve(ProfileCurve.Kind.Circle, 0, w - 3.5, 3.5, r = 1.375),
+    )
+
+    @Test
+    fun projectedEdgesFollowWhatTheyCameFrom() {
+        val s = Sketch()
+        val link = SketchOps.project(s, board(65.0), true, listOf("Body 1"))
+        s.links += link
+        assertEquals(5, link.points.size)
+        assertEquals(1, link.circles.size)
+        // A wall line 2.5 out from the board's right side, measured from its corner.
+        val corner = link.points.first { abs(s.x(it) - 65.0) < 1e-9 && abs(s.y(it)) < 1e-9 }
+        val wall = s.addLine(s.addPoint(67.5, 0.0), s.addPoint(67.5, 30.0))
+        s.add(Constraint.Vertical(wall))
+        s.add(Constraint.AxisDistance(corner, wall.a, false, 2.5))
+        // The board grows 2 mm: the wall and the hole go with it.
+        assertTrue(SketchOps.reproject(s, link, board(67.0)))
+        near(69.5, s.x(wall.a))
+        near(63.5, s.x(link.circles[0].centre))
+        // A board with another hole can't be matched up.
+        assertTrue(!SketchOps.reproject(s, link, board(67.0) + ProfileCurve(ProfileCurve.Kind.Circle, 0, 3.5, 3.5, r = 1.375)))
+    }
+
     /** A square corner at the origin: one line along x and one up y, 10 long. */
     private fun corner(s: Sketch): Point {
         val p = s.addPoint(0.0, 0.0)

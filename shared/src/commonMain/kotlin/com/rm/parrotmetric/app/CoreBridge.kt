@@ -23,6 +23,12 @@ private class Curves(curves: List<ProfileCurve>) {
 
 private fun SketchPlane.numbers() = doubleArrayOf(origin.x, origin.y, origin.z, x.x, x.y, x.z, y.x, y.y, y.z)
 
+/** Curves from the core, 12 numbers each after a count: kind, then the ends, radius and angles. */
+private fun unpackCurves(d: DoubleArray): List<ProfileCurve> = List(d[0].toInt()) { i ->
+    val o = 1 + i * 12
+    ProfileCurve(ProfileCurve.Kind.entries[d[o].toInt()], 0, d[o + 1], d[o + 2], d[o + 3], d[o + 4], d[o + 5], d[o + 6], d[o + 7])
+}
+
 /** Finds regions with the C++ core. */
 fun coreRegionFinder(core: NativeCore) = RegionFinder { curves ->
     val c = Curves(curves)
@@ -49,6 +55,12 @@ class CoreKernel(private val core: NativeCore) : Kernel {
     } catch (e: RuntimeException) {
         throw KernelException(e.message ?: "That couldn't be done")
     }
+
+    override fun section(bodies: List<Long>, plane: SketchPlane): List<ProfileCurve>? =
+        try { unpackCurves(core.section(bodies.toLongArray(), plane.numbers())) } catch (e: RuntimeException) { null }
+
+    override fun faceOutline(body: Long, face: String, plane: SketchPlane): List<ProfileCurve>? =
+        try { unpackCurves(core.faceOutline(body, face, plane.numbers())) } catch (e: RuntimeException) { null }
 
     private class Picks(regions: List<RegionRef>) {
         val counts = IntArray(regions.size) { regions[it].curveIds.size }
@@ -192,18 +204,9 @@ class CoreViewport(private val core: NativeCore, private val gl: (() -> Unit) ->
 
     override fun selectedMeshPlane() = core.selectedMeshPlane()?.let { Vec3(it[0], it[1], it[2]) to Vec3(it[3], it[4], it[5]) }
 
-    override fun section(bodies: List<Long>, plane: SketchPlane): List<ProfileCurve> = unpack(core.section(bodies.toLongArray(), plane.numbers()))
+    override fun section(bodies: List<Long>, plane: SketchPlane): List<ProfileCurve> = unpackCurves(core.section(bodies.toLongArray(), plane.numbers()))
 
-    override fun faceOutline(body: Long, face: String, plane: SketchPlane): List<ProfileCurve> = unpack(core.faceOutline(body, face, plane.numbers()))
-
-    private fun unpack(d: DoubleArray): List<ProfileCurve> {
-        return List(d[0].toInt()) { i ->
-            val o = 1 + i * 12
-            ProfileCurve(
-                ProfileCurve.Kind.entries[d[o].toInt()], 0, d[o + 1], d[o + 2], d[o + 3], d[o + 4], d[o + 5], d[o + 6], d[o + 7],
-            )
-        }
-    }
+    override fun faceOutline(body: Long, face: String, plane: SketchPlane): List<ProfileCurve> = unpackCurves(core.faceOutline(body, face, plane.numbers()))
 
     override fun selectedEdges() = core.selectedEdges().toList()
     override fun selectedCorners() = core.selectedCorners().toList()

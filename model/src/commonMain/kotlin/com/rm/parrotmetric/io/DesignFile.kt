@@ -410,6 +410,9 @@ object DesignFile {
             }
         },
         "constraints" to s.constraints.mapNotNull { constraint(it) },
+        "links" to s.links.map { l ->
+            mapOf("section" to l.section, "bodies" to l.bodies, "points" to l.points.map { it.id }, "circles" to l.circles.map { it.id })
+        },
         "texts" to s.texts.map { t ->
             mapOf(
                 "id" to t.id, "anchor" to t.anchor.id, "text" to t.text, "height" to t.height, "bold" to t.bold, "angle" to t.angle,
@@ -509,6 +512,12 @@ object DesignFile {
             }
             if (k is Constraint.Dimension) k.expression = (c["expression"] as? Json.Str)?.value
             s.loadConstraint(k)
+        }
+        for (j in o.arr("links")) {
+            val l = j as Json.Obj
+            val points = ints(l["points"]).mapNotNull { s.point(it) }
+            val circles = ints(l["circles"]).mapNotNull { s.curve(it) as? com.rm.parrotmetric.sketch.Circle }
+            s.links += com.rm.parrotmetric.sketch.ProjectionLink(l.bool("section"), strings(l.arr("bodies")), points, circles)
         }
         return s
     }

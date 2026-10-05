@@ -31,6 +31,9 @@ class Sketch {
     val constraints: List<Constraint> get() = constraintList
     val texts: Collection<SketchText> get() = textMap.values
 
+    /** What Project brought in, each tied to where it came from so it can follow it. */
+    val links = mutableListOf<ProjectionLink>()
+
     /**
      * Adds text at [anchor]. Its [outline] (from the font, at (0, 0)) is
      * worked out by whoever sets the text, as the sketch has no fonts.
@@ -366,6 +369,7 @@ class Sketch {
         internal val construction: Map<Curve, Boolean>,
         internal val nextId: Int,
         internal val texts: Map<Int, SketchText> = emptyMap(),
+        internal val links: List<ProjectionLink> = emptyList(),
         internal val rhos: Map<Spline, Double> = emptyMap(),
     )
 
@@ -375,6 +379,7 @@ class Sketch {
         curveMap.values.associateWith { it.construction },
         nextId,
         LinkedHashMap(textMap),
+        links.toList(),
         curveMap.values.filterIsInstance<Spline>().associateWith { it.rho },
     )
 
@@ -387,6 +392,7 @@ class Sketch {
         for ((c, b) in s.construction) c.construction = b
         for ((c, r) in s.rhos) c.rho = r
         textMap.clear(); textMap.putAll(s.texts)
+        links.clear(); links += s.links
         nextId = s.nextId
     }
 
@@ -439,3 +445,15 @@ class Spline internal constructor(id: Int, val through: List<Point>, constructio
     override fun points() = through.distinct()
     val closed get() = shape == Shape.Ellipse || shape != Shape.Conic && through.size > 2 && through.first() === through.last()
 }
+
+/**
+ * Curves brought in by Project, tied to what they came from: the outline of
+ * the face the sketch is on, or with [section], where the bodies labelled
+ * [bodies] cross the sketch's plane. [points] are its points in the order the
+ * projection placed them, [circles] its circles in order, so the same
+ * projection made again can move each to where its edge is now.
+ */
+class ProjectionLink(val section: Boolean, val bodies: List<String>, val points: List<Point>, val circles: List<Circle>)
+
+/** Edges ready to project into a sketch: flattened onto it, and where they came from, as for [ProjectionLink]. */
+class ProjectedOutline(val curves: List<ProfileCurve>, val section: Boolean, val bodies: List<String>)

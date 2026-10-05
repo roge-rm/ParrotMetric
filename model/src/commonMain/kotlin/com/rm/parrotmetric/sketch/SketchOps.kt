@@ -40,6 +40,96 @@ object SketchOps {
         return s
     }
 
+    /**
+     * Goes through edges flattened onto a sketch in a fixed order, asking
+     * [point] for each place, so projecting and projecting again make their
+     * points in the same order. Curved pieces of one edge become one spline
+     * through points along them.
+     */
+    private fun <P> walk(
+        curves: List<ProfileCurve>, point: (Double, Double) -> P,
+        line: (P, P) -> Unit, circle: (P, Double) -> Unit, arc: (P, P, P) -> Unit, spline: (List<P>) -> Unit,
+    ) {
+        for (c in curves) when (c.kind) {
+            ProfileCurve.Kind.Line -> line(point(c.x1, c.y1), point(c.x2, c.y2))
+            ProfileCurve.Kind.Circle -> circle(point(c.x1, c.y1), c.r)
+            ProfileCurve.Kind.Arc -> arc(point(c.x1, c.y1), point(c.x1 + c.r * cos(c.a0), c.y1 + c.r * sin(c.a0)), point(c.x1 + c.r * cos(c.a1), c.y1 + c.r * sin(c.a1)))
+            ProfileCurve.Kind.Bezier -> {}
+        }
+        for ((_, pieces) in curves.filter { it.kind == ProfileCurve.Kind.Bezier }.groupBy { it.id }) {
+            val along = mutableListOf<Pair<Double, Double>>()
+            for (b in pieces) for (k in 0..3) {
+                if (k == 0 && along.isNotEmpty()) continue
+                val t = k / 3.0; val w = 1 - t
+                along += (w * w * w * b.x1 + 3 * w * w * t * b.cx1 + 3 * w * t * t * b.cx2 + t * t * t * b.x2) to
+                    (w * w * w * b.y1 + 3 * w * w * t * b.cy1 + 3 * w * t * t * b.cy2 + t * t * t * b.y2)
+            }
+            spline(along.map { (u, v) -> point(u, v) })
+        }
+    }
+
+    /**
+     * Brings edges flattened onto the sketch in as fixed curves to draw
+     * against, and returns the link that ties them to where they came from
+     * (see [ProjectionLink]), which the caller keeps in [Sketch.links] if it
+     * should follow. A point already at a place is used, not doubled.
+     */
+    fun project(s: Sketch, curves: List<ProfileCurve>, section: Boolean, bodies: List<String>): ProjectionLink {
+        val points = mutableListOf<Point>()
+        val circles = mutableListOf<Circle>()
+        fun fixedPoint(u: Double, v: Double): Point {
+            val p = s.points.firstOrNull { it !== s.origin && hypot(s.x(it) - u, s.y(it) - v) < 1e-6 }
+                ?: s.addPoint(u, v).also { s.loadConstraint(Constraint.Fixed(it, u, v)) }
+            if (p !in points) points += p
+            return p
+        }
+        walk(
+            curves, ::fixedPoint,
+            line = { a, b -> s.addLine(a, b) },
+            circle = { c, r -> s.addCircle(c, r).also { circles += it; s.loadConstraint(Constraint.Radius(it, true, 2 * r)) } },
+            arc = { c, a, b -> s.addArc(c, a, b) },
+            spline = { ps ->
+                val closed = ps.size > 3 && ps.first() === ps.last()
+                if (ps.distinct().size >= 2) s.addSpline(if (closed) ps else ps.distinct(), construction = false)
+            },
+        )
+        return ProjectionLink(section, bodies, points, circles)
+    }
+
+    /**
+     * Moves what [link] brought in to where its edges are now, given the same
+     * projection made again. False when the edges changed shape (more or
+     * fewer of them), and nothing is moved.
+     */
+    fun reproject(s: Sketch, link: ProjectionLink, curves: List<ProfileCurve>): Boolean {
+        val places = mutableListOf<Pair<Double, Double>>()
+        val radii = mutableListOf<Double>()
+        fun place(u: Double, v: Double): Int =
+            places.indexOfFirst { hypot(it.first - u, it.second - v) < 1e-6 }.takeIf { it >= 0 } ?: places.size.also { places += u to v }
+        walk(curves, ::place, line = { _, _ -> }, circle = { _, r -> radii += r }, arc = { _, _, _ -> }, spline = {})
+        if (places.size != link.points.size || radii.size != link.circles.size) return false
+        var moved = false
+        for ((i, p) in link.points.withIndex()) {
+            if (s.point(p.id) !== p) continue
+            val (u, v) = places[i]
+            val fixed = s.constraints.filterIsInstance<Constraint.Fixed>().firstOrNull { it.p === p } ?: continue
+            if (abs(fixed.atX - u) < 1e-9 && abs(fixed.atY - v) < 1e-9) continue
+            s.remove(fixed)
+            s.loadConstraint(Constraint.Fixed(p, u, v))
+            moved = true
+        }
+        for ((i, c) in link.circles.withIndex()) {
+            val size = s.constraints.filterIsInstance<Constraint.Radius>().firstOrNull { it.curve === c } ?: continue
+            val want = if (size.diameter) 2 * radii[i] else radii[i]
+            if (abs(size.value - want) > 1e-9) {
+                size.value = want
+                moved = true
+            }
+        }
+        if (moved) s.solve()
+        return true
+    }
+
     /** Where a curve meets others: a line's or arc's ends, an open spline's first and last points; none for closed shapes. */
     private fun ends(c: Curve): List<Point> = when (c) {
         is Line -> listOf(c.a, c.b)
