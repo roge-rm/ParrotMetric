@@ -62,7 +62,7 @@ object Manual {
             ManualBlock(ManualKind.Heading, "The history"),
             ManualBlock(ManualKind.Para, "The chips along the bottom are the steps that make the design, oldest on the left. The orange bar is where the history ends right now."),
             ManualBlock(ManualKind.Bullet, "Tap a chip to open that step's settings again."),
-            ManualBlock(ManualKind.Bullet, "A long press on a chip (or a right-click) gives **Edit**, **Roll back to here**, **Turn off** and **Delete**."),
+            ManualBlock(ManualKind.Bullet, "A long press on a chip (or a right-click) gives **Edit**, **Roll back to here**, **Turn off** and **Delete**. A sketch's also has **Move to picked face**: pick a plane or a flat face first, and the sketch moves onto it with what's drawn in it."),
             ManualBlock(ManualKind.Para, "**Roll back to here** moves the end of the history back to that step, so the steps after it stop for now. Anything you add then goes in at that point. **Roll forward to here** brings them back."),
             ManualBlock(ManualKind.Para, "**Turn off** keeps a step but leaves it out, to see the part without it."),
             ManualBlock(ManualKind.Para, "A step that can't be built turns red and says why, and the steps after it still try. Usually it's because an edge or face it used isn't there any more, and opening it to pick again fixes it."),

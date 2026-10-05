@@ -628,6 +628,9 @@ private fun HistoryBar(design: DesignEditor, actions: ModelActions) {
                 }
                 DropdownMenu(menu, onDismissRequest = { menu = false }, containerColor = Palette.raised) {
                     DropdownMenuItem({ Text("Edit") }, onClick = { menu = false; actions.openHistory(entry.id) })
+                    if (entry.kind == HistoryEntry.Kind.Sketch) DropdownMenuItem(
+                        { Text("Move to picked face") }, onClick = { menu = false; design.moveSketch(entry.id) }, enabled = design.hasPickedPlane(),
+                    )
                     DropdownMenuItem({ Text(if (entry.active) "Roll back to here" else "Roll forward to here") }, onClick = { menu = false; design.rollTo(index) })
                     DropdownMenuItem({ Text(if (entry.off) "Turn on" else "Turn off") }, onClick = { menu = false; design.setOff(entry.id, !entry.off) })
                     DropdownMenuItem({ Text("Delete") }, onClick = { menu = false; design.delete(entry.id) })

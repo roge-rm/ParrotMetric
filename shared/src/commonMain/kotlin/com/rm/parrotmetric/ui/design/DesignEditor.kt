@@ -537,6 +537,26 @@ class DesignEditor(
         return PlaneRef.OnFace(faces[0].second, x)
     }
 
+    /** A plane or flat face is picked, that a sketch could be moved onto. */
+    fun hasPickedPlane(): Boolean =
+        viewport.selectedPlanes().size == 1 || viewport.selectedFaces().count { it.second.isNotEmpty() } == 1
+
+    /**
+     * Puts a sketch on the picked construction plane or flat face, keeping
+     * what's drawn in it, its x running as near as it can to the way it did.
+     */
+    fun moveSketch(id: Int) {
+        val f = design.features.firstOrNull { it.id == id } as? SketchFeature ?: return
+        val was = built?.sketchPlanes?.get(id)
+        val ref = viewport.selectedPlanes().singleOrNull()?.let { i -> shownPlanes.getOrNull(i)?.let { PlaneRef.Construction(it.id) } }
+            ?: viewport.selectedFaces().filter { it.second.isNotEmpty() }.singleOrNull()?.let { PlaneRef.OnFace(it.second, was?.x ?: Vec3(1.0, 0.0, 0.0)) }
+            ?: run { message = "Pick a plane or a flat face to move it onto"; return }
+        if (ref is PlaneRef.Construction && ref.featureId == id) return
+        checkpoint()
+        design.replace(SketchFeature(f.id, f.name, ref, f.sketch))
+        changed()
+    }
+
     // Rebuilding.
 
     private var pending = false
