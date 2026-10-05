@@ -136,11 +136,12 @@ enum class HoleFit { Insert, SelfTap }
 object HolePresets {
     val sizes = listOf("M2", "M2.5", "M3", "M4", "M5")
 
-    // Pocket diameter, and depth: the insert's length (mm) and 1 more for the plastic it pushes down.
-    private val insert = mapOf("M2" to (3.2 to 5.0), "M2.5" to (3.6 to 5.0), "M3" to (4.0 to 6.7), "M4" to (5.6 to 9.1), "M5" to (6.4 to 10.5))
+    // Pocket diameter, and depth: a short insert's length and 2 mm more for the plastic it pushes down.
+    // M3 is a proven print, 4 mm wide and 6 deep for a 4 mm insert; the rest go by the inserts' sizes.
+    private val insert = mapOf("M2" to (3.2 to 5.0), "M2.5" to (3.6 to 6.0), "M3" to (4.0 to 6.0), "M4" to (5.6 to 7.5), "M5" to (6.4 to 8.5))
 
-    // A little under the screw's core diameter, so the thread bites into the plastic.
-    private val selfTap = mapOf("M2" to 1.7, "M2.5" to 2.2, "M3" to 2.6, "M4" to 3.5, "M5" to 4.4)
+    // Two thirds of the screw's size, tight enough that it forces its own thread: 2 mm for M3 holds.
+    private val selfTap = mapOf("M2" to 1.3, "M2.5" to 1.7, "M3" to 2.0, "M4" to 2.7, "M5" to 3.3)
 
     fun diameter(fit: HoleFit, size: String): Double = when (fit) {
         HoleFit.Insert -> insert.getValue(size).first

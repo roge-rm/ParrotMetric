@@ -14,12 +14,13 @@ class HolePresetsTest {
             assertNull(HolePresets.depth(HoleFit.SelfTap, size))
         }
         assertEquals(4.0, HolePresets.diameter(HoleFit.Insert, "M3"))
+        assertEquals(6.0, HolePresets.depth(HoleFit.Insert, "M3"))
     }
 
     @Test
     fun aSavedHoleIsKnownAgainByItsDiameter() {
         assertEquals(HoleFit.Insert to "M3", HolePresets.match(4.0))
-        assertEquals(HoleFit.SelfTap to "M2.5", HolePresets.match(2.2))
-        assertNull(HolePresets.match(3.3))
+        assertEquals(HoleFit.SelfTap to "M3", HolePresets.match(2.0))
+        assertNull(HolePresets.match(3.0))
     }
 }
