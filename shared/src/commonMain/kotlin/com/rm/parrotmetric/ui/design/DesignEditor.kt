@@ -304,6 +304,20 @@ class DesignEditor(
 
     fun setHidden(label: String, hidden: Boolean) = setInfo(label) { it.copy(hidden = hidden) }
 
+    /** Shows or hides every body in a component. */
+    fun setComponentHidden(component: String, hidden: Boolean) {
+        checkpoint()
+        for (b in allBodies()) if (design.info(b.label).component == component) design.bodies[b.label] = design.info(b.label).copy(hidden = hidden)
+        changed()
+    }
+
+    /** The component new bodies go into as they're made, or null for none. */
+    var activeComponent by mutableStateOf<String?>(null)
+
+    // The bodies there were after the last build, so ones a step has just made can be told apart.
+    private var knownLabels: Set<String>? = null
+    private val placed = mutableSetOf<String>()
+
     /** Construction planes there are, by id and name, for the parts list. */
     fun planes(): List<Pair<Int, String>> = design.active.filterIsInstance<PlaneFeature>().map { it.id to it.name }
 
@@ -599,6 +613,19 @@ class DesignEditor(
                     }
                 }
                 built = result.first
+                // New bodies go into the component that's taking them.
+                val labels = result.first.bodies.map { it.label }.toSet()
+                val into = activeComponent
+                if (into != null) knownLabels?.let { known ->
+                    for (l in labels - known) if (design.info(l).component == null) {
+                        design.bodies[l] = design.info(l).copy(component = into)
+                        placed += l
+                    }
+                }
+                // A body put in a component that's gone again (a cancelled preview) is let go.
+                for (l in placed - labels) if (design.info(l).component != null) design.bodies[l] = design.info(l).copy(component = null)
+                placed.retainAll(labels)
+                knownLabels = labels
                 design.hints.clear()
                 design.hints.putAll(result.first.hints)
                 shownSketches = result.second

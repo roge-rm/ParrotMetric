@@ -1378,6 +1378,10 @@ class SketchEditor(
             message = "The face's edges couldn't be found"
             return
         }
+        if (found?.curves.isNullOrEmpty() && lone.isEmpty()) {
+            message = "There are no edges to bring in here"
+            return
+        }
         checkpoint()
         if (found != null && found.curves.isNotEmpty()) sketch.links += SketchOps.project(sketch, found.curves, found.section, found.bodies)
         for ((u, v) in lone) {

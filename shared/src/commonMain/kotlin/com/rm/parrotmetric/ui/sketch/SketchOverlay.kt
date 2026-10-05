@@ -512,7 +512,11 @@ private fun annotations(editor: SketchEditor, proj: PlaneProjection, dp: Float):
                 val a = screen(c.line.a, editor, proj); val b = screen(c.line.b, editor, proj)
                 val d = along(a, b)
                 val foot = a + d * ((p - a).x * d.x + (p - a).y * d.y)
-                out += Annotation(item, (p + foot) / 2f + d * (16 * dp), format(c.value), c)
+                // Halfway when short; when long, near the point it measures, where it's looked for.
+                val gap = foot - p
+                val len = gap.getDistance()
+                val at = if (len < 90 * dp) (p + foot) / 2f + d * (16 * dp) else p + gap * (34 * dp / len) + d * (16 * dp)
+                out += Annotation(item, at, c.expression ?: format(c.value), c)
             }
             is Constraint.Radius -> {
                 val curve = c.curve

@@ -135,7 +135,29 @@ fun PartsSheet(editor: DesignEditor, close: () -> Unit) {
         if (bodies.isEmpty() && editor.planes().isEmpty()) Text("No bodies yet", fontSize = 14.sp, color = Palette.muted)
         Column(Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState())) {
             for ((component, list) in bodies.groupBy { editor.design.info(it.label).component }) {
-                if (component != null) Text(component, Modifier.padding(start = 6.dp, top = 8.dp, bottom = 2.dp), fontSize = 13.sp, color = Palette.muted, fontWeight = FontWeight.SemiBold)
+                if (component != null) {
+                    val allHidden = list.all { editor.design.info(it.label).hidden }
+                    val taking = editor.activeComponent == component
+                    var menu by remember(component) { mutableStateOf(false) }
+                    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = { editor.setComponentHidden(component, !allHidden) }) {
+                            Icon(if (allHidden) Icons.hidden else Icons.shown, if (allHidden) "Show" else "Hide", tint = if (allHidden) Palette.faint else Palette.mint)
+                        }
+                        Column(Modifier.weight(1f)) {
+                            Text(component, fontSize = 13.sp, color = Palette.muted, fontWeight = FontWeight.SemiBold)
+                            if (taking) Text("New bodies go here", fontSize = 11.sp, color = Palette.mint)
+                        }
+                        Box {
+                            IconButton(onClick = { menu = true }) { Icon(Icons.more, "Options", tint = Palette.muted) }
+                            DropdownMenu(menu, onDismissRequest = { menu = false }, containerColor = Palette.raised) {
+                                DropdownMenuItem(
+                                    { Text(if (taking) "Stop putting new bodies here" else "Put new bodies here") },
+                                    onClick = { menu = false; editor.activeComponent = if (taking) null else component },
+                                )
+                            }
+                        }
+                    }
+                }
                 for (b in list) {
                     val info = editor.design.info(b.label)
                     var menu by remember(b.label) { mutableStateOf(false) }
