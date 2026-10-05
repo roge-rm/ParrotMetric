@@ -94,6 +94,38 @@ fun StartScreen(icon: Painter?, state: ModelState, actions: ModelActions) {
         BigButton("Open…", Icons.open, onClick = actions::openFile)
         BigButton("Settings", Icons.parameters) { actions.showScreen(AppScreen.Settings) }
         if (state.canQuit) BigButton("Quit", Icons.close, onClick = actions::quit)
+        val folder = state.folderName
+        if (folder != null) {
+            Text("In $folder", Modifier.padding(start = 6.dp, top = 14.dp, bottom = 2.dp), fontSize = 14.sp, color = Palette.muted)
+            if (state.projects.isEmpty()) Text("No designs yet", Modifier.padding(start = 6.dp), fontSize = 14.sp, color = Palette.faint)
+            for (p in state.projects.take(30)) {
+                Surface(
+                    onClick = { actions.openProject(p.name) },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    color = Palette.surface,
+                    contentColor = Palette.text,
+                ) {
+                    Row(Modifier.height(46.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(p.name.removeSuffix(".pmet"), Modifier.weight(1f), fontSize = 15.sp, maxLines = 1)
+                        Text(ago(p.modified), fontSize = 13.sp, color = Palette.muted)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** How long ago a time in ms since 1970 was, roughly: "just now", "5 min ago", "3 days ago". */
+private fun ago(ms: Long): String {
+    val now = kotlin.time.Clock.System.now().toEpochMilliseconds()
+    val min = (now - ms) / 60_000
+    return when {
+        min < 1 -> "just now"
+        min < 60 -> "$min min ago"
+        min < 60 * 24 -> "${min / 60} h ago"
+        min < 60 * 24 * 60 -> "${min / (60 * 24)} days ago"
+        else -> "${min / (60 * 24 * 30)} months ago"
     }
 }
 
@@ -112,6 +144,15 @@ fun SettingsScreen(state: ModelState, actions: ModelActions, onBack: () -> Unit)
                 state.autoDetail?.let { "${it.label} on this device" } ?: "Measuring this device…",
                 Modifier.padding(start = 6.dp), fontSize = 13.sp, color = Palette.muted,
             )
+        }
+        if (state.canChooseFolder) {
+            Box(Modifier.size(6.dp))
+            Text("Projects folder", fontSize = 14.sp, color = Palette.muted)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(state.folderName ?: "None", Modifier.weight(1f).padding(start = 6.dp), fontSize = 15.sp, color = Palette.text, maxLines = 1)
+                androidx.compose.material3.TextButton(onClick = actions::chooseFolder) { Text(if (state.folderName == null) "Choose…" else "Change…", color = Palette.mint) }
+                if (state.folderName != null) androidx.compose.material3.TextButton(onClick = actions::forgetFolder) { Text("Stop using", color = Palette.muted) }
+            }
         }
         Box(Modifier.size(12.dp))
         BigButton("Back", primary = true, onClick = onBack)

@@ -43,6 +43,15 @@ interface PlatformFiles {
     /** The app's settings as "key=value" lines, or null if none are saved yet. */
     fun readSettings(): String?
     suspend fun writeSettings(text: String)
+
+    /** Asks for a projects folder; calls back on the main thread with a token for it, or null. Null here means there's no such thing. */
+    fun chooseFolder(then: (token: String?) -> Unit) = then(null)
+    /** Can a projects folder be chosen here at all. */
+    val hasFolders: Boolean get() = false
+    /** The folder a token from [chooseFolder] names, or null if it can't be reached any more. */
+    fun folder(token: String): ProjectFolder? = null
+    /** What to call this device in the name of a copy kept after a clash, such as "Pixel 5". */
+    val deviceName: String get() = "this device"
 }
 
 /**
@@ -75,6 +84,14 @@ class AppController(
     /** Where Settings goes back to. */
     private var beforeSettings = AppScreen.Start
 
+    /** The projects folder, if one is chosen and can be reached. */
+    private var folder: ProjectFolder? = null
+    /** The design's file in the folder, once it's been saved or opened there. */
+    private var folderFile: String? = null
+    /** That file's modified time and contents as this device last wrote or read them, to tell when another changed it. */
+    private var folderStamp: Long? = null
+    private var folderText: String? = null
+
     /** The saved settings, as "key=value" lines in the platform's settings file. */
     private val settings = mutableMapOf<String, String>()
 
@@ -92,6 +109,9 @@ class AppController(
         )
         applyDetail()
         if (state.autoDetail == null) measureSpeed()
+        folder = settings["folder"]?.let { files.folder(it) }
+        state = state.copy(folderName = folder?.name, canChooseFolder = files.hasFolders)
+        refreshProjects()
         design.onShown = { state = state.copy(selectedFaces = 0, selectedEdges = 0, selectedAreas = 0, selectedPlanes = 0, selectedCorners = 0) }
         design.onHistoryChanged = ::scheduleAutosave
         // Saves now and then while there are changes, besides shortly after each.
@@ -143,6 +163,81 @@ class AppController(
         if (!designOpen) return
         unsaved = false
         files.writeAutosave(autosaveContent())
+        // Kept in the projects folder too, so sync apps carry each change: unless it was
+        // saved to a file of its own somewhere else.
+        if (folder != null && document == null) writeToFolder(quiet = true)
+    }
+
+    private fun refreshProjects() {
+        val f = folder ?: run { state = state.copy(projects = emptyList()); return }
+        scope.launch {
+            val list = withContext(Dispatchers.Default) { runCatching { f.list() }.getOrDefault(emptyList()) }
+            state = state.copy(projects = list)
+        }
+    }
+
+    /**
+     * Writes the design to its file in the projects folder, picking a name the
+     * first time. If another device changed the file since this one last read
+     * or wrote it, this one's version goes into a copy named for this device,
+     * which becomes the design's file, so neither is lost.
+     */
+    private suspend fun writeToFolder(quiet: Boolean) {
+        val f = folder ?: return
+        val text = design.fileText(state.title)
+        withContext(Dispatchers.Default) {
+            var name = folderFile
+            if (name == null) {
+                val taken = runCatching { f.list().map { it.name }.toSet() }.getOrDefault(emptySet())
+                name = freeName(projectFileName(state.title), taken)
+            } else {
+                val now = runCatching { f.modified(name) }.getOrNull()
+                if (now != null && now != folderStamp) {
+                    // Changed since: a clash only if the contents did.
+                    val there = runCatching { f.read(name) }.getOrNull()?.decodeToString()
+                    if (there != null && there != folderText && there != text) {
+                        val taken = runCatching { f.list().map { it.name }.toSet() }.getOrDefault(emptySet())
+                        val mine = freeName(projectFileName("${state.title} (${files.deviceName})"), taken)
+                        design.message = "Changed on another device too, so this is saved as $mine"
+                        name = mine
+                    }
+                }
+            }
+            val stamp = runCatching { f.write(name, text.encodeToByteArray()) }.getOrNull()
+            if (stamp == null) {
+                if (!quiet) design.message = "Couldn't save to ${f.name}"
+                return@withContext
+            }
+            folderFile = name
+            folderStamp = stamp
+            folderText = text
+            if (!quiet) design.message = "Saved $name in ${f.name}"
+        }
+        rememberLastFile()
+    }
+
+    /**
+     * Back from the background: if another device has changed the open
+     * design's file and there are no changes here yet, that version is loaded.
+     */
+    fun resumed() {
+        val f = folder ?: return
+        val name = folderFile ?: return
+        if (unsaved || state.screen != AppScreen.Model || state.sketch != null || design.panel != null) return
+        scope.launch {
+            val now = withContext(Dispatchers.Default) { runCatching { f.modified(name) }.getOrNull() } ?: return@launch
+            if (now == folderStamp) return@launch
+            val text = withContext(Dispatchers.Default) { runCatching { f.read(name) }.getOrNull()?.decodeToString() } ?: return@launch
+            folderStamp = now
+            if (text == folderText || unsaved) return@launch
+            folderText = text
+            try {
+                state = state.copy(title = design.openFile(text))
+                design.message = "Loaded the newer version from ${f.name}"
+            } catch (e: IllegalArgumentException) {
+                design.message = "The newer version in ${f.name} couldn't be read"
+            }
+        }
     }
 
     /**
@@ -207,6 +302,7 @@ class AppController(
             try {
                 state = state.copy(title = design.openFile(bytes.decodeToString()))
                 document = null
+                folderFile = null
                 opening()
             } catch (e: IllegalArgumentException) {
                 design.message = e.message
@@ -283,6 +379,43 @@ class AppController(
         }
     }
 
+    /**
+     * Continue picks the folder copy back up. If it's as this device left it,
+     * saving carries on there. If another device changed it, that version is
+     * opened and this one is kept as a copy named for this device.
+     */
+    private suspend fun rejoinFolder(f: ProjectFolder, name: String, mine: String) {
+        val stamp = withContext(Dispatchers.Default) { runCatching { f.modified(name) }.getOrNull() } ?: return
+        val there = withContext(Dispatchers.Default) { runCatching { f.read(name) }.getOrNull()?.decodeToString() } ?: return
+        if (there == mine) {
+            folderFile = name
+            folderStamp = stamp
+            folderText = there
+            return
+        }
+        val taken = withContext(Dispatchers.Default) { runCatching { f.list().map { it.name }.toSet() }.getOrDefault(emptySet()) }
+        val copy = freeName(projectFileName("${state.title} (${files.deviceName})"), taken)
+        withContext(Dispatchers.Default) { runCatching { f.write(copy, mine.encodeToByteArray()) } }
+        try {
+            state = state.copy(title = design.openFile(there))
+            folderFile = name
+            folderStamp = stamp
+            folderText = there
+            design.message = "$name changed on another device, so it's opened as that; this device's version is in $copy"
+            refreshProjects()
+        } catch (e: IllegalArgumentException) {
+            design.message = "$name changed on another device and couldn't be read"
+        }
+    }
+
+    /** Remembers which folder file the open design is, for Continue. */
+    private fun rememberLastFile() {
+        val name = folderFile ?: return
+        if (settings["lastFile"] == name) return
+        settings["lastFile"] = name
+        saveSettings()
+    }
+
     /** The view's covered edges as last sent, so layout passes that don't change them send nothing. */
     private var covered = listOf(0f, 0f, 0f, 0f)
 
@@ -290,6 +423,7 @@ class AppController(
         override fun newDesign() {
             design.newDesign()
             document = null
+            folderFile = null
             state = state.copy(title = "Untitled")
             opening()
         }
@@ -299,7 +433,12 @@ class AppController(
             try {
                 state = state.copy(title = design.openFile(text))
                 document = null
+                folderFile = null
                 opening()
+                // Carries on with the folder copy it came from, checking it against this one.
+                val f = folder
+                val name = settings["lastFile"]
+                if (f != null && name != null) scope.launch { rejoinFolder(f, name, text) }
             } catch (e: IllegalArgumentException) {
                 design.message = "The last design couldn't be read back"
             }
@@ -309,7 +448,7 @@ class AppController(
             if (screen == AppScreen.Settings) beforeSettings = state.screen
             if (screen == AppScreen.Start) {
                 // Leaving the design: keep it for Continue.
-                scope.launch { saveNow() }
+                scope.launch { saveNow(); refreshProjects() }
                 state = state.copy(lastDesign = if (designOpen) state.title to design.design.features.size else state.lastDesign)
             }
             state = state.copy(screen = if (screen == AppScreen.Model && !designOpen) AppScreen.Start else screen)
@@ -336,7 +475,55 @@ class AppController(
         }
 
         override fun save() {
-            document?.let { writeDesign(it) } ?: saveAs()
+            if (folder != null && document == null) scope.launch { writeToFolder(quiet = false) }
+            else document?.let { writeDesign(it) } ?: saveAs()
+        }
+
+        override fun openProject(name: String) {
+            val f = folder ?: return
+            scope.launch {
+                val bytes = withContext(Dispatchers.Default) { runCatching { f.read(name) }.getOrNull() }
+                val stamp = withContext(Dispatchers.Default) { runCatching { f.modified(name) }.getOrNull() }
+                if (bytes == null) {
+                    design.message = "Couldn't read $name"
+                    refreshProjects()
+                    return@launch
+                }
+                val text = bytes.decodeToString()
+                try {
+                    state = state.copy(title = design.openFile(text))
+                    document = null
+                    folderFile = name
+                    folderStamp = stamp
+                    folderText = text
+                    rememberLastFile()
+                    opening()
+                } catch (e: IllegalArgumentException) {
+                    design.message = e.message
+                }
+            }
+        }
+
+        override fun chooseFolder() = files.chooseFolder { token ->
+            if (token == null) return@chooseFolder
+            val f = files.folder(token)
+            if (f == null) {
+                design.message = "That folder can't be used"
+                return@chooseFolder
+            }
+            folder = f
+            settings["folder"] = token
+            saveSettings()
+            state = state.copy(folderName = f.name)
+            refreshProjects()
+        }
+
+        override fun forgetFolder() {
+            folder = null
+            folderFile = null
+            settings.remove("folder")
+            saveSettings()
+            state = state.copy(folderName = null, projects = emptyList())
         }
 
         override fun saveAs() = files.create(state.title + ".pmet", ::writeDesign)

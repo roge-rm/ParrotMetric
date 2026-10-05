@@ -108,6 +108,11 @@ data class ModelState(
     /** What Automatic picks on this device, once it's been measured. */
     val autoDetail: DisplayDetail? = null,
     val canQuit: Boolean = false,
+    /** The projects folder's name, if one is chosen, and the designs in it. */
+    val folderName: String? = null,
+    val projects: List<com.rm.parrotmetric.app.ProjectFile> = emptyList(),
+    /** Whether this platform can have a projects folder. */
+    val canChooseFolder: Boolean = false,
 )
 
 /** Which screen layout: by the window's width, or always the phone one or the large-screen one. */
@@ -149,6 +154,10 @@ interface ModelActions {
     /** Asks for a picture to lay on a plane. */
     fun insertCanvas()
     fun quit()
+    /** Opens a design from the projects folder. */
+    fun openProject(name: String) {}
+    fun chooseFolder() {}
+    fun forgetFolder() {}
 }
 
 /**

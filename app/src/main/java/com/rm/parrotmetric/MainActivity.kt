@@ -2,6 +2,7 @@ package com.rm.parrotmetric
 
 import android.content.Intent
 import android.net.Uri
+import android.provider.DocumentsContract
 import android.os.Bundle
 import android.provider.OpenableColumns
 import androidx.activity.ComponentActivity
@@ -24,6 +25,8 @@ import androidx.lifecycle.viewModelScope
 import com.rm.parrotmetric.app.AppController
 import com.rm.parrotmetric.app.FileSink
 import com.rm.parrotmetric.app.PlatformFiles
+import com.rm.parrotmetric.app.ProjectFile
+import com.rm.parrotmetric.app.ProjectFolder
 import com.rm.parrotmetric.ui.LaunchSplash
 import com.rm.parrotmetric.ui.ModelScreen
 import kotlinx.coroutines.Dispatchers
@@ -46,6 +49,10 @@ class AppHolder : ViewModel() {
         override suspend fun writeAutosave(text: String) = current.writeAutosave(text)
         override fun readSettings() = current.readSettings()
         override suspend fun writeSettings(text: String) = current.writeSettings(text)
+        override fun chooseFolder(then: (String?) -> Unit) = current.chooseFolder(then)
+        override val hasFolders get() = true
+        override fun folder(token: String) = current.folder(token)
+        override val deviceName get() = current.deviceName
     }
 
     /** Made on first use, once [activity] is set, since it reads the settings through it. */
@@ -69,6 +76,17 @@ class MainActivity : ComponentActivity() {
             }
             then(displayName(uri), bytes)
         }
+    }
+
+    private var onFolder: ((String?) -> Unit)? = null
+    private val openFolder = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        val then = onFolder ?: return@registerForActivityResult
+        if (uri == null) return@registerForActivityResult then(null)
+        // Kept across restarts, so the folder is still there next time.
+        runCatching {
+            contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+        }
+        then(uri.toString())
     }
 
     private var onCreated: ((FileSink) -> Unit)? = null
@@ -113,6 +131,21 @@ class MainActivity : ComponentActivity() {
             tmp.renameTo(autosave)
             Unit
         }
+
+        override val hasFolders get() = true
+
+        override fun chooseFolder(then: (String?) -> Unit) {
+            onFolder = then
+            openFolder.launch(null)
+        }
+
+        override fun folder(token: String): ProjectFolder? {
+            val uri = Uri.parse(token)
+            val allowed = contentResolver.persistedUriPermissions.any { it.uri == uri && it.isReadPermission && it.isWritePermission }
+            return if (allowed) TreeFolder(contentResolver, uri) else null
+        }
+
+        override val deviceName: String get() = android.os.Build.MODEL ?: "this device"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -186,6 +219,8 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         view?.onResume()
+        // Picks up changes another device synced into the projects folder.
+        app.resumed()
     }
 
     override fun onPause() {
@@ -197,4 +232,57 @@ class MainActivity : ComponentActivity() {
         if (uri.scheme == "file") uri.lastPathSegment.orEmpty() else contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
             if (it.moveToFirst()) it.getString(0) else null
         } ?: uri.lastPathSegment.orEmpty()
+}
+
+/**
+ * A projects folder picked with the system's folder picker: on the device, or
+ * from a provider such as Nextcloud or Drive, which syncs it.
+ */
+private class TreeFolder(private val resolver: android.content.ContentResolver, private val tree: Uri) : ProjectFolder {
+    private val treeDoc = DocumentsContract.getTreeDocumentId(tree)
+    private val dir = DocumentsContract.buildDocumentUriUsingTree(tree, treeDoc)
+
+    override val name: String = runCatching {
+        resolver.query(dir, arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME), null, null, null)?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
+    }.getOrNull() ?: "the folder"
+
+    private class Child(val id: String, val name: String, val modified: Long)
+
+    private fun children(): List<Child> {
+        val uri = DocumentsContract.buildChildDocumentsUriUsingTree(tree, treeDoc)
+        val columns = arrayOf(
+            DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+            DocumentsContract.Document.COLUMN_LAST_MODIFIED,
+        )
+        val out = mutableListOf<Child>()
+        resolver.query(uri, columns, null, null, null)?.use { c ->
+            while (c.moveToNext()) out += Child(c.getString(0), c.getString(1) ?: "", if (c.isNull(2)) 0L else c.getLong(2))
+        }
+        return out
+    }
+
+    private fun find(name: String) = children().firstOrNull { it.name == name }
+
+    override suspend fun list() = withContext(Dispatchers.IO) {
+        children().filter { it.name.endsWith(".pmet", ignoreCase = true) }.map { ProjectFile(it.name, it.modified) }.sortedByDescending { it.modified }
+    }
+
+    override suspend fun read(name: String) = withContext(Dispatchers.IO) {
+        runCatching {
+            val c = find(name) ?: return@runCatching null
+            resolver.openInputStream(DocumentsContract.buildDocumentUriUsingTree(tree, c.id))?.use { it.readBytes() }
+        }.getOrNull()
+    }
+
+    override suspend fun modified(name: String) = withContext(Dispatchers.IO) { runCatching { find(name)?.modified }.getOrNull() }
+
+    override suspend fun write(name: String, bytes: ByteArray) = withContext(Dispatchers.IO) {
+        runCatching {
+            val existing = find(name)
+            val uri = if (existing != null) DocumentsContract.buildDocumentUriUsingTree(tree, existing.id)
+            else DocumentsContract.createDocument(resolver, dir, "application/octet-stream", name) ?: return@runCatching null
+            resolver.openOutputStream(uri, "wt")?.use { it.write(bytes) } ?: return@runCatching null
+            find(name)?.modified ?: System.currentTimeMillis()
+        }.getOrNull()
+    }
 }

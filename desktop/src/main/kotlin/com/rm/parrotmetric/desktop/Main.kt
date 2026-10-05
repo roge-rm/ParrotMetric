@@ -18,6 +18,8 @@ import com.rm.parrotmetric.Core
 import com.rm.parrotmetric.app.AppController
 import com.rm.parrotmetric.app.FileSink
 import com.rm.parrotmetric.app.PlatformFiles
+import com.rm.parrotmetric.app.ProjectFile
+import com.rm.parrotmetric.app.ProjectFolder
 import com.rm.parrotmetric.ui.LaunchSplash
 import com.rm.parrotmetric.ui.ModelScreen
 import androidx.compose.foundation.layout.Box
@@ -102,6 +104,40 @@ private class DesktopFiles(private val data: File) : PlatformFiles {
     override suspend fun writeAutosave(text: String) {
         LocalFile(autosave).write(text.encodeToByteArray())
     }
+
+    override val hasFolders get() = true
+
+    override fun chooseFolder(then: (String?) -> Unit) {
+        val chooser = javax.swing.JFileChooser(folder ?: System.getProperty("user.home")).apply {
+            dialogTitle = "Projects folder"
+            fileSelectionMode = javax.swing.JFileChooser.DIRECTORIES_ONLY
+        }
+        val picked = if (chooser.showDialog(null, "Use this folder") == javax.swing.JFileChooser.APPROVE_OPTION) chooser.selectedFile else null
+        then(picked?.absolutePath)
+    }
+
+    override fun folder(token: String): ProjectFolder? = File(token).takeIf { it.isDirectory }?.let(::LocalFolder)
+
+    override val deviceName: String
+        get() = runCatching { java.net.InetAddress.getLocalHost().hostName }.getOrNull()?.substringBefore('.')?.ifEmpty { null } ?: "this computer"
+}
+
+/** A projects folder on disk, as a sync client (Nextcloud, Syncthing, Dropbox) keeps. */
+private class LocalFolder(private val dir: File) : ProjectFolder {
+    override val name: String get() = dir.name
+
+    override suspend fun list() = (dir.listFiles { f -> f.isFile && f.name.endsWith(".pmet", ignoreCase = true) } ?: emptyArray())
+        .map { ProjectFile(it.name, it.lastModified()) }
+        .sortedByDescending { it.modified }
+
+    override suspend fun read(name: String) = runCatching { File(dir, name).readBytes() }.getOrNull()
+
+    override suspend fun modified(name: String) = File(dir, name).takeIf { it.isFile }?.lastModified()
+
+    override suspend fun write(name: String, bytes: ByteArray): Long? {
+        val file = File(dir, name)
+        return if (LocalFile(file).write(bytes)) file.lastModified() else null
+    }
 }
 
 fun main(args: Array<String>) {
@@ -132,6 +168,14 @@ fun main(args: Array<String>) {
             // A file named on the command line, as when opened from a file manager.
             LaunchedEffect(Unit) {
                 args.firstOrNull()?.let { File(it) }?.takeIf { it.isFile }?.let { app.opened(it.name, runCatching { it.readBytes() }.getOrNull()) }
+            }
+            // Coming back to the window picks up changes another device synced into the projects folder.
+            androidx.compose.runtime.DisposableEffect(window) {
+                val listener = object : java.awt.event.WindowAdapter() {
+                    override fun windowGainedFocus(e: java.awt.event.WindowEvent?) = app.resumed()
+                }
+                this@Window.window.addWindowFocusListener(listener)
+                onDispose { this@Window.window.removeWindowFocusListener(listener) }
             }
             Box(Modifier.fillMaxSize()) {
                 ModelScreen(
