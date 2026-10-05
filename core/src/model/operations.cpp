@@ -1839,6 +1839,11 @@ NamedShape lipTool(int id, const NamedShape& body, const std::string& face, doub
             ShapeFix_Face fix(make.Face());
             fix.Perform();
             TopoDS_Face opening = fix.Face();
+            // Only real openings: just behind the face there's no material, as there is under a boss on a floor.
+            GProp_GProps props;
+            BRepGProp::SurfaceProperties(opening, props);
+            BRepClass3d_SolidClassifier behind(body.shape, props.CentreOfMass().Translated(gp_Vec(n) * -0.01), 1e-6);
+            if (behind.State() == TopAbs_IN) continue;
             BRepAlgoAPI_Cut ring(grown(opening, outside), grown(opening, inside));
             if (!ring.IsDone()) throw std::runtime_error("The lip doesn't fit the opening");
             b.Add(all, BRepPrimAPI_MakePrism(ring.Shape(), gp_Vec(n) * height).Shape());

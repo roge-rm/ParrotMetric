@@ -301,8 +301,7 @@ private fun LipSettings(editor: DesignEditor, d: DesignEditor.LipDraft) {
     Field(editor, d, "width", "Width", d.width, "mm", allowNegative = false) { d.width = it; editor.draftChanged() }
     Field(editor, d, "height", "Height", d.height, "mm", allowNegative = false) { d.height = it; editor.draftChanged() }
     // The body the groove goes in, usually the lid sitting on the rim.
-    val base = d.face?.let { editor.bodyWithFace(it) }
-    val others = editor.allBodies().map { it.label }.filter { it != base }
+    val others = editor.allBodies().map { it.label }.filter { it != d.base }
     if (others.isEmpty()) return
     Text("Groove in", fontSize = 13.sp, color = Palette.muted)
     androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {

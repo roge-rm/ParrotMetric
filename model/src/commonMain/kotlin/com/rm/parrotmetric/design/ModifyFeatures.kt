@@ -176,7 +176,7 @@ object HolePresets {
 }
 
 /**
- * Holes at a sketch's lone points, going in against the sketch's normal.
+ * Holes at a sketch's hole points (see Sketch.holePoints), going in against the sketch's normal.
  * [depth] 0 goes right through. The top's size is for counterbores and
  * countersinks; [topDepth] only for counterbores.
  */

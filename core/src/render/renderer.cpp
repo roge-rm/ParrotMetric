@@ -686,9 +686,9 @@ void Renderer::drawScene(bool ids, const float* vp, const float* normal) {
     glUniform4fv(glGetUniformLocation(edgeProgram, "clip"), 1, clip_);
     glUniform1i(glGetUniformLocation(edgeProgram, "clipping"), clipping_ ? 1 : 0);
     glUniform2f(glGetUniformLocation(edgeProgram, "viewport"), float(width_), float(height_));
-    // Edges are easier to hit than to see: the id pass draws them a finger wide.
-    glUniform1f(glGetUniformLocation(edgeProgram, "width"), (ids ? 14.0f : 1.6f) * density_);
-    glUniform1f(glGetUniformLocation(edgeProgram, "selectedWidth"), (ids ? 14.0f : 3.5f) * density_);
+    // The id pass draws edges a little wider than they show; pickNear reaches the rest of the way.
+    glUniform1f(glGetUniformLocation(edgeProgram, "width"), (ids ? 4.0f : 1.6f) * density_);
+    glUniform1f(glGetUniformLocation(edgeProgram, "selectedWidth"), (ids ? 4.0f : 3.5f) * density_);
     glUniform1i(glGetUniformLocation(edgeProgram, "selected"), 0);
     for (uint32_t i = 0; i < gpu_.size(); ++i) {
         const Gpu& g = gpu_[i];
@@ -822,7 +822,9 @@ Pick Renderer::pickNear(float x, float y, float reach, const std::function<bool(
             if (d2 < bestD[slot]) bestD[slot] = d2, best[slot] = p;
         }
     if (best[0].kind != Pick::None) return best[0];
-    if (best[1].kind != Pick::None) return best[1];
+    // Over a face, an edge has to be closer to win, so a narrow face like a wall's top can still be picked.
+    bool onFace = centre.kind != Pick::None && centre.kind != Pick::Edge && centre.kind != Pick::Vertex;
+    if (best[1].kind != Pick::None && (!onFace || bestD[1] * 4 <= reach2)) return best[1];
     if (centre.kind != Pick::None) return centre;
     return best[2];
 }

@@ -276,6 +276,15 @@ class Rebuilder(private val kernel: Kernel) {
             val base = bodyWithFace(rim, bodies) ?: throw KernelException("The rim isn't there any more")
             val lid = f.lid?.let { l -> bodies.firstOrNull { it.label == l } ?: throw KernelException("The lid isn't there any more") }
             if (lid == base) throw KernelException("The groove goes in another body")
+            // A groove as deep as the lid is thick would cut it in two.
+            if (lid != null) kernel.facePlane(base.handle, rim)?.let { p ->
+                val b = kernel.bounds(lid.handle)
+                val n = Vec3(p[3], p[4], p[5])
+                var far = Double.NEGATIVE_INFINITY
+                for (i in 0..7) far = maxOf(far, Vec3(b[if (i and 1 == 0) 0 else 3], b[if (i and 2 == 0) 1 else 4], b[if (i and 4 == 0) 2 else 5]).dot(n))
+                if (far - Vec3(p[0], p[1], p[2]).dot(n) <= f.height + f.gap + 1e-6)
+                    throw KernelException("The groove would go right through the lid. Make the lip lower or the lid thicker")
+            }
             // Both from the rim as it is before the lip goes on.
             val lip = kernel.lipTool(f.id, base.handle, rim, 0.0, f.width, f.height, "l")
             val groove = try {
@@ -370,8 +379,8 @@ class Rebuilder(private val kernel: Kernel) {
             val sketch = sketchOf(f.sketchId, all)
             val plane = planes[f.sketchId] ?: throw KernelException("Its sketch couldn't be built")
             val s = sketch.sketch
-            // The sketch's lone points, not the ends of its curves.
-            val at = s.points.filter { p -> p !== s.origin && s.curves.none { p in it.points() } }.map { s.x(it) to s.y(it) }
+            // Lone points and the corners and centres of construction curves, not the ends of drawn ones.
+            val at = s.holePoints().map { s.x(it) to s.y(it) }
             if (at.isEmpty()) throw KernelException("Its sketch has no points for holes")
             val tool = kernel.holeTool(f.id, plane, at, f.diameter, f.depth, f.kind.ordinal, f.topDiameter, f.topDepth)
             applyTool(f, tool, Operation.Cut, bodies, planes, made)

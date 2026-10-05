@@ -210,8 +210,6 @@ class DesignEditor(
     /** Every body there is now, labels and handles, hidden ones too. */
     fun allBodies(): List<com.rm.parrotmetric.design.BodyState> = built?.bodies ?: emptyList()
 
-    /** The body with this face, if one has it. */
-    fun bodyWithFace(face: String): String? = allBodies().firstOrNull { face in kernel.faceNames(it.handle) }?.label
 
     /** The bodies that aren't hidden, for export. */
     fun bodies(): List<Long> = shownBodies.map { it.handle }
@@ -824,7 +822,11 @@ class DesignEditor(
     /** A lip's rim from the selection: the first flat face. */
     private fun lipPick(d: LipDraft) {
         d.face = viewport.selectedFaces().map { it.second }.firstOrNull { it.isNotEmpty() && faceKind(it) == 4.0 } ?: return
+        d.base = baseOf(d.face)
     }
+
+    /** The body with this face, shown or not. */
+    private fun baseOf(face: String?): String? = face?.let { f -> allBodies().firstOrNull { f in kernel.faceNames(it.handle) }?.label }
 
     fun startLoft() {
         val d = LoftDraft(null)
@@ -867,12 +869,27 @@ class DesignEditor(
         d.regions = picked.filter { it.first == picked[0].first }.mapNotNull { (_, r) ->
             regions.getOrNull(r)?.let { RegionRef(it.curveIds, it.insideU, it.insideV) }
         }
+        joinOnFace(d)
+    }
+
+    /** A new step from a sketch on a body's face joins that body unless told otherwise; decided once, on its first areas. */
+    private fun joinOnFace(d: AreaDraft) {
+        if (!d.fresh) return
+        d.fresh = false
+        if ((design.feature(d.sketchId ?: return) as? SketchFeature)?.plane is PlaneRef.OnFace) d.operation = Operation.Join
     }
 
     private fun openArea(d: AreaDraft) {
         panel = d
         selectionChanged()
-        if (d.regions.isEmpty()) rebuild()
+        // Nothing picked: the newest sketch's area, when it has just the one.
+        if (d.regions.isEmpty()) design.active.lastOrNull { it is SketchFeature }?.let { f ->
+            val only = finder.find((f as SketchFeature).sketch.profileCurves()).singleOrNull() ?: return@let
+            d.sketchId = f.id
+            d.regions = listOf(RegionRef(only.curveIds, only.insideU, only.insideV))
+            joinOnFace(d)
+        }
+        rebuild()
     }
 
     /** Opens Fillet or Chamfer with the selected edges. */
@@ -1136,7 +1153,7 @@ class DesignEditor(
     /** Sketches with lone points, for holes, newest first. */
     fun holeSketches(): List<SketchFeature> = design.active.filterIsInstance<SketchFeature>().filter { f ->
         val s = f.sketch
-        s.points.any { p -> p !== s.origin && s.curves.none { p in it.points() } }
+        s.holePoints().isNotEmpty()
     }.reversed()
 
     /** Opens a feature's panel to change it. */
@@ -1174,7 +1191,7 @@ class DesignEditor(
             is com.rm.parrotmetric.design.PipeFeature -> PipeDraft(f)
             is com.rm.parrotmetric.design.CoilFeature -> CoilDraft(f).also { it.planes = planeChoices() }
             is com.rm.parrotmetric.design.ThreadFeature -> ThreadDraft(f)
-            is com.rm.parrotmetric.design.LipFeature -> LipDraft(f)
+            is com.rm.parrotmetric.design.LipFeature -> LipDraft(f).also { it.base = baseOf(f.face) }
             is com.rm.parrotmetric.design.LoftFeature -> LoftDraft(f)
             is com.rm.parrotmetric.design.CanvasFeature -> CanvasDraft(f, f.image).also { it.planes = planeChoices() }
             else -> return f
@@ -1376,6 +1393,8 @@ class DesignEditor(
         var sketchId by mutableStateOf<Int?>(null)
         var regions by mutableStateOf<List<RegionRef>>(emptyList())
         var operation by mutableStateOf(Operation.NewBody)
+        /** New, with its operation not yet chosen for it. */
+        var fresh = editing == null
         override fun missing() = "Tap an area of a sketch"
 
         init { only = editing?.only ?: emptyList() }
@@ -1520,6 +1539,8 @@ class DesignEditor(
         var height by mutableStateOf(editing?.height ?: 2.0)
         var gap by mutableStateOf(editing?.gap ?: 0.2)
         var lid by mutableStateOf(editing?.lid)
+        /** The body the rim is on, so the groove isn't offered in it. */
+        var base by mutableStateOf<String?>(null)
         override fun feature(): Feature? = face?.let { com.rm.parrotmetric.design.LipFeature(id, name, it, width, height, gap, lid) }
         override fun missing() = "Tap the top of a wall, round the opening"
     }

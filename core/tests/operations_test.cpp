@@ -173,6 +173,17 @@ TEST_CASE("a lip stands round the opening of a shell, and its groove is wider") 
     NamedShape groove = lipTool(3, cup, rim, -0.2, 1.2, 2.2, "g");
     CHECK(volume(groove) == Catch::Approx((36 * 16 + 104 * 1.2 + pi * 1.44 - 35.6 * 15.6) * 2.2).epsilon(1e-3));
     CHECK_THROWS_WITH(lipTool(3, box, "F1.start", 0, 1, 2, "l"), Catch::Matchers::Equals("Pick the top of a wall, round an opening"));
+    // A floor with a post standing on it has no opening.
+    NamedShape post = primitive(4, gp_Ax3(gp_Pnt(0, 0, 2), gp_Dir(0, 0, 1)), Primitive::Cylinder, 20, 10, 6, 5, 0);
+    NamedShape withPost = combine(5, cup, post, Combine::Join);
+    std::string floor;
+    for (const auto& name : withPost.faceNames()) {
+        try {
+            if (std::abs(facePlane(withPost, name).Location().Z() - 2) < 1e-6) floor = name;
+        } catch (const std::exception&) {}
+    }
+    REQUIRE(!floor.empty());
+    CHECK_THROWS_WITH(lipTool(6, withPost, floor, 0, 1, 2, "l"), Catch::Matchers::Equals("Pick the top of a wall, round an opening"));
 }
 
 TEST_CASE("a shell keeps the inside corner of an L sharp") {

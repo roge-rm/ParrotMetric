@@ -175,6 +175,17 @@ class SketchOpsTest {
     }
 
     @Test
+    fun holesGoAtLonePointsAndConstructionCornersButNotDrawnOnes() {
+        val s = Sketch()
+        val a = s.addPoint(0.0, 0.0); val b = s.addPoint(20.0, 0.0); val c = s.addPoint(20.0, 10.0)
+        s.addLine(a, b, construction = true); s.addLine(b, c, construction = true)
+        s.addCircle(s.addPoint(50.0, 50.0), 3.0)
+        val lone = s.addPoint(30.0, 30.0)
+        s.addLine(s.addPoint(60.0, 0.0), s.addPoint(70.0, 0.0))
+        assertEquals(setOf(a, b, c, lone), s.holePoints().toSet())
+    }
+
+    @Test
     fun aWholeOutlineIsFoundFromOneOfItsPieces() {
         val s = Sketch()
         val a = s.addPoint(0.0, 0.0); val b = s.addPoint(20.0, 0.0); val c = s.addPoint(20.0, 10.0); val d = s.addPoint(0.0, 10.0)

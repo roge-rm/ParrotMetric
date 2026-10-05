@@ -102,7 +102,8 @@ private class FakeKernel : Kernel {
         return maxOf(0.0, minOf(x.to, y.to) - maxOf(x.from, y.from))
     }
 
-    override fun facePlane(body: Long, face: String) = doubleArrayOf(0.0, 0.0, 10.0, 0.0, 0.0, 1.0)
+    var plane = doubleArrayOf(0.0, 0.0, 10.0, 0.0, 0.0, 1.0)
+    override fun facePlane(body: Long, face: String) = plane
     override fun faceNames(body: Long) = bodies.getValue(body).faces
     override fun import(id: Int, data: ByteArray, format: Int) = make(Box(0.0, 1.0, listOf("F$id.i0")))
     override fun shell(id: Int, body: Long, open: List<String>, thickness: Double) = make(bodies.getValue(body))
@@ -260,6 +261,8 @@ class RebuildTest {
     @Test
     fun aLipGoesOnTheRimAndItsGrooveInTheLid() {
         val k = FakeKernel()
+        // The rim 7 below the lid's top: room for a 2.2 deep groove.
+        k.plane = doubleArrayOf(0.0, 0.0, 7.0, 0.0, 0.0, 1.0)
         val d = Design()
         val base = extrude(d, sketchAt(d, 0.0, 10.0), Operation.NewBody)
         extrude(d, sketchAt(d, 10.0, 2.0), Operation.NewBody)
@@ -274,6 +277,9 @@ class RebuildTest {
         // The groove can't go in the body the lip is on.
         d.replace(LipFeature(5, "Lip", "F${base.id}.end", 1.0, 2.0, 0.2, "Body 1"))
         assertEquals("The groove goes in another body", Rebuilder(k).rebuild(d.active).errors.values.single())
+        // Too deep for the lid.
+        d.replace(LipFeature(5, "Lip", "F${base.id}.end", 1.0, 7.0, 0.2, "Body 2"))
+        assertTrue(Rebuilder(k).rebuild(d.active).errors.values.single().startsWith("The groove would go right through"))
     }
 
     @Test
