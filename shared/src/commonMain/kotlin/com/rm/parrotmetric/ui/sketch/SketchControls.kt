@@ -225,7 +225,7 @@ private fun ActionBar(editor: SketchEditor) {
 /** An icon with its name in a tooltip on hover or a long press. */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-private fun Named(label: String, content: @Composable () -> Unit) {
+internal fun Named(label: String, content: @Composable () -> Unit) {
     androidx.compose.material3.TooltipBox(
         positionProvider = androidx.compose.material3.TooltipDefaults.rememberTooltipPositionProvider(androidx.compose.material3.TooltipAnchorPosition.Above),
         tooltip = { PlainTooltip { Text(label) } },

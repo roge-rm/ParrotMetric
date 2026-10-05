@@ -566,7 +566,12 @@ private fun SelectionChip(state: ModelState, actions: ModelActions) {
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
+/**
+ * The history: each step as a chip with its name when they all fit across;
+ * when they don't, just their icons, wrapping onto up to three rows, the
+ * name in a tooltip and at the top of the menu; past that, one row that scrolls.
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun HistoryBar(design: DesignEditor, actions: ModelActions) {
     design.version
@@ -574,72 +579,101 @@ private fun HistoryBar(design: DesignEditor, actions: ModelActions) {
     val history = design.history()
     val marker = design.design.marker
     val scroll = rememberScrollState()
-    // New steps come in at the end, so keep the end in view as the history grows.
-    LaunchedEffect(history.size) { scroll.animateScrollTo(scroll.maxValue) }
-    Row(
-        Modifier.fillMaxWidth().sideways(scroll).padding(horizontal = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        history.forEachIndexed { index, entry ->
-            if (index == marker) Marker(design, history.size)
-            var menu by remember(entry.id) { mutableStateOf(false) }
-            val group = when (entry.kind) {
-                HistoryEntry.Kind.Sketch -> ToolGroup.Sketch
-                HistoryEntry.Kind.Modify -> ToolGroup.Modify
-                HistoryEntry.Kind.Construct -> ToolGroup.Construct
-                else -> ToolGroup.Create
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val room = maxWidth.value - 8
+        val named = history.sumOf { 48.0 + it.name.length * 7.5 } + 24
+        val icon = 42.0
+        val perRow = ((room - 24) / icon).toInt().coerceAtLeast(1)
+        val showNames = named <= room
+        val wrap = !showNames && history.size <= perRow * 3
+        // New steps come in at the end, so keep the end in view as the history grows.
+        LaunchedEffect(history.size, wrap) { if (!wrap) scroll.animateScrollTo(scroll.maxValue) }
+        val chips: @Composable () -> Unit = {
+            history.forEachIndexed { index, entry ->
+                if (index == marker) Marker(design, history.size)
+                HistoryChip(design, actions, entry, index, showNames)
             }
-            Box {
-                Row(
-                    Modifier.alpha(if (entry.active && !entry.off) 1f else 0.4f)
-                        .clip(RoundedCornerShape(18.dp))
-                        .background(Palette.surface)
-                        .then(
-                            when {
-                                entry.error != null -> Modifier.border(1.5.dp, Palette.orange, RoundedCornerShape(18.dp))
-                                entry.warning != null -> Modifier.border(1.5.dp, Palette.construct, RoundedCornerShape(18.dp))
-                                else -> Modifier
-                            },
-                        )
-                        // A right-click opens the menu too, as a long press does.
-                        .pointerInput(Unit) {
-                            awaitPointerEventScope {
-                                while (true) {
-                                    val e = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
-                                    if (e.type == androidx.compose.ui.input.pointer.PointerEventType.Press && e.buttons.isSecondaryPressed) {
-                                        e.changes.forEach { it.consume() }
-                                        menu = true
-                                    }
-                                }
+            if (marker >= history.size && history.isNotEmpty()) Marker(design, history.size)
+        }
+        if (wrap) androidx.compose.foundation.layout.FlowRow(
+            Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) { chips() }
+        else Row(
+            Modifier.fillMaxWidth().sideways(scroll).padding(horizontal = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) { chips() }
+    }
+}
+
+/** One step: its icon, and its name when [showName]; a tap opens it, a long press or right-click its menu. */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun HistoryChip(design: DesignEditor, actions: ModelActions, entry: HistoryEntry, index: Int, showName: Boolean) {
+    var menu by remember(entry.id) { mutableStateOf(false) }
+    val group = when (entry.kind) {
+        HistoryEntry.Kind.Sketch -> ToolGroup.Sketch
+        HistoryEntry.Kind.Modify -> ToolGroup.Modify
+        HistoryEntry.Kind.Construct -> ToolGroup.Construct
+        else -> ToolGroup.Create
+    }
+    val chip: @Composable () -> Unit = {
+        Row(
+            Modifier.alpha(if (entry.active && !entry.off) 1f else 0.4f)
+                .clip(RoundedCornerShape(18.dp))
+                .background(Palette.surface)
+                .then(
+                    when {
+                        entry.error != null -> Modifier.border(1.5.dp, Palette.orange, RoundedCornerShape(18.dp))
+                        entry.warning != null -> Modifier.border(1.5.dp, Palette.construct, RoundedCornerShape(18.dp))
+                        else -> Modifier
+                    },
+                )
+                // A right-click opens the menu too, as a long press does.
+                .pointerInput(Unit) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val e = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                            if (e.type == androidx.compose.ui.input.pointer.PointerEventType.Press && e.buttons.isSecondaryPressed) {
+                                e.changes.forEach { it.consume() }
+                                menu = true
                             }
                         }
-                        .combinedClickable(
-                            onClick = { (entry.error ?: entry.warning)?.let { design.message = it }; actions.openHistory(entry.id) },
-                            onLongClick = { menu = true },
-                        )
-                        .height(36.dp).padding(start = 9.dp, end = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(entry.tool?.let { Tools.byId(it) }?.icon ?: group.icon, null, Modifier.size(15.dp), tint = if (entry.error != null) Palette.orange else group.colour)
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        entry.name, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Palette.text, maxLines = 1,
-                        textDecoration = if (entry.off) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
-                    )
+                    }
                 }
-                DropdownMenu(menu, onDismissRequest = { menu = false }, containerColor = Palette.raised) {
-                    DropdownMenuItem({ Text("Edit") }, onClick = { menu = false; actions.openHistory(entry.id) })
-                    if (entry.kind == HistoryEntry.Kind.Sketch) DropdownMenuItem(
-                        { Text("Move to picked face") }, onClick = { menu = false; design.moveSketch(entry.id) }, enabled = design.hasPickedPlane(),
-                    )
-                    DropdownMenuItem({ Text(if (entry.active) "Roll back to here" else "Roll forward to here") }, onClick = { menu = false; design.rollTo(index) })
-                    DropdownMenuItem({ Text(if (entry.off) "Turn on" else "Turn off") }, onClick = { menu = false; design.setOff(entry.id, !entry.off) })
-                    DropdownMenuItem({ Text("Delete") }, onClick = { menu = false; design.delete(entry.id) })
-                }
+                .combinedClickable(
+                    onClick = { (entry.error ?: entry.warning)?.let { design.message = it }; actions.openHistory(entry.id) },
+                    onLongClick = { menu = true },
+                )
+                .height(36.dp)
+                .then(if (showName) Modifier.padding(start = 9.dp, end = 12.dp) else Modifier.width(36.dp)),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = if (showName) Arrangement.Start else Arrangement.Center,
+        ) {
+            Icon(entry.tool?.let { Tools.byId(it) }?.icon ?: group.icon, entry.name, Modifier.size(if (showName) 15.dp else 17.dp), tint = if (entry.error != null) Palette.orange else group.colour)
+            if (showName) {
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    entry.name, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Palette.text, maxLines = 1,
+                    textDecoration = if (entry.off) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
+                )
             }
         }
-        if (marker >= history.size && history.isNotEmpty()) Marker(design, history.size)
+    }
+    Box {
+        if (showName) chip() else com.rm.parrotmetric.ui.sketch.Named(entry.name) { chip() }
+        DropdownMenu(menu, onDismissRequest = { menu = false }, containerColor = Palette.raised) {
+            if (!showName) Text(entry.name, Modifier.padding(horizontal = 16.dp, vertical = 6.dp), fontSize = 13.sp, color = Palette.muted, fontWeight = FontWeight.SemiBold)
+            DropdownMenuItem({ Text("Edit") }, onClick = { menu = false; actions.openHistory(entry.id) })
+            if (entry.kind == HistoryEntry.Kind.Sketch) DropdownMenuItem(
+                { Text("Move to picked face") }, onClick = { menu = false; design.moveSketch(entry.id) }, enabled = design.hasPickedPlane(),
+            )
+            DropdownMenuItem({ Text(if (entry.active) "Roll back to here" else "Roll forward to here") }, onClick = { menu = false; design.rollTo(index) })
+            DropdownMenuItem({ Text(if (entry.off) "Turn on" else "Turn off") }, onClick = { menu = false; design.setOff(entry.id, !entry.off) })
+            DropdownMenuItem({ Text("Delete") }, onClick = { menu = false; design.delete(entry.id) })
+        }
     }
 }
 
