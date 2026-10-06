@@ -879,4 +879,26 @@ object WebCore : NativeCore {
         args.double(clearance)
         return call(100, args).long()
     }
+
+    override fun threadMarks(bodies: LongArray, faces: Array<String>, pitches: DoubleArray) {
+        val args = Args()
+        args.longs(bodies)
+        args.strings(faces)
+        args.doubles(pitches)
+        call(101, args)
+    }
+
+    override fun fastener(id: Int, seat: DoubleArray, kind: Int, d: Double, length: Double, head: Double, headHeight: Double, socket: Double, angle: Double): Long {
+        val args = Args()
+        args.int(id)
+        args.doubles(seat)
+        args.int(kind)
+        args.double(d)
+        args.double(length)
+        args.double(head)
+        args.double(headHeight)
+        args.double(socket)
+        args.double(angle)
+        return call(102, args).long()
+    }
 }

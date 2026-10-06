@@ -141,6 +141,10 @@ private class FakeKernel : Kernel {
         calls += "gear $id"
         return make(Box(u - module * (teeth + 2) / 2, u + module * (teeth + 2) / 2, listOf("F$id.g0")))
     }
+    override fun fastener(id: Int, seat: SketchPlane, kind: Int, d: Double, length: Double, head: Double, headHeight: Double, socket: Double, angle: Double): Long {
+        calls += "fastener $id $kind ${seat.origin} ${seat.normal} $d"
+        return make(Box(seat.origin.z - length, seat.origin.z + headHeight, listOf("F$id.thread", "F$id.f0")))
+    }
     override fun coil(id: Int, plane: SketchPlane, u: Double, v: Double, diameter: Double, pitch: Double, turns: Double, section: Double, square: Boolean): Long {
         calls += "coil $id"
         return make(Box(u - diameter / 2, u + diameter / 2, listOf("F$id.c0")))
@@ -616,6 +620,27 @@ class RebuildTest {
         val flat = PlaneFeature(d.newId(), "Flat", PlaneFeature.Kind.ThreePoints, PlaneRef.Fixed(SketchPlane.Top), 0.0, 0.0, false, null, refs).also { d.add(it) }
         val built = Rebuilder(k).rebuild(d.active)
         assertEquals("The points are in a line", built.errors[flat.id])
+    }
+
+    @Test
+    fun threadsCanBeOnlyDrawnAndFastenersCarryTheirs() {
+        val k = FakeKernel()
+        val d = Design()
+        val box = extrude(d, sketchAt(d, 0.0, 10.0), Operation.NewBody)
+        val drawn = ThreadFeature(d.newId(), "Thread", "F${box.id}.end", 1.5, symbol = true).also { d.add(it) }
+        val bolt = FastenerFeature(d.newId(), "Fastener", FastenerKind.SocketCap, "M6", 20.0, null, plane = PlaneRef.Fixed(SketchPlane.Top), u = 30.0)
+        d.add(bolt)
+        val nut = FastenerFeature(d.newId(), "Nut", FastenerKind.Nut, "1/4-20", 0.0, null, modelled = true)
+        d.add(nut)
+        val built = Rebuilder(k).rebuild(d.active)
+        assertTrue(built.errors.isEmpty(), built.errors.toString())
+        assertTrue(k.calls.none { it.startsWith("thread ${drawn.id}") })
+        assertEquals(listOf(ThreadMark("F${box.id}.end", 1.5), ThreadMark("F${bolt.id}.thread", 1.0)), built.threads)
+        assertTrue(k.calls.any { it.startsWith("fastener ${bolt.id} 0 Vec3(x=30.0, y=0.0, z=0.0)") })
+        // A modelled nut's hole is the thread's smaller size, and the thread is cut.
+        val minor = 0.25 * 25.4 - 1.0825 * 25.4 / 20
+        assertTrue(k.calls.any { it.startsWith("fastener ${nut.id} 3") && it.endsWith(" $minor") }, k.calls.toString())
+        assertTrue("thread ${nut.id} F${nut.id}.thread ${25.4 / 20}" in k.calls)
     }
 
     @Test

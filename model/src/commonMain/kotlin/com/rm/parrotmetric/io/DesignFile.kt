@@ -227,7 +227,11 @@ object DesignFile {
                 "type" to "coil", "plane" to plane(f.plane), "u" to f.u, "v" to f.v, "diameter" to f.diameter, "pitch" to f.pitch,
                 "turns" to f.turns, "section" to f.section, "square" to f.square, "operation" to f.operation.name,
             )
-            is ThreadFeature -> mapOf("type" to "thread", "face" to f.face, "pitch" to f.pitch, "clearance" to f.clearance)
+            is ThreadFeature -> mapOf("type" to "thread", "face" to f.face, "pitch" to f.pitch, "clearance" to f.clearance, "symbol" to f.symbol)
+            is com.rm.parrotmetric.design.FastenerFeature -> mapOf(
+                "type" to "fastener", "kind" to f.kind.name, "size" to f.size, "length" to f.length, "hole" to f.hole, "otherEnd" to f.otherEnd,
+                "plane" to plane(f.plane), "u" to f.u, "v" to f.v, "modelled" to f.modelled, "clearance" to f.clearance, "operation" to f.operation.name,
+            )
             is com.rm.parrotmetric.design.SnapFitFeature -> f.sizes.let { z ->
                 mapOf(
                     "type" to "snapFit", "sketch" to f.sketchId, "length" to z.length, "width" to z.width, "thickness" to z.thickness,
@@ -342,7 +346,11 @@ object DesignFile {
                 id, name, plane(o.obj("plane")), o.num("u"), o.num("v"), o.num("diameter"), o.num("pitch"), o.num("turns"), o.num("section"),
                 o.bool("square"), Operation.valueOf(o.str("operation")),
             )
-            "thread" -> ThreadFeature(id, name, o.str("face"), o.num("pitch"), o.numOr("clearance", 0.0))
+            "thread" -> ThreadFeature(id, name, o.str("face"), o.num("pitch"), o.numOr("clearance", 0.0), o.bool("symbol"))
+            "fastener" -> com.rm.parrotmetric.design.FastenerFeature(
+                id, name, com.rm.parrotmetric.design.FastenerKind.valueOf(o.str("kind")), o.str("size"), o.num("length"), (o["hole"] as? Json.Str)?.value,
+                o.bool("otherEnd"), plane(o.obj("plane")), o.num("u"), o.num("v"), o.bool("modelled"), o.num("clearance"), Operation.valueOf(o.str("operation")),
+            )
             "snapFit" -> com.rm.parrotmetric.design.SnapFitFeature(
                 id, name, o.int("sketch"),
                 com.rm.parrotmetric.design.SnapFitSizes(o.num("length"), o.num("width"), o.num("thickness"), o.num("overhang"), o.num("catchHeight"), o.num("gap")),

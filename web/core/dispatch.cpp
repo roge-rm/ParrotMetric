@@ -105,6 +105,8 @@ JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_sculptedBody(JNIEnv*, jobj
 JNIEXPORT jbyteArray JNICALL Java_com_rm_parrotmetric_Core_sculptPack(JNIEnv*, jobject);
 JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_sculptLook(JNIEnv*, jobject, jint, jboolean);
 JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_gear(JNIEnv*, jobject, jint, jdoubleArray, jdouble, jdouble, jdouble, jdouble, jint, jdouble, jdouble, jdouble, jboolean, jdouble, jdouble);
+JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_threadMarks(JNIEnv*, jobject, jlongArray, jobjectArray, jdoubleArray);
+JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_fastener(JNIEnv*, jobject, jint, jdoubleArray, jint, jdouble, jdouble, jdouble, jdouble, jdouble, jdouble);
 }
 
 namespace pmweb {
@@ -959,6 +961,27 @@ void dispatch(int call, Reader& in, Writer& out, JNIEnv* env) {
             auto a11 = in.f64();
             auto a12 = in.f64();
             auto r = Java_com_rm_parrotmetric_Core_gear(env, nullptr, a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12);
+            if (!failed()) out.put(r);
+            break;
+        }
+        case 101: {  // threadMarks
+            auto a0 = in.longs();
+            auto a1 = in.strings();
+            auto a2 = in.doubles();
+            Java_com_rm_parrotmetric_Core_threadMarks(env, nullptr, a0, a1, a2);
+            break;
+        }
+        case 102: {  // fastener
+            auto a0 = in.i32();
+            auto a1 = in.doubles();
+            auto a2 = in.i32();
+            auto a3 = in.f64();
+            auto a4 = in.f64();
+            auto a5 = in.f64();
+            auto a6 = in.f64();
+            auto a7 = in.f64();
+            auto a8 = in.f64();
+            auto r = Java_com_rm_parrotmetric_Core_fastener(env, nullptr, a0, a1, a2, a3, a4, a5, a6, a7, a8);
             if (!failed()) out.put(r);
             break;
         }

@@ -64,7 +64,8 @@ The box has rounded corners, a hollow, vents and a lid on a hinge joint, with it
 
 - Fillet (one radius, from one radius to another, or a set width across) and chamfer (equal, two distances, or a distance and an angle)
 - Shell, draft, press pull and delete face
-- Holes (plain, counterbore and countersink) and modelled ISO metric threads
+- Holes (plain, counterbore and countersink) and threads, metric or UNC, modelled or only drawn
+- Standard screws, nuts and washers that go in a hole, metric or inch
 - Rib and web, grown from an open line until they meet the body
 - Emboss, to raise or sink sketch areas into a face, flat or curved, so text and shapes follow a round part
 - Mirror and pattern (in a row, in a grid, round an axis or along a path), of bodies or of the steps that made them

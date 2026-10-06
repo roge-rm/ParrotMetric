@@ -115,6 +115,7 @@ fun FeaturePanel(editor: DesignEditor, maxHeight: androidx.compose.ui.unit.Dp = 
                 is DesignEditor.PipeDraft -> PipeSettings(editor, d)
                 is DesignEditor.CoilDraft -> CoilSettings(editor, d)
                 is DesignEditor.GearDraft -> GearSettings(editor, d)
+                is DesignEditor.FastenerDraft -> FastenerSettings(editor, d)
                 is DesignEditor.ThreadDraft -> ThreadSettings(editor, d)
                 is DesignEditor.LipDraft -> LipSettings(editor, d)
                 is DesignEditor.LoftDraft -> LoftSettings(editor, d)
@@ -414,24 +415,72 @@ private fun tenths(v: Double): String = (kotlin.math.round(v * 10) / 10).toStrin
 @Composable
 private fun ThreadSettings(editor: DesignEditor, d: DesignEditor.ThreadDraft) {
     Header("Thread", Icons.thread, Palette.modify, if (d.face != null) "1 face" else null)
-    // The ISO sizes; picking one sets its pitch.
-    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        for ((size, pitch) in ThreadSizes.all) {
-            Surface(
-                onClick = { d.pitch = pitch; d.exprs.remove("pitch"); editor.draftChanged() },
-                shape = RoundedCornerShape(12.dp),
-                color = if (d.pitch == pitch) Palette.line else Palette.ground,
-                contentColor = Palette.text,
-            ) { Text(size, Modifier.padding(horizontal = 10.dp, vertical = 7.dp), fontSize = 13.sp) }
-        }
+    Segmented(listOf("Metric", "Inch"), if (d.inches) 1 else 0) {
+        d.inches = it == 1
+        if (d.across > 0) { d.pitch = ThreadSizes.fitting(d.across, d.inches).pitch; d.exprs.remove("pitch") }
+        editor.draftChanged()
+    }
+    // Picking a size sets its pitch.
+    SizeChips((if (d.inches) ThreadSizes.inch else ThreadSizes.metric).map { it.name }, (if (d.inches) ThreadSizes.inch else ThreadSizes.metric).indexOfFirst { it.pitch == d.pitch }) { i ->
+        d.pitch = (if (d.inches) ThreadSizes.inch else ThreadSizes.metric)[i].pitch
+        d.exprs.remove("pitch")
+        editor.draftChanged()
     }
     Field(editor, d, "pitch", "Pitch", d.pitch, "mm", allowNegative = false) { d.pitch = it; editor.draftChanged() }
-    Field(editor, d, "clearance", "Clearance", d.clearance, "mm", allowNegative = false) { d.clearance = it; editor.draftChanged() }
+    Toggle("Only draw it", d.symbol) { d.symbol = it; editor.draftChanged() }
+    if (!d.symbol) Field(editor, d, "clearance", "Clearance", d.clearance, "mm", allowNegative = false) { d.clearance = it; editor.draftChanged() }
     // ISO: a nut's hole is made 1.0825 pitches smaller than its bolt.
     if (d.across > 0) Text(
         if (d.hole) "Takes a bolt ${tenths(d.across + 1.0825 * d.pitch)} across" else "Make its nut's hole ${tenths(d.across - 1.0825 * d.pitch)} across",
         fontSize = 12.sp, color = Palette.muted,
     )
+}
+
+@Composable
+private fun FastenerSettings(editor: DesignEditor, d: DesignEditor.FastenerDraft) {
+    Header("Fastener", Icons.fastener, Palette.modify, if (d.hole != null) "In a hole" else null)
+    val kinds = com.rm.parrotmetric.design.FastenerKind.entries
+    SizeChips(kinds.map { it.label }, d.kind.ordinal) { d.kind = kinds[it]; editor.draftChanged() }
+    Segmented(listOf("Metric", "Inch"), if (d.inches) 1 else 0) {
+        d.inches = it == 1
+        val sizes = if (d.inches) com.rm.parrotmetric.design.Fasteners.inch else com.rm.parrotmetric.design.Fasteners.metric
+        val now = com.rm.parrotmetric.design.Fasteners.size(d.size)?.d ?: 3.0
+        d.size = sizes.minBy { s -> kotlin.math.abs(s.d - now) }.name
+        editor.draftChanged()
+    }
+    val sizes = if (d.inches) com.rm.parrotmetric.design.Fasteners.inch else com.rm.parrotmetric.design.Fasteners.metric
+    SizeChips(sizes.map { it.name }, sizes.indexOfFirst { it.name == d.size }) { d.size = sizes[it].name; editor.draftChanged() }
+    if (d.kind.screw) Field(editor, d, "length", "Length", d.length, "mm", allowNegative = false) { d.length = it; editor.draftChanged() }
+    if (d.hole != null) {
+        Toggle("From the other end", d.otherEnd) { d.otherEnd = it; editor.draftChanged() }
+    } else {
+        Text("On", fontSize = 13.sp, color = Palette.muted)
+        Segmented(d.planes.map { it.first }, d.planes.indexOfFirst { it.second == d.plane }.coerceAtLeast(0)) { d.plane = d.planes[it].second; editor.draftChanged() }
+        Field(editor, d, "u", "Centre x", d.u, "mm", allowNegative = true) { d.u = it; editor.draftChanged() }
+        Field(editor, d, "v", "Centre y", d.v, "mm", allowNegative = true) { d.v = it; editor.draftChanged() }
+    }
+    if (d.kind != com.rm.parrotmetric.design.FastenerKind.Washer) Toggle("Model the thread", d.modelled) { d.modelled = it; editor.draftChanged() }
+    Field(editor, d, "clearance", "Clearance", d.clearance, "mm", allowNegative = false) { d.clearance = it; editor.draftChanged() }
+    OperationRow(d.operation) {
+        d.operation = it
+        editor.draftChanged()
+    }
+}
+
+/** A row of sizes to pick from, [picked] highlighted. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun SizeChips(names: List<String>, picked: Int, onPick: (Int) -> Unit) {
+    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        names.forEachIndexed { i, name ->
+            Surface(
+                onClick = { onPick(i) },
+                shape = RoundedCornerShape(12.dp),
+                color = if (i == picked) Palette.line else Palette.ground,
+                contentColor = Palette.text,
+            ) { Text(name, Modifier.padding(horizontal = 10.dp, vertical = 7.dp), fontSize = 13.sp) }
+        }
+    }
 }
 
 @Composable

@@ -173,6 +173,8 @@ class CoreKernel(private val core: NativeCore) : Kernel {
     override fun gear(id: Int, plane: SketchPlane, u: Double, v: Double, turn: Double, module: Double, teeth: Int, pressureAngle: Double, thickness: Double,
                       helix: Double, herringbone: Boolean, bore: Double, clearance: Double) =
         call { core.gear(id, plane.numbers(), u, v, turn, module, teeth, pressureAngle, thickness, helix, herringbone, bore, clearance) }
+    override fun fastener(id: Int, seat: SketchPlane, kind: Int, d: Double, length: Double, head: Double, headHeight: Double, socket: Double, angle: Double) =
+        call { core.fastener(id, seat.numbers(), kind, d, length, head, headHeight, socket, angle) }
     override fun coil(id: Int, plane: SketchPlane, u: Double, v: Double, diameter: Double, pitch: Double, turns: Double, section: Double, square: Boolean) =
         call { core.coil(id, plane.numbers(), u, v, diameter, pitch, turns, section, square) }
 
@@ -222,6 +224,8 @@ class CoreViewport(private val core: NativeCore, private val gl: (() -> Unit) ->
         gl {}
     }
 
+    override fun threadMarks(marks: List<Pair<Long, com.rm.parrotmetric.design.ThreadMark>>) =
+        core.threadMarks(marks.map { it.first }.toLongArray(), marks.map { it.second.face }.toTypedArray(), marks.map { it.second.pitch }.toDoubleArray())
     override fun canvasImage(key: Int, bytes: ByteArray) = core.canvasImage(key, bytes)
     override fun selectedPlanes() = core.selectedPlanes().toList()
     override fun measure() = core.measure().toList()

@@ -664,6 +664,27 @@ TEST_CASE("gears mesh at their pitch circles") {
     }
 }
 
+TEST_CASE("fasteners stand on their seat with the thread's face named") {
+    NamedShape screw = fastener(1, top, Fastener::SocketCap, 3, 10, 5.5, 3, 2.5, 0);
+    auto b = bounds(screw);
+    CHECK(b[2] == Catch::Approx(-10).margin(1e-3));
+    CHECK(b[5] == Catch::Approx(3).margin(1e-3));
+    CHECK(has(screw.faceNames(), "F1.thread"));
+    double hexArea = std::sqrt(3.0) / 2 * 2.5 * 2.5;
+    CHECK(volume(screw) == Catch::Approx(M_PI * 1.5 * 1.5 * 10 + M_PI * 2.75 * 2.75 * 3 - hexArea * 1.8).epsilon(1e-3));
+    NamedShape nut = fastener(2, top, Fastener::Nut, 3, 0, 5.5, 2.4, 0, 0);
+    CHECK(volume(nut) == Catch::Approx((std::sqrt(3.0) / 2 * 5.5 * 5.5 - M_PI * 1.5 * 1.5) * 2.4).epsilon(1e-3));
+    CHECK(has(nut.faceNames(), "F2.thread"));
+    // A countersunk screw's head is flush with the seat.
+    NamedShape flat = fastener(3, top, Fastener::Countersunk, 3, 10, 6, 1.7, 2, M_PI / 2);
+    b = bounds(flat);
+    CHECK(b[5] == Catch::Approx(0).margin(1e-3));
+    CHECK(b[2] == Catch::Approx(-10).margin(1e-3));
+    NamedShape washer = fastener(4, top, Fastener::Washer, 3.2, 0, 7, 0.5, 0, 0);
+    CHECK(volume(washer) == Catch::Approx(M_PI * (3.5 * 3.5 - 1.6 * 1.6) * 0.5).epsilon(1e-3));
+    CHECK_THROWS(fastener(5, top, Fastener::SocketCap, 3, 0, 5.5, 3, 2.5, 0));
+}
+
 TEST_CASE("pressing and pulling a flat face keeps its name") {
     NamedShape box = primitive(1, top, Primitive::Box, 0, 0, 10, 20, 30);
     NamedShape pulled = offsetFaces(2, box, {"F1.end"}, 5);

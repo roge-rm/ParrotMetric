@@ -171,6 +171,20 @@ NamedShape coil(int id, const gp_Ax3& plane, double u, double v, double diameter
 NamedShape gear(int id, const gp_Ax3& plane, double u, double v, double turn, double module, int teeth, double pressureAngle, double thickness,
                 double helix, bool herringbone, double bore, double clearance);
 
+enum class Fastener { SocketCap, HexBolt, Countersunk, Nut, Washer };
+
+/**
+ * A screw, nut or washer, standing on [seat]: heads, nuts and washers on the
+ * side its normal points to, shanks [length] mm into the other (under the head;
+ * all of it for a countersunk screw, whose head sinks in). [d] is the shank's
+ * or the hole's diameter; [head] the head's diameter, or across the flats of
+ * a hexagon; [socket] across a hex key's flats, 0 for none; [angle] a
+ * countersink's, radians. The shank's or nut's round face, where a thread
+ * would go, is named "thread".
+ */
+NamedShape fastener(int id, const gp_Ax3& seat, Fastener kind, double d, double length, double head, double headHeight, double socket,
+                    double angle);
+
 /**
  * A body with a thread cut into one of its round faces: on the outside of
  * a shaft or the inside of a hole, as the face looks. ISO metric: a 60°

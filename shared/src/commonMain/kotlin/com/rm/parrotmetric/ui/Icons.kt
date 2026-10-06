@@ -57,6 +57,7 @@ object Icons {
         width = 1.5f,
     )
     val coil = stroke("coil", "M6 5c0-2 12-2 12 0s-12 2-12 4 12 2 12 4-12 2-12 4 12 2 12 4")
+    val fastener = stroke("fastener", "M7 3h10v4H7z", "M10 7v14h4V7", "M10 10l4 1M10 13l4 1M10 16l4 1")
     val thread = stroke("thread", "M8 3v18M16 3v18", "M8 5l8 2M8 9l8 2M8 13l8 2M8 17l8 2")
     val text = stroke("text", "M5 6V4h14v2", "M12 4v16", "M9 20h6")
     val canvas = stroke("canvas", "M4 5h16v14H4z", "M4 16l5-5 4 4 2-2 5 5", circle(15f, 9f, 1.5f))

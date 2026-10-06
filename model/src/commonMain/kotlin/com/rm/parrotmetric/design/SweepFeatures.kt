@@ -90,7 +90,15 @@ data class GearFeature(
 
 /** An ISO metric thread [pitch] mm a turn, cut into a round [face]: outside a shaft or inside a hole. */
 /** [clearance] (mm) moves the face away from the mating part first: a shaft gets smaller, a hole bigger, so printed threads fit. */
-data class ThreadFeature(override val id: Int, override val name: String, val face: String, val pitch: Double, val clearance: Double = 0.0) : Feature() {
+/** With [symbol] the face is left as it is and the thread only drawn on it. */
+data class ThreadFeature(
+    override val id: Int,
+    override val name: String,
+    val face: String,
+    val pitch: Double,
+    val clearance: Double = 0.0,
+    val symbol: Boolean = false,
+) : Feature() {
     override fun key() = this
 }
 

@@ -161,6 +161,13 @@ object Parametrics {
                 "v" -> f.copy(v = v)
                 else -> f
             }
+            is FastenerFeature -> when (field) {
+                "length" -> f.copy(length = v)
+                "clearance" -> f.copy(clearance = v)
+                "u" -> f.copy(u = v)
+                "v" -> f.copy(v = v)
+                else -> f
+            }
             is ThreadFeature -> when (field) {
                 "pitch" -> f.copy(pitch = v)
                 "clearance" -> f.copy(clearance = v)

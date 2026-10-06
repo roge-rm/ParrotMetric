@@ -29,6 +29,8 @@ class Built(
     val found: Map<Int, Map<String, String>> = emptyMap(),
     /** Where each face or edge a feature uses was when last found by name, by "id:name" (see Kernel.signature). */
     val hints: Map<String, DoubleArray> = emptyMap(),
+    /** Threads drawn as a symbol rather than cut. */
+    val threads: List<ThreadMark> = emptyList(),
 )
 
 /**
@@ -61,6 +63,8 @@ class Rebuilder(private val kernel: Kernel) {
         var toolOp = Operation.NewBody
         /** For a mirror or pattern of features: each feature whose shape it placed, and where. */
         var repeats: List<Pair<Int, DoubleArray>> = emptyList()
+        /** Threads it drew as a symbol. */
+        var threads: List<ThreadMark> = emptyList()
     }
 
     private val steps = mutableListOf<Step>()
@@ -111,6 +115,7 @@ class Rebuilder(private val kernel: Kernel) {
             }.toMap(),
             steps.withIndex().mapNotNull { (i, s) -> if (s.found.isNotEmpty()) features[i].id to s.found else null }.toMap(),
             this.hints.toMap(),
+            steps.filter { it.error == null }.flatMap { it.threads },
         )
     }
 
@@ -356,8 +361,14 @@ class Rebuilder(private val kernel: Kernel) {
         is ThreadFeature -> {
             val face = ref(f, f.face, false, bodies)
             val body = bodyWithFace(face, bodies) ?: throw KernelException("The face it's on isn't there any more")
-            replace(f, bodies, planes, made, body) { kernel.thread(f.id, body.handle, face, f.pitch, f.clearance) }
+            if (f.symbol) {
+                keep(bodies)
+                Step(f.key(), bodies, planes, null, made).also { it.threads = listOf(ThreadMark(face, f.pitch)) }
+            } else {
+                replace(f, bodies, planes, made, body) { kernel.thread(f.id, body.handle, face, f.pitch, f.clearance) }
+            }
         }
+        is FastenerFeature -> fastener(f, bodies, planes, made)
         is LoftFeature -> {
             if (f.sections.size < 2) throw KernelException("Pick areas in at least two sketches")
             val sections = f.sections.map { s ->
@@ -852,6 +863,59 @@ class Rebuilder(private val kernel: Kernel) {
             }
         }
         return Step(f.key(), out, planes, null, made)
+    }
+
+    /** A screw, nut or washer, seated in its hole or standing on its plane. */
+    private fun fastener(f: FastenerFeature, bodies: List<BodyState>, planes: Map<Int, SketchPlane>, made: Int): Step {
+        val size = Fasteners.size(f.size) ?: throw KernelException("There's no ${f.size}")
+        val seat = if (f.hole != null) {
+            val face = ref(f, f.hole, false, bodies)
+            val s = bodies.firstNotNullOfOrNull { kernel.shapeOf(it.handle, face, false) }?.takeIf { it[0] == 2.0 && it.size > 10 }
+                ?: throw KernelException("The hole it goes in isn't there any more")
+            val at = Vec3(s[1], s[2], s[3])
+            val axis = Vec3(s[4], s[5], s[6])
+            // The higher end, or the lower one; the seat faces out of the hole.
+            val ends = listOf(at + axis * s[9] to axis * -1.0, at + axis * s[10] to axis)
+            val up = Vec3(0.0, 0.0, 1.0)
+            val higher = if (abs(ends[1].first.dot(up) - ends[0].first.dot(up)) < 1e-6) ends[1] else ends.maxBy { it.first.dot(up) }
+            val (origin, out) = if (f.otherEnd) ends.first { it !== higher } else higher
+            val x = squareTo(out)
+            SketchPlane(f.name, origin, x, out.cross(x))
+        } else {
+            val p = resolvePlane(f.plane, bodies, f, planes)
+            p.copy(origin = p.toWorld(f.u, f.v))
+        }
+        val c = f.clearance
+        val threaded = f.modelled && f.kind != FastenerKind.Washer
+        val (head, height, key, angle) = when (f.kind) {
+            FastenerKind.SocketCap -> listOf(size.capHead, size.capHeight, size.capKey, 0.0)
+            FastenerKind.HexBolt -> listOf(size.hex, size.hexHeight, 0.0, 0.0)
+            // A countersunk head's height follows from its angle; the 1 is unused.
+            FastenerKind.Countersunk -> listOf(size.sunkHead, 1.0, size.sunkKey, size.sunkAngle)
+            FastenerKind.Nut -> listOf(size.hex, size.nutHeight, 0.0, 0.0)
+            FastenerKind.Washer -> listOf(size.washerOutside, size.washerThickness, 0.0, 0.0)
+        }
+        // A modelled nut's hole is the thread's smaller size, which the thread is cut out from.
+        val d = when (f.kind) {
+            FastenerKind.Washer -> size.washerHole
+            FastenerKind.Nut -> if (threaded) size.d - 1.0825 * size.pitch else size.d
+            else -> size.d
+        }
+        var tool = kernel.fastener(
+            f.id, seat, f.kind.ordinal, if (f.kind == FastenerKind.Washer || f.kind == FastenerKind.Nut) d - 2 * c else d + 2 * c,
+            if (f.kind.screw) f.length + c else 0.0, head + 2 * c, height + c, key, angle,
+        )
+        if (threaded) {
+            val plain = tool
+            try {
+                tool = kernel.thread(f.id, plain, "F${f.id}.thread", size.pitch)
+            } finally {
+                kernel.release(plain)
+            }
+        }
+        val step = applyTool(f, tool, f.operation, bodies, planes, made)
+        if (!threaded && f.kind != FastenerKind.Washer && f.operation != Operation.Cut) step.threads = listOf(ThreadMark("F${f.id}.thread", size.pitch))
+        return step
     }
 
     private fun keep(bodies: List<BodyState>) = bodies.forEach { kernel.retain(it.handle) }

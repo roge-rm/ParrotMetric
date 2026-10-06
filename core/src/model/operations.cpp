@@ -2119,6 +2119,78 @@ NamedShape gear(int id, const gp_Ax3& plane, double u, double v, double turn, do
     }
 }
 
+NamedShape fastener(int id, const gp_Ax3& seat, Fastener kind, double d, double length, double head, double headHeight, double socket,
+                    double angle) {
+    if (d <= 0 || head <= d || headHeight <= 0) throw std::runtime_error("Sizes have to be more than 0, the head bigger than the shank");
+    bool screw = kind == Fastener::SocketCap || kind == Fastener::HexBolt || kind == Fastener::Countersunk;
+    if (screw && length <= 0) throw std::runtime_error("The length has to be more than 0");
+    try {
+        auto cylinder = [](double r, double z0, double z1) {
+            return BRepPrimAPI_MakeCylinder(gp_Ax2(gp_Pnt(0, 0, z0), gp::DZ()), r, z1 - z0).Shape();
+        };
+        // A hexagon [across] its flats, from z0 to z1.
+        auto hexagon = [](double across, double z0, double z1) {
+            std::vector<gp_Pnt> corners;
+            double r = across / std::sqrt(3.0);
+            for (int k = 0; k < 6; ++k) corners.push_back(gp_Pnt(r * std::cos(k * M_PI / 3), r * std::sin(k * M_PI / 3), z0));
+            return BRepPrimAPI_MakePrism(BRepBuilderAPI_MakeFace(polygon(corners)).Face(), gp_Vec(0, 0, z1 - z0)).Shape();
+        };
+        auto fuse = [](const TopoDS_Shape& a, const TopoDS_Shape& b) {
+            BRepAlgoAPI_Fuse f(a, b);
+            if (!f.IsDone()) throw std::runtime_error("The fastener couldn't be made");
+            ShapeUpgrade_UnifySameDomain tidy(f.Shape(), true, true, true);
+            tidy.Build();
+            return tidy.Shape();
+        };
+        auto cut = [](const TopoDS_Shape& a, const TopoDS_Shape& b) {
+            BRepAlgoAPI_Cut c(a, b);
+            if (!c.IsDone()) throw std::runtime_error("The fastener couldn't be made");
+            return c.Shape();
+        };
+        // The seat is z = 0: heads, nuts and washers stand above it, shanks go down into the hole.
+        TopoDS_Shape shape;
+        switch (kind) {
+            case Fastener::SocketCap:
+                shape = fuse(cylinder(head / 2, 0, headHeight), cylinder(d / 2, -length, 0));
+                if (socket > 0) shape = cut(shape, hexagon(socket, headHeight * 0.4, headHeight + 1));
+                break;
+            case Fastener::HexBolt:
+                shape = fuse(hexagon(head, 0, headHeight), cylinder(d / 2, -length, 0));
+                break;
+            case Fastener::Countersunk: {
+                // The head's top is flush with the seat; its cone narrows to the shank at [angle] across.
+                double sink = (head - d) / 2 / std::tan(angle / 2);
+                if (sink >= length) throw std::runtime_error("The screw is shorter than its head");
+                TopoDS_Shape cone = BRepPrimAPI_MakeCone(gp_Ax2(gp_Pnt(0, 0, -sink), gp::DZ()), d / 2, head / 2, sink).Shape();
+                shape = fuse(cone, cylinder(d / 2, -length, -sink));
+                if (socket > 0) shape = cut(shape, hexagon(socket, -sink * 0.7, 1));
+                break;
+            }
+            case Fastener::Nut:
+                shape = cut(hexagon(head, 0, headHeight), cylinder(d / 2, -1, headHeight + 1));
+                break;
+            case Fastener::Washer:
+                shape = cut(cylinder(head / 2, 0, headHeight), cylinder(d / 2, -1, headHeight + 1));
+                break;
+        }
+        shape = BRepBuilderAPI_Transform(shape, placeOn(seat), true).Shape();
+        // The face the thread goes on is named "thread"; the rest are numbered.
+        NamedShape out;
+        out.shape = shape;
+        int k = 0;
+        for (TopExp_Explorer f(shape, TopAbs_FACE); f.More(); f.Next()) {
+            if (out.names.IsBound(f.Current())) continue;
+            BRepAdaptor_Surface s(TopoDS::Face(f.Current()));
+            bool threaded = kind != Fastener::Washer && s.GetType() == GeomAbs_Cylinder && std::abs(s.Cylinder().Radius() - d / 2) < 1e-6;
+            out.names.Bind(f.Current(), prefix(id) + (threaded ? ".thread" : ".f" + std::to_string(k++)));
+        }
+        check(out.shape, "The fastener couldn't be made");
+        return out;
+    } catch (const Standard_Failure&) {
+        throw std::runtime_error("The fastener couldn't be made");
+    }
+}
+
 namespace {
 
 /** A flat face grown outward by d mm (shrunk when d is less than 0), corners going round as they grow. */

@@ -69,6 +69,8 @@ struct Shown {
     std::shared_ptr<pm::DisplayMesh> mesh;          // Mesh bodies: what was drawn, for finding a picked flat area.
 };
 std::vector<Shown> shown;
+/** Threads drawn as a symbol, shown with the bodies from the next show(). */
+std::vector<pm::DisplayMesh> threadMarks;
 std::vector<pm::Body> shownBodies;  // The bodies of the last show(), in order, for measuring.
 std::vector<pm::Pick> selection;
 std::unordered_map<int, pm::Picture> pictures;  // Canvas pictures by key, under lock.
@@ -552,7 +554,7 @@ JNIEXPORT jdoubleArray JNICALL Java_com_rm_parrotmetric_Core_shapeOf(JNIEnv* env
         std::unique_lock<std::mutex> g(lock);
         pm::NamedShape s = solidOf(body);
         g.unlock();
-        double v[9] = {-1, 0, 0, 0, 0, 0, 0, 0, 0};
+        double v[12] = {-1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         auto put = [&](double kind, const gp_Pnt& p, const gp_Dir& d, double size) {
             v[0] = kind; v[1] = p.X(); v[2] = p.Y(); v[3] = p.Z(); v[4] = d.X(); v[5] = d.Y(); v[6] = d.Z(); v[7] = size;
         };
@@ -586,9 +588,35 @@ JNIEXPORT jdoubleArray JNICALL Java_com_rm_parrotmetric_Core_shapeOf(JNIEnv* env
                         gp_Vec radial(cyl.Location(), p);
                         radial -= gp_Vec(cyl.Axis().Direction()) * radial.Dot(gp_Vec(cyl.Axis().Direction()));
                         v[8] = normal.Dot(radial) < 0 ? 1 : 0;
+                        v[9] = w0;
+                        v[10] = w1;
                         break;
                     }
-                    case GeomAbs_Cone: put(2, surface.Cone().Location(), surface.Cone().Axis().Direction(), surface.Cone().RefRadius()); break;
+                    case GeomAbs_Cone: {
+                        gp_Cone cone = surface.Cone();
+                        put(2, cone.Location(), cone.Axis().Direction(), cone.RefRadius());
+                        // A hole if it looks in towards its axis; where it starts and ends along the axis from its corners.
+                        double u0, u1, w0, w1;
+                        BRepTools::UVBounds(f, u0, u1, w0, w1);
+                        gp_Pnt p;
+                        gp_Vec du, dv;
+                        surface.D1((u0 + u1) / 2, (w0 + w1) / 2, p, du, dv);
+                        gp_Vec normal = du.Crossed(dv);
+                        if (f.Orientation() == TopAbs_REVERSED) normal.Reverse();
+                        gp_Vec axis(cone.Axis().Direction()), radial(cone.Location(), p);
+                        radial -= axis * radial.Dot(axis);
+                        v[8] = normal.Dot(radial) < 0 ? 1 : 0;
+                        double lo = 1e300, hi = -1e300;
+                        for (double w : {w0, w1}) {
+                            double along = gp_Vec(cone.Location(), surface.Value(u0, w)).Dot(axis);
+                            lo = std::min(lo, along);
+                            hi = std::max(hi, along);
+                        }
+                        v[9] = lo;
+                        v[10] = hi;
+                        v[11] = 1;
+                        break;
+                    }
                     case GeomAbs_Sphere: put(3, surface.Sphere().Location(), gp::DZ(), surface.Sphere().Radius()); break;
                     case GeomAbs_Plane: {
                         gp_Ax3 ax = pm::facePlane(s, n);
@@ -601,8 +629,8 @@ JNIEXPORT jdoubleArray JNICALL Java_com_rm_parrotmetric_Core_shapeOf(JNIEnv* env
             }
         }
         if (v[0] < 0) return nullptr;
-        jdoubleArray out = env->NewDoubleArray(9);
-        env->SetDoubleArrayRegion(out, 0, 9, v);
+        jdoubleArray out = env->NewDoubleArray(12);
+        env->SetDoubleArrayRegion(out, 0, 12, v);
         return out;
     } catch (const std::exception&) {
         return nullptr;
@@ -1437,6 +1465,12 @@ JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_show(JNIEnv* env, jobject, 
         nextShown.push_back(std::move(sh));
     }
     std::lock_guard<std::mutex> g(lock);
+    for (const auto& m : threadMarks) {
+        meshes.push_back(m);
+        Shown sh;
+        sh.plane = -2;
+        nextShown.push_back(std::move(sh));
+    }
     shown = std::move(nextShown);
     shownBodies = bodies;
     shownTriangles = triangles;
@@ -2302,6 +2336,69 @@ JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_gear(JNIEnv* env, jobject,
     try {
         auto p = doubles(env, plane);
         return keep(pm::gear(id, planeOf(p.data()), u, v, turn, module, teeth, pressureAngle, thickness, helix, herringbone, bore, clearance));
+    } catch (const std::exception& e) {
+        fail(env, e.what());
+        return 0;
+    }
+}
+
+/**
+ * Threads to draw as a symbol: a fine helix on each of these round faces, a
+ * turn every pitch, just off the face so it shows. Shown from the next show().
+ */
+JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_threadMarks(JNIEnv* env, jobject, jlongArray bodies, jobjectArray faces, jdoubleArray pitches) {
+    auto h = longs(env, bodies);
+    auto names = strings(env, faces);
+    auto p = doubles(env, pitches);
+    std::vector<pm::DisplayMesh> marks;
+    for (size_t i = 0; i < h.size() && i < names.size() && i < p.size(); ++i) {
+        try {
+            std::unique_lock<std::mutex> g(lock);
+            if (!store.has(h[i])) continue;
+            pm::NamedShape s = solidOf(h[i]);
+            g.unlock();
+            for (const auto& f : s.findFaces(names[i])) {
+                BRepAdaptor_Surface surface(f);
+                if (surface.GetType() != GeomAbs_Cylinder || p[i] <= 0) continue;
+                gp_Cylinder cyl = surface.Cylinder();
+                double u0, u1, w0, w1;
+                BRepTools::UVBounds(f, u0, u1, w0, w1);
+                // Out from a shaft, in from a hole: the side it's seen from.
+                gp_Pnt at;
+                gp_Vec du, dv;
+                surface.D1((u0 + u1) / 2, (w0 + w1) / 2, at, du, dv);
+                gp_Vec normal = du.Crossed(dv);
+                if (f.Orientation() == TopAbs_REVERSED) normal.Reverse();
+                gp_Vec axis(cyl.Axis().Direction()), radial(cyl.Location(), at);
+                radial -= axis * radial.Dot(axis);
+                double r = cyl.Radius() * (normal.Dot(radial) < 0 ? 0.99 : 1.01);
+                gp_Vec x(cyl.Position().XDirection()), y(cyl.Position().YDirection());
+                const int perTurn = 24;
+                int steps = std::min(20000, int(std::ceil((w1 - w0) / p[i] * perTurn)));
+                pm::DisplayMesh m;
+                pm::DisplayMesh::Edge e;
+                for (int k = 0; k <= steps; ++k) {
+                    double w = w0 + (w1 - w0) * k / std::max(1, steps), a = 2 * M_PI * (w - w0) / p[i];
+                    gp_Pnt q = cyl.Location().Translated(axis * w + x * (r * std::cos(a)) + y * (r * std::sin(a)));
+                    e.points.insert(e.points.end(), {float(q.X()), float(q.Y()), float(q.Z())});
+                }
+                m.edges.push_back(std::move(e));
+                const float colour[4] = {0.13f, 0.18f, 0.17f, 0.55f};
+                std::copy(colour, colour + 4, m.edgeColour);
+                marks.push_back(std::move(m));
+            }
+        } catch (const std::exception&) {
+        }
+    }
+    std::lock_guard<std::mutex> g(lock);
+    threadMarks = std::move(marks);
+}
+
+JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_fastener(JNIEnv* env, jobject, jint id, jdoubleArray seat, jint kind, jdouble d, jdouble length,
+                                                              jdouble head, jdouble headHeight, jdouble socket, jdouble angle) {
+    try {
+        auto p = doubles(env, seat);
+        return keep(pm::fastener(id, planeOf(p.data()), pm::Fastener(kind), d, length, head, headHeight, socket, angle));
     } catch (const std::exception& e) {
         fail(env, e.what());
         return 0;

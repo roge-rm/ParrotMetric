@@ -53,6 +53,8 @@ import kotlin.math.sin
 
 /** The 3D view, as the design editor uses it. The platform supplies it. */
 interface Viewport {
+    /** Threads to draw as a symbol from the next show(): each on a body's face. */
+    fun threadMarks(marks: List<Pair<Long, com.rm.parrotmetric.design.ThreadMark>>) {}
     /** Shows these bodies, these sketches with their areas pickable, and construction planes, axes and points. Clears the selection. */
     fun show(
         bodies: List<Long>, sketches: List<Pair<SketchPlane, List<ProfileCurve>>>,
@@ -182,6 +184,7 @@ class DesignEditor(
         is com.rm.parrotmetric.design.PipeFeature -> "pipe"
         is com.rm.parrotmetric.design.CoilFeature -> "coil"
         is com.rm.parrotmetric.design.GearFeature -> "gear"
+        is com.rm.parrotmetric.design.FastenerFeature -> "fastener"
         is com.rm.parrotmetric.design.PatchFeature -> "patch"
         is com.rm.parrotmetric.design.StitchFeature -> "stitch"
         is com.rm.parrotmetric.design.ThickenFeature -> "thicken"
@@ -669,6 +672,7 @@ class DesignEditor(
                         // Until the panel's picks are put back, a tap adds to them rather than starting afresh.
                         redrawing = draft != null
                         viewport.setAreasFirst(draft is LoftDraft)
+                        viewport.threadMarks(b.threads.mapNotNull { t -> visible.firstOrNull { t.face in kernel.faceNames(it.handle) }?.let { it.handle to t } })
                         viewport.show(
                             visible.map { it.handle }, shown.map { it.second to it.first.sketch.profileCurves() },
                             planeFeatures.map { b.sketchPlanes.getValue(it.id) }, b.axes.values.toList(), b.points.values.toList(), visible.map { design.info(it.label).colour ?: -1 }, canvasesToShow(b), refit,
@@ -919,6 +923,29 @@ class DesignEditor(
         rebuild()
     }
 
+    fun startFastener() {
+        val d = FastenerDraft(null)
+        d.planes = planeChoices()
+        fastenerPick(d)
+        panel = d
+        rebuild()
+    }
+
+    /** A fastener goes in the round hole picked, sized to fit it and as long as it's deep. */
+    private fun fastenerPick(d: FastenerDraft) {
+        val face = viewport.selectedFaces().map { it.second }.firstOrNull { it.isNotEmpty() && faceKind(it) == 2.0 } ?: return
+        val shape = allBodies().firstNotNullOfOrNull { kernel.shapeOf(it.handle, face, false) }?.takeIf { it.size > 10 } ?: return
+        if (shape[8] != 1.0) return
+        d.hole = face
+        // A countersink's cone seats it flush; its size comes from the hole below it.
+        if (shape.size > 11 && shape[11] == 1.0) return
+        val across = 2 * shape[7]
+        val sizes = if (d.inches) com.rm.parrotmetric.design.Fasteners.inch else com.rm.parrotmetric.design.Fasteners.metric
+        // The biggest that goes through, or failing that the one its tapping hole is nearest.
+        d.size = (sizes.filter { it.d <= across + 1e-6 }.maxByOrNull { it.d } ?: sizes.first()).name
+        if (d.kind.screw && d.exprs["length"] == null) d.length = kotlin.math.ceil(kotlin.math.abs(shape[10] - shape[9]))
+    }
+
     fun startThread() {
         val d = ThreadDraft(null)
         threadPick(d)
@@ -975,7 +1002,7 @@ class DesignEditor(
         val face = viewport.selectedFaces().map { it.second }.firstOrNull { it.isNotEmpty() && faceKind(it) == 2.0 } ?: return
         d.face = face
         threadShape(d)
-        if (d.across > 0) d.pitch = ThreadSizes.fitting(d.across).second
+        if (d.across > 0) d.pitch = ThreadSizes.fitting(d.across, d.inches).pitch
     }
 
     /** How big the thread's face is across, and whether it's a hole. */
@@ -1382,6 +1409,7 @@ class DesignEditor(
             is com.rm.parrotmetric.design.PipeFeature -> PipeDraft(f)
             is com.rm.parrotmetric.design.CoilFeature -> CoilDraft(f).also { it.planes = planeChoices() }
             is com.rm.parrotmetric.design.GearFeature -> GearDraft(f).also { it.planes = planeChoices() }
+            is com.rm.parrotmetric.design.FastenerFeature -> FastenerDraft(f).also { it.planes = planeChoices() }
             is com.rm.parrotmetric.design.ThreadFeature -> ThreadDraft(f).also { threadShape(it) }
             is com.rm.parrotmetric.design.LipFeature -> LipDraft(f).also { it.base = baseOf(f.face) }
             is com.rm.parrotmetric.design.LoftFeature -> LoftDraft(f)
@@ -1451,6 +1479,10 @@ class DesignEditor(
             }
             is ThreadDraft -> {
                 threadPick(d)
+                rebuild()
+            }
+            is FastenerDraft -> {
+                fastenerPick(d)
                 rebuild()
             }
             is LipDraft -> {
@@ -1811,16 +1843,39 @@ class DesignEditor(
         override fun missing() = ""
     }
 
+    inner class FastenerDraft(editing: com.rm.parrotmetric.design.FastenerFeature?) : FeatureDraft() {
+        val id = editing?.id ?: newId()
+        private val name = editing?.name ?: nextName("Fastener", design.features.count { it is com.rm.parrotmetric.design.FastenerFeature })
+        var planes: List<Pair<String, PlaneRef>> = emptyList()
+        var kind by mutableStateOf(editing?.kind ?: com.rm.parrotmetric.design.FastenerKind.SocketCap)
+        var size by mutableStateOf(editing?.size ?: "M3")
+        var inches by mutableStateOf(editing?.size?.startsWith("M") == false)
+        var length by mutableStateOf(editing?.length ?: 10.0)
+        var hole by mutableStateOf(editing?.hole)
+        var otherEnd by mutableStateOf(editing?.otherEnd ?: false)
+        var plane by mutableStateOf<PlaneRef>(editing?.plane ?: PlaneRef.Fixed(SketchPlane.Top))
+        var u by mutableStateOf(editing?.u ?: 0.0)
+        var v by mutableStateOf(editing?.v ?: 0.0)
+        var modelled by mutableStateOf(editing?.modelled ?: false)
+        var clearance by mutableStateOf(editing?.clearance ?: 0.0)
+        var operation by mutableStateOf(editing?.operation ?: Operation.NewBody)
+        override fun feature() = com.rm.parrotmetric.design.FastenerFeature(id, name, kind, size, length, hole, otherEnd, plane, u, v, modelled, clearance, operation)
+        override fun missing() = ""
+    }
+
     inner class ThreadDraft(editing: com.rm.parrotmetric.design.ThreadFeature?) : FeatureDraft() {
         val id = editing?.id ?: newId()
         private val name = editing?.name ?: nextName("Thread", design.features.count { it is com.rm.parrotmetric.design.ThreadFeature })
         var face by mutableStateOf(editing?.face)
         var pitch by mutableStateOf(editing?.pitch ?: 1.0)
         var clearance by mutableStateOf(editing?.clearance ?: 0.0)
+        var symbol by mutableStateOf(editing?.symbol ?: false)
+        /** Inch sizes shown rather than metric. */
+        var inches by mutableStateOf(editing != null && ThreadSizes.isInch(editing.pitch))
         /** The face's size across before threading (0 if not known), and whether it's a hole. */
         var across by mutableStateOf(0.0)
         var hole by mutableStateOf(false)
-        override fun feature(): Feature? = face?.let { com.rm.parrotmetric.design.ThreadFeature(id, name, it, pitch, clearance) }
+        override fun feature(): Feature? = face?.let { com.rm.parrotmetric.design.ThreadFeature(id, name, it, pitch, clearance, symbol) }
         override fun missing() = "Tap the round face of a shaft or hole"
     }
 
