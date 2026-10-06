@@ -27,9 +27,9 @@ android {
         // phones also run 32-bit code, so the 64-bit APK must be higher: the
         // release number times ten, plus 2 for 64-bit and 1 for 32-bit.
         // Bump [release], not the code.
-        val release = 11
+        val release = 12
         versionCode = release * 10 + if (arm32) 1 else 2
-        versionName = "0.4.1"
+        versionName = "0.5.0"
         ndk { abiFilters += armAbi }
         externalNativeBuild {
             cmake {
