@@ -25,7 +25,7 @@ Tap to place each point. Points snap to the ends and middles of what's already t
 - **Spline** goes through the points you tap, or is pulled by them as control points. Tap **Spline** again to end it.
 - **Ellipse** is a centre, then the end of one axis, then the width.
 - **Conic** is two ends and a point the curve leans towards. Pick one and **Fullness** sets how full it is, between 0 and 1.
-- **Text** asks for the words, the height and whether it's bold. Its letters are areas like any other, so they extrude. **Change text** edits it later.
+- **Text** asks for the words, the height and whether it's bold. Its letters are areas like any other, so they extrude. **Change text**, or a double click on the text, edits it later.
 
 The styles of each tool show above the tools while it's in hand.
 

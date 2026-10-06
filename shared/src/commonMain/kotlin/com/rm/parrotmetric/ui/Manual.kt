@@ -93,7 +93,7 @@ object Manual {
             ManualBlock(ManualKind.Bullet, "**Spline** goes through the points you tap, or is pulled by them as control points. Tap **Spline** again to end it."),
             ManualBlock(ManualKind.Bullet, "**Ellipse** is a centre, then the end of one axis, then the width."),
             ManualBlock(ManualKind.Bullet, "**Conic** is two ends and a point the curve leans towards. Pick one and **Fullness** sets how full it is, between 0 and 1."),
-            ManualBlock(ManualKind.Bullet, "**Text** asks for the words, the height and whether it's bold. Its letters are areas like any other, so they extrude. **Change text** edits it later."),
+            ManualBlock(ManualKind.Bullet, "**Text** asks for the words, the height and whether it's bold. Its letters are areas like any other, so they extrude. **Change text**, or a double click on the text, edits it later."),
             ManualBlock(ManualKind.Para, "The styles of each tool show above the tools while it's in hand."),
             ManualBlock(ManualKind.Para, "As soon as a shape is placed, its sizes show at the bottom as you drew them: a rectangle's width and height, a circle's diameter, an arc's radius, a line's length, and so on. Type the sizes you want and tap **Set**, and they become dimensions. To leave it free, just carry on drawing."),
             ManualBlock(ManualKind.Para, "**Construction** makes new curves construction curves, drawn dashed. They help you place things but don't make areas. With curves picked, it switches those instead."),

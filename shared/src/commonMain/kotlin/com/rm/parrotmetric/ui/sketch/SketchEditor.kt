@@ -332,8 +332,15 @@ class SketchEditor(
         }
         // A second click on a curve straight after the first takes the whole outline it's part of.
         val now = kotlin.time.TimeSource.Monotonic.markNow()
-        val again = item is SketchItem.C && lastTap?.let { (was, at) -> was == item && at.elapsedNow().inWholeMilliseconds < 450 } == true
+        val twice = lastTap?.let { (was, at) -> was == item && at.elapsedNow().inWholeMilliseconds < 450 } == true
+        val again = item is SketchItem.C && twice
         lastTap = item?.let { it to now }
+        // A second click on text opens it to change.
+        if (item is SketchItem.T && twice) {
+            lastTap = null
+            editText(item.text)
+            return
+        }
         if (again) {
             for (c in SketchOps.connected(sketch, (item as SketchItem.C).curve)) SketchItem.C(c).let { if (it !in selection) selection += it }
             lastTap = null
