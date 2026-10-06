@@ -34,7 +34,7 @@ On the model, a finger, a pen or the left mouse button makes a stroke. Off the m
 - **Grab** drags what was under the brush when the stroke began.
 - **Pull** drags the surface along with the brush, stretching it into horns, limbs and tails. With **Detail** on it keeps adding triangles as it goes.
 - **Layer** raises it to a set height and no further in one stroke, for even plates and scales.
-- **Mask** paints a mask, shown darker, that the other brushes leave alone. **More** has **Clear** and **Invert** for it.
+- **Mask** paints a mask, shown blue-grey, that the other brushes leave alone. **More** has **Clear** and **Invert** for it.
 
 ## Detail
 

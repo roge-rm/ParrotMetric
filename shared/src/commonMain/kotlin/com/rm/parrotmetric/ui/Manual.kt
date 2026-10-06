@@ -247,7 +247,7 @@ object Manual {
             ManualBlock(ManualKind.Bullet, "**Grab** drags what was under the brush when the stroke began."),
             ManualBlock(ManualKind.Bullet, "**Pull** drags the surface along with the brush, stretching it into horns, limbs and tails. With **Detail** on it keeps adding triangles as it goes."),
             ManualBlock(ManualKind.Bullet, "**Layer** raises it to a set height and no further in one stroke, for even plates and scales."),
-            ManualBlock(ManualKind.Bullet, "**Mask** paints a mask, shown darker, that the other brushes leave alone. **More** has **Clear** and **Invert** for it."),
+            ManualBlock(ManualKind.Bullet, "**Mask** paints a mask, shown blue-grey, that the other brushes leave alone. **More** has **Clear** and **Invert** for it."),
             ManualBlock(ManualKind.Heading, "Detail"),
             ManualBlock(ManualKind.Para, "With **Detail** on, triangles are added under the brush where it needs them, so the surface stays smooth wherever you work. How fine is under **More**, from **Coarse** to **Fine**, and it goes with the brush's size: a small brush adds finer detail."),
             ManualBlock(ManualKind.Para, "**More** also has, for the whole mesh: **Finer all over**, which about doubles the triangles, **Coarser**, which about halves them, and **Even**, which evens them out at the size they are. The count is under the title."),

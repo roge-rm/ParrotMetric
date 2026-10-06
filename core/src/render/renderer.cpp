@@ -94,7 +94,7 @@ void main() {
         else if (thick < limit * 2.0) own = mix(vec3(0.95, 0.70, 0.25), vec3(0.62, 0.78, 0.70), (thick - limit) / limit);
         else own = vec3(0.62, 0.78, 0.70);
     }
-    if (masking) own = mix(own, vec3(0.22, 0.25, 0.28), clamp(thick, 0.0, 1.0) * 0.8);
+    if (masking) own = mix(own, vec3(0.36, 0.42, 0.52), clamp(thick, 0.0, 1.0) * 0.7);
     vec3 base = mix(own, vec3(1.0, 0.48, 0.24), chosen * 0.55);
     float alpha = faceColour.a < 1.0 ? mix(faceColour.a, 0.55, chosen) : 1.0;
     colour = vec4(base * (ambient + 0.72 * key) + rim * (1.0 - chosen), alpha);
