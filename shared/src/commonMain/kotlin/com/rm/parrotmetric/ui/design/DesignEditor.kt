@@ -1400,8 +1400,9 @@ class DesignEditor(
             is PointDraft -> showPicks(listOfNotNull(d.ref), emptyList(), d.planes.mapNotNull { (it as? PlaneRef.OnFace)?.face })
             is BodyDraft -> if ((d as? PatternDraft)?.byFeatures != true && (d as? MirrorDraft)?.byFeatures != true) {
                 // A face of each picked body stays selected, so the next tap with Shift adds to them.
+                // Meshes have no named faces; their picks are left as they are.
                 val faces = d.bodies.mapNotNull { l -> shownBodies.firstOrNull { it.label == l }?.let { kernel.faceNames(it.handle).firstOrNull() } }
-                viewport.select(emptyList(), emptyList(), faces)
+                if (faces.size == d.bodies.size) viewport.select(emptyList(), emptyList(), faces)
             }
         }
     }
