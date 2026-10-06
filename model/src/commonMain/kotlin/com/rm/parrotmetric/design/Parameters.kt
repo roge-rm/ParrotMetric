@@ -85,7 +85,8 @@ object Parametrics {
             is EmbossFeature -> if (field == "size") f.copy(depth = v) else f
             is JointFeature -> when (field) {
                 "value" -> f.copy(value = if (f.kind == JointKind.Slide) v else rad)
-                "value2" -> f.copy(value2 = v)
+                "value2" -> f.copy(value2 = if (f.kind == JointKind.Ball) rad else v)
+                "value3" -> f.copy(value3 = if (f.kind == JointKind.Ball) rad else v)
                 else -> f
             }
             is MeshEditFeature -> when (field) {

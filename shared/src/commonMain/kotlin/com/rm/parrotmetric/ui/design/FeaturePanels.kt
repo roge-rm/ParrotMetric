@@ -821,25 +821,69 @@ internal fun FaceSettings(editor: DesignEditor, d: DesignEditor.FaceDraft) {
 @Composable
 private fun JointSettings(editor: DesignEditor, d: DesignEditor.JointDraft) {
     Header("Joint", Icons.joint, Palette.modify, d.moving)
-    Segmented(listOf("Rigid", "Turn", "Slide", "Both"), d.kind.ordinal) {
+    Segmented(listOf("Rigid", "Turn", "Slide", "Both", "Planar", "Ball"), d.kind.ordinal) {
         d.kind = com.rm.parrotmetric.design.JointKind.entries[it]
         d.value = 0.0
+        d.value2 = 0.0
+        d.value3 = 0.0
         d.exprs.remove("value")
+        d.exprs.remove("value2")
+        d.exprs.remove("value3")
         editor.draftChanged()
     }
+    val ball = d.kind == com.rm.parrotmetric.design.JointKind.Ball
     // How far it's moved first, as that's what's changed most.
     if (d.kind != com.rm.parrotmetric.design.JointKind.Rigid) {
-        val turnLabel = if (d.turns) "Turned" else "Slid"
+        val turnLabel = if (ball) "Turned round x" else if (d.turns) "Turned" else "Slid"
         Field(editor, d, "value", turnLabel, d.value, if (d.turns) "°" else "mm", allowNegative = true) { d.value = it; editor.draftChanged() }
-        // Drag to move it.
+        // Drag to move it, as far as its limits let it.
+        val range = if (d.turns) {
+            if (d.turnLimits) minOf(d.turnMin, d.turnMax).toFloat()..maxOf(d.turnMin, d.turnMax).toFloat() else -180f..180f
+        } else {
+            if (d.slideLimits) minOf(d.slideMin, d.slideMax).toFloat()..maxOf(d.slideMin, d.slideMax).toFloat() else -100f..100f
+        }
         androidx.compose.material3.Slider(
-            value = d.value.toFloat().coerceIn(if (d.turns) -180f else -100f, if (d.turns) 180f else 100f),
+            value = d.value.toFloat().coerceIn(range),
             onValueChange = { d.value = kotlin.math.round(it).toDouble(); d.exprs.remove("value"); editor.draftChanged() },
-            valueRange = if (d.turns) -180f..180f else -100f..100f,
+            valueRange = range,
             colors = androidx.compose.material3.SliderDefaults.colors(thumbColor = Palette.mint, activeTrackColor = Palette.mint),
         )
-        if (d.kind == com.rm.parrotmetric.design.JointKind.TurnSlide) {
-            Field(editor, d, "value2", "Slid", d.value2, "mm", allowNegative = true) { d.value2 = it; editor.draftChanged() }
+        when (d.kind) {
+            com.rm.parrotmetric.design.JointKind.TurnSlide ->
+                Field(editor, d, "value2", "Slid", d.value2, "mm", allowNegative = true) { d.value2 = it; editor.draftChanged() }
+            com.rm.parrotmetric.design.JointKind.Planar -> {
+                Field(editor, d, "value2", "Slid one way", d.value2, "mm", allowNegative = true) { d.value2 = it; editor.draftChanged() }
+                Field(editor, d, "value3", "Slid the other way", d.value3, "mm", allowNegative = true) { d.value3 = it; editor.draftChanged() }
+            }
+            com.rm.parrotmetric.design.JointKind.Ball -> {
+                Field(editor, d, "value2", "Turned round y", d.value2, "°", allowNegative = true) { d.value2 = it; editor.draftChanged() }
+                Field(editor, d, "value3", "Turned round z", d.value3, "°", allowNegative = true) { d.value3 = it; editor.draftChanged() }
+            }
+            else -> {}
+        }
+        if (d.turns) {
+            Toggle("Turn limits", d.turnLimits) { d.turnLimits = it; editor.draftChanged() }
+            if (d.turnLimits) {
+                NumberRow("Lowest", d.turnMin, "°", allowNegative = true) { d.turnMin = it; editor.draftChanged() }
+                NumberRow("Highest", d.turnMax, "°", allowNegative = true) { d.turnMax = it; editor.draftChanged() }
+            }
+        }
+        if (d.slides) {
+            Toggle("Slide limits", d.slideLimits) { d.slideLimits = it; editor.draftChanged() }
+            if (d.slideLimits) {
+                NumberRow("Lowest", d.slideMin, "mm", allowNegative = true) { d.slideMin = it; editor.draftChanged() }
+                NumberRow("Highest", d.slideMax, "mm", allowNegative = true) { d.slideMax = it; editor.draftChanged() }
+            }
+        }
+        val leaders = d.leaders()
+        if (d.kind == com.rm.parrotmetric.design.JointKind.Turn && leaders.isNotEmpty()) {
+            Text("Geared to", fontSize = 13.sp, color = Palette.muted)
+            val ids = listOf<Int?>(null) + leaders.map { it.second }
+            Segmented(listOf("None") + leaders.map { it.first }, ids.indexOf(d.linkedTo).coerceAtLeast(0)) { d.linkedTo = ids[it]; editor.draftChanged() }
+            if (d.linkedTo != null) {
+                Toggle("Ratio from the teeth", d.ratio == null) { d.ratio = if (it) null else -1.0; editor.draftChanged() }
+                d.ratio?.let { r -> NumberRow("Ratio", r, "", allowNegative = true) { d.ratio = it; editor.draftChanged() } }
+            }
         }
     }
     val comps = editor.components()
@@ -850,11 +894,18 @@ private fun JointSettings(editor: DesignEditor, d: DesignEditor.JointDraft) {
     Segmented(others.map { it ?: "In place" }, others.indexOf(d.fixed).coerceAtLeast(0)) { d.fixed = others[it]; editor.draftChanged() }
     if (d.kind == com.rm.parrotmetric.design.JointKind.Rigid) return
     if (d.edge != null || d.face != null) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(if (d.edge != null) "Round the edge picked" else "Round the face picked", Modifier.weight(1f), fontSize = 14.sp, color = Palette.text)
-            androidx.compose.material3.TextButton(onClick = { d.edge = null; d.face = null; editor.draftChanged() }) { Text("Use an axis", color = Palette.mint) }
+        val where = when (d.kind) {
+            com.rm.parrotmetric.design.JointKind.Planar -> "On the face picked"
+            com.rm.parrotmetric.design.JointKind.Ball -> if (d.edge != null) "About the edge picked" else "About the face picked"
+            else -> if (d.edge != null) "Round the edge picked" else "Round the face picked"
         }
-    } else AxisRow("Round", d.axis, false) { d.axis = it!!; editor.draftChanged() }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(where, Modifier.weight(1f), fontSize = 14.sp, color = Palette.text)
+            androidx.compose.material3.TextButton(onClick = { d.edge = null; d.face = null; editor.draftChanged() }) {
+                Text(if (ball) "Use the origin" else "Use an axis", color = Palette.mint)
+            }
+        }
+    } else if (!ball) AxisRow(if (d.kind == com.rm.parrotmetric.design.JointKind.Planar) "Square to" else "Round", d.axis, false) { d.axis = it!!; editor.draftChanged() }
 }
 
 @Composable

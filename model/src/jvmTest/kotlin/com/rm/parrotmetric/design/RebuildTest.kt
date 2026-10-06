@@ -114,9 +114,12 @@ private class FakeKernel : Kernel {
     override fun shell(id: Int, body: Long, open: List<String>, thickness: Double) = make(bodies.getValue(body))
     override fun draft(id: Int, body: Long, faces: List<String>, neutral: String, angle: Double) = make(bodies.getValue(body))
 
+    val matrices = mutableListOf<DoubleArray>()
+
     /** Moves along x by the matrix's x translation, or mirrors when the first entry is negative. */
     override fun transform(id: Int, body: Long, m: DoubleArray, tag: String): Long {
         calls += "transform $id $tag"
+        matrices += m
         val b = bodies.getValue(body)
         return if (m[0] < 0) make(Box(m[3] - b.to, m[3] - b.from, b.faces)) else make(Box(b.from + m[3], b.to + m[3], b.faces))
     }
@@ -826,5 +829,91 @@ class RebuildTest {
         assertEquals(40.0, k.bodies.getValue(again.bodies[2].handle).from)
         r.clear()
         assertTrue(k.bodies.isEmpty())
+    }
+
+    /** Where a matrix takes a point. */
+    private fun DoubleArray.at(p: Vec3) = Vec3(
+        this[0] * p.x + this[1] * p.y + this[2] * p.z + this[3],
+        this[4] * p.x + this[5] * p.y + this[6] * p.z + this[7],
+        this[8] * p.x + this[9] * p.y + this[10] * p.z + this[11],
+    )
+
+    private fun assertNear(want: Vec3, got: Vec3) =
+        assertTrue((want - got).let { it.dot(it) } < 1e-18, "wanted $want, got $got")
+
+    @Test
+    fun eachKindOfJointMovesAsItShould() {
+        val p = Vec3(10.0, 0.0, 0.0)
+        val z = Vec3(0.0, 0.0, 1.0)
+        fun joint(kind: JointKind, a: Double = 0.0, b: Double = 0.0, c: Double = 0.0) = JointFeature(1, "J", kind, "A", null, value = a, value2 = b, value3 = c)
+        val pt = Vec3(11.0, 0.0, 0.0)
+        assertNear(pt, jointMatrix(joint(JointKind.Rigid), p, z, 0.0).at(pt))
+        // A quarter turn round the axis through p.
+        assertNear(Vec3(10.0, 1.0, 0.0), jointMatrix(joint(JointKind.Turn), p, z, PI / 2).at(pt))
+        assertNear(Vec3(11.0, 0.0, 5.0), jointMatrix(joint(JointKind.Slide, 5.0), p, z, 0.0).at(pt))
+        assertNear(Vec3(10.0, 1.0, 3.0), jointMatrix(joint(JointKind.TurnSlide, PI / 2, 3.0), p, z, PI / 2).at(pt))
+        // Planar on a face facing up: turned round its normal, then slid along x and y.
+        assertNear(Vec3(12.0, 4.0, 0.0), jointMatrix(joint(JointKind.Planar, PI / 2, 2.0, 3.0), p, z, PI / 2).at(pt))
+        // Ball: a quarter turn round y about p takes a point on x down to -z.
+        assertNear(Vec3(10.0, 0.0, -1.0), jointMatrix(joint(JointKind.Ball, 0.0, PI / 2, 0.0), p, z, 0.0).at(pt))
+        // Then round z: the three angles go x, y, z in turn.
+        assertNear(Vec3(10.0, 0.0, -1.0), jointMatrix(joint(JointKind.Ball, 0.0, PI / 2, PI / 2), p, z, 0.0).at(pt))
+        assertNear(Vec3(10.0, 1.0, 0.0), jointMatrix(joint(JointKind.Ball, PI / 2, 0.0, PI / 2), p, z, 0.0).at(pt))
+        // Planar's directions across a face facing x are y and z.
+        assertEquals(Vec3(0.0, 1.0, 0.0) to Vec3(0.0, 0.0, 1.0), across(Vec3(1.0, 0.0, 0.0)))
+    }
+
+    @Test
+    fun jointLimitsStopTheMove() {
+        val pt = Vec3(1.0, 0.0, 0.0)
+        val z = Vec3(0.0, 0.0, 1.0)
+        val o = Vec3(0.0, 0.0, 0.0)
+        val turn = JointFeature(1, "J", JointKind.Turn, "A", null, value = PI, turnMin = -PI / 2, turnMax = PI / 2)
+        assertEquals(PI / 2, turn.turnWithin(turn.value))
+        assertEquals(-PI / 2, turn.turnWithin(-PI))
+        val ball = JointFeature(1, "J", JointKind.Ball, "A", null, value3 = PI, turnMax = PI / 2)
+        assertNear(Vec3(0.0, 1.0, 0.0), jointMatrix(ball, o, z, 0.0).at(pt))
+        val planar = JointFeature(1, "J", JointKind.Planar, "A", null, value2 = -20.0, value3 = 20.0, slideMin = -5.0, slideMax = 5.0)
+        assertNear(Vec3(-4.0, 5.0, 0.0), jointMatrix(planar, o, z, 0.0).at(pt))
+
+        // Through a rebuild: a slide of 50 held to 8.
+        val k = FakeKernel()
+        val d = Design()
+        extrude(d, sketchAt(d, 0.0, 10.0), Operation.NewBody)
+        extrude(d, sketchAt(d, 20.0, 10.0), Operation.NewBody)
+        d.add(JointFeature(d.newId(), "Slide", JointKind.Slide, "Lid", "Base", axis = Axis3.X, value = 50.0, slideMax = 8.0))
+        val built = Rebuilder(k).rebuild(d.active, components = mapOf("Body 1" to "Base", "Body 2" to "Lid"))
+        assertTrue(built.errors.isEmpty(), built.errors.toString())
+        assertEquals(28.0, k.bodies.getValue(built.bodies[1].handle).from)
+    }
+
+    @Test
+    fun aGearedJointTurnsWithTheOneItFollows() {
+        val top = PlaneRef.Fixed(SketchPlane.Top)
+        val comps = mapOf("Body 1" to "Small", "Body 2" to "Big")
+        fun build(follower: JointFeature): Pair<Built, FakeKernel> {
+            val k = FakeKernel()
+            val d = Design()
+            d.add(GearFeature(d.newId(), "Gear 1", top, 0.0, 0.0, 1.0, 20, 5.0))
+            d.add(GearFeature(d.newId(), "Gear 2", top, 25.0, 0.0, 1.0, 30, 5.0))
+            val lead = JointFeature(d.newId(), "Drive", JointKind.Turn, "Small", null, value = 0.6)
+            d.add(lead)
+            d.add(follower.copy(id = d.newId(), linkedTo = lead.id))
+            return Rebuilder(k).rebuild(d.active, components = comps) to k
+        }
+        fun angle(m: DoubleArray) = kotlin.math.atan2(m[4], m[0])
+        val follower = JointFeature(0, "Driven", JointKind.Turn, "Big", null)
+        // 20 teeth over 30, the other way.
+        val (built, k) = build(follower)
+        assertTrue(built.errors.isEmpty(), built.errors.toString())
+        assertEquals(-0.4, angle(k.matrices.last()), 1e-12)
+        // Its own turn adds on, and its limits still hold.
+        assertEquals(-0.3, angle(build(follower.copy(value = 0.1)).second.matrices.last()), 1e-12)
+        assertEquals(-0.35, angle(build(follower.copy(turnMin = -0.35)).second.matrices.last()), 1e-12)
+        // A ratio given is used as it is.
+        assertEquals(1.2, angle(build(follower.copy(ratio = 2.0)).second.matrices.last()), 1e-12)
+        // Only Turn joints gear together.
+        val slid = build(follower.copy(kind = JointKind.Slide)).first
+        assertEquals(1, slid.errors.size)
     }
 }

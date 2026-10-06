@@ -210,7 +210,9 @@ object DesignFile {
             is DeleteFaceFeature -> mapOf("type" to "deleteFace", "faces" to f.faces)
             is JointFeature -> mapOf(
                 "type" to "joint", "kind" to f.kind.name, "moving" to f.moving, "fixed" to f.fixed, "edge" to f.edge, "face" to f.face,
-                "axisFeature" to f.axisFeature, "axis" to f.axis.name, "value" to f.value, "value2" to f.value2,
+                "axisFeature" to f.axisFeature, "axis" to f.axis.name, "value" to f.value, "value2" to f.value2, "value3" to f.value3,
+                "turnMin" to f.turnMin, "turnMax" to f.turnMax, "slideMin" to f.slideMin, "slideMax" to f.slideMax,
+                "linkedTo" to f.linkedTo, "ratio" to f.ratio,
             )
             is EmbossFeature -> mapOf(
                 "type" to "emboss", "sketch" to f.sketchId, "regions" to writeRegions(f.regions), "face" to f.face, "depth" to f.depth, "sink" to f.sink,
@@ -341,6 +343,9 @@ object DesignFile {
             "joint" -> JointFeature(
                 id, name, JointKind.valueOf(o.str("kind")), o.str("moving"), (o["fixed"] as? Json.Str)?.value, (o["edge"] as? Json.Str)?.value,
                 (o["face"] as? Json.Str)?.value, (o["axisFeature"] as? Json.Num)?.value?.toInt(), Axis3.valueOf(o.str("axis")), o.num("value"), o.num("value2"),
+                o.numOr("value3", 0.0), (o["turnMin"] as? Json.Num)?.value, (o["turnMax"] as? Json.Num)?.value,
+                (o["slideMin"] as? Json.Num)?.value, (o["slideMax"] as? Json.Num)?.value,
+                (o["linkedTo"] as? Json.Num)?.value?.toInt(), (o["ratio"] as? Json.Num)?.value,
             )
             "emboss" -> EmbossFeature(id, name, o.int("sketch"), readRegions(o.arr("regions")), o.str("face"), o.num("depth"), o.bool("sink"))
             "patch" -> PatchFeature(id, name, (o["sketch"] as? Json.Num)?.value?.toInt(), readRegions(o.arr("regions")), strings(o.arr("edges")))

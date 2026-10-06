@@ -108,6 +108,13 @@ class DesignFileTest {
             com.rm.parrotmetric.design.StitchFeature(d.newId(), "Stitch", listOf("Body 1", "Body 2")),
             com.rm.parrotmetric.design.JointFeature(d.newId(), "Hinge", com.rm.parrotmetric.design.JointKind.Turn, "Lid", "Case", edge = "F1.s1|F1.end", value = 0.5),
             com.rm.parrotmetric.design.JointFeature(d.newId(), "Held", com.rm.parrotmetric.design.JointKind.Rigid, "Knob", null, axis = com.rm.parrotmetric.design.Axis3.X),
+            com.rm.parrotmetric.design.JointFeature(
+                d.newId(), "Slider", com.rm.parrotmetric.design.JointKind.Planar, "Lid", "Case", face = "F1.end", value = 0.2, value2 = 3.0, value3 = -4.0,
+                turnMin = -1.0, turnMax = 1.5, slideMin = -10.0, slideMax = 12.0,
+            ),
+            com.rm.parrotmetric.design.JointFeature(d.newId(), "Socket", com.rm.parrotmetric.design.JointKind.Ball, "Knob", "Case", value = 0.1, value2 = 0.2, value3 = 0.3),
+            com.rm.parrotmetric.design.JointFeature(d.newId(), "Driven", com.rm.parrotmetric.design.JointKind.Turn, "Knob", null, linkedTo = 3, ratio = -1.5),
+            com.rm.parrotmetric.design.JointFeature(d.newId(), "By teeth", com.rm.parrotmetric.design.JointKind.Turn, "Knob", null, linkedTo = 3),
             com.rm.parrotmetric.design.ThickenFeature(d.newId(), "Thicken", "Body 1", 1.5, true),
             com.rm.parrotmetric.design.MeshEditFeature(d.newId(), "Smooth", "Body 2", com.rm.parrotmetric.design.MeshEdit.Smooth, 40.0, 3),
             com.rm.parrotmetric.design.MeshEditFeature(d.newId(), "Hollow", "Body 2", com.rm.parrotmetric.design.MeshEdit.Hollow, 2.0),

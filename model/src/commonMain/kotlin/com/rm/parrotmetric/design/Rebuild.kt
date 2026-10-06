@@ -588,16 +588,7 @@ class Rebuilder(private val kernel: Kernel) {
                 Step(f.key(), bodies, planes, null, made)
             } else {
                 val (p, d) = jointAxis(f, bodies)
-                val turn = if (f.kind == JointKind.Slide) 0.0 else f.value
-                val slide = when (f.kind) {
-                    JointKind.Slide -> f.value
-                    JointKind.TurnSlide -> f.value2
-                    else -> 0.0
-                }
-                val m = Transforms.then(
-                    Transforms.then(Transforms.then(Transforms.translate(-p), Transforms.rotate(d, turn)), Transforms.translate(p)),
-                    Transforms.translate(d * slide),
-                )
+                val m = jointMatrix(f, p, d, jointTurn(f, bodies, all))
                 val group = rigidWith(f.moving, f.fixed, all.subList(0, all.indexOf(f).coerceAtLeast(0)))
                 val out = mutableListOf<BodyState>()
                 try {
@@ -669,7 +660,10 @@ class Rebuilder(private val kernel: Kernel) {
         else -> throw KernelException("This version can't build ${f.name}")
     }
 
-    /** A joint's axis: a point on it and its unit direction. */
+    /**
+     * A joint's axis: a point on it and its unit direction. For Planar, a
+     * point on the face and its normal; for Ball, its centre.
+     */
     private fun jointAxis(f: JointFeature, bodies: List<BodyState>): Pair<Vec3, Vec3> {
         f.axisFeature?.let { id -> return steps.firstNotNullOfOrNull { it.axes[id] } ?: throw KernelException("Its axis has been deleted") }
         // While the joint's panel is open its own result is shown, so a pick there is named
@@ -679,11 +673,40 @@ class Rebuilder(private val kernel: Kernel) {
         val picked = edge?.let { n -> ref(f, n, true, bodies).let { r -> bodies.firstNotNullOfOrNull { kernel.shapeOf(it.handle, r, true) } } }
             ?: face?.let { n -> ref(f, n, false, bodies).let { r -> bodies.firstNotNullOfOrNull { kernel.shapeOf(it.handle, r, false) } } }
         if (f.edge != null || f.face != null) {
-            if (picked == null || picked[0] > 2.0) throw KernelException("Its axis edge or face isn't there any more")
+            val shape = picked?.get(0)?.toInt()
+            when (f.kind) {
+                JointKind.Planar -> if (shape != 4) throw KernelException("Pick a flat face for it to slide on")
+                JointKind.Ball -> if (shape != 1 && shape != 3 && shape != 4) throw KernelException("Pick a ball, a round edge or a flat face for its centre")
+                else -> if (shape == null || shape > 2) throw KernelException("Its axis edge or face isn't there any more")
+            }
+            val point = Vec3(picked!![1], picked[2], picked[3])
+            if (shape == 3) return point to Vec3(0.0, 0.0, 1.0)
             val d = Vec3(picked[4], picked[5], picked[6])
-            return Vec3(picked[1], picked[2], picked[3]) to d * (1 / sqrt(d.dot(d)))
+            return point to d * (1 / sqrt(d.dot(d)))
         }
         return Vec3(0.0, 0.0, 0.0) to Transforms.unit(f.axis)
+    }
+
+    /** A joint's turn in radians: its own, plus that of the joint it's geared to times the ratio, kept within its limits. */
+    private fun jointTurn(f: JointFeature, bodies: List<BodyState>, all: List<Feature>): Double {
+        val leaderId = f.linkedTo ?: return f.turnWithin(f.value)
+        if (f.kind != JointKind.Turn) throw KernelException("Only a Turn joint can be geared to another")
+        val before = all.subList(0, all.indexOf(f).coerceAtLeast(0))
+        val leader = before.firstOrNull { it.id == leaderId } as? JointFeature ?: throw KernelException("The joint it's geared to is gone")
+        if (leader.kind != JointKind.Turn) throw KernelException("It can only be geared to a Turn joint")
+        val ratio = f.ratio ?: run {
+            val mine = gearIn(f.moving, bodies, before)
+            val theirs = gearIn(leader.moving, bodies, before)
+            if (mine == null || theirs == null) throw KernelException("Give the ratio, as these aren't both gears")
+            -theirs.teeth.toDouble() / mine.teeth
+        }
+        return f.turnWithin(f.value + ratio * jointTurn(leader, bodies, before))
+    }
+
+    /** The gear made by the Gear tool whose body is in [component], if any. */
+    private fun gearIn(component: String, bodies: List<BodyState>, before: List<Feature>): GearFeature? {
+        val faces = bodies.filter { components[it.label] == component }.flatMap { kernel.faceNames(it.handle) }
+        return before.filterIsInstance<GearFeature>().firstOrNull { g -> faces.any { it.startsWith("F${g.id}.") } }
     }
 
     /** [name] with each "[open]...)" around a part of it taken off, keeping what was inside. */
@@ -1384,6 +1407,36 @@ class Rebuilder(private val kernel: Kernel) {
         }
         return Step(f.key(), out, planes, null, made)
     }
+}
+
+/**
+ * Where a joint puts its moving component, about the point [p] and unit
+ * direction [d] (see Rebuilder.jointAxis), with [turn] its turn in radians
+ * after gearing and limits.
+ */
+internal fun jointMatrix(f: JointFeature, p: Vec3, d: Vec3, turn: Double): DoubleArray {
+    fun about(axis: Vec3, angle: Double) = Transforms.then(Transforms.then(Transforms.translate(-p), Transforms.rotate(axis, angle)), Transforms.translate(p))
+    return when (f.kind) {
+        JointKind.Rigid -> Transforms.translate(Vec3(0.0, 0.0, 0.0))
+        JointKind.Turn -> about(d, turn)
+        JointKind.Slide -> Transforms.translate(d * f.slideWithin(f.value))
+        JointKind.TurnSlide -> Transforms.then(about(d, turn), Transforms.translate(d * f.slideWithin(f.value2)))
+        JointKind.Planar -> {
+            val (u, v) = across(d)
+            Transforms.then(about(d, turn), Transforms.translate(u * f.slideWithin(f.value2) + v * f.slideWithin(f.value3)))
+        }
+        JointKind.Ball -> Transforms.then(
+            Transforms.then(about(Transforms.unit(Axis3.X), f.turnWithin(f.value)), about(Transforms.unit(Axis3.Y), f.turnWithin(f.value2))),
+            about(Transforms.unit(Axis3.Z), f.turnWithin(f.value3)),
+        )
+    }
+}
+
+/** Two unit directions square to unit [n] and each other, the first along x where it can be, as a Planar joint slides. */
+internal fun across(n: Vec3): Pair<Vec3, Vec3> {
+    val a = if (abs(n.x) < 0.9) Vec3(1.0, 0.0, 0.0) else Vec3(0.0, 1.0, 0.0)
+    val u = (a - n * a.dot(n)).let { it * (1 / sqrt(it.dot(it))) }
+    return u to n.cross(u)
 }
 
 /**

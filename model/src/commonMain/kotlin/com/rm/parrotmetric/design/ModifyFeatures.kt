@@ -76,17 +76,27 @@ data class ThickenFeature(override val id: Int, override val name: String, val b
     override fun key() = this
 }
 
-enum class JointKind { Rigid, Turn, Slide, TurnSlide }
+enum class JointKind { Rigid, Turn, Slide, TurnSlide, Planar, Ball }
 
 /**
  * Joins component [moving] to [fixed] (or to the origin when null) where
  * they are, and moves it as the joint allows: turned [value] radians round
  * the axis, slid [value] mm along it, or turned [value] and slid [value2].
- * Rigid moves nothing, but from then on the two move together.
+ * Planar turns [value] round the face's normal and slides [value2] and
+ * [value3] mm across it. Ball turns [value], [value2] and [value3] radians
+ * round x, y and z, about its centre. Rigid moves nothing, but from then on
+ * the two move together.
  *
  * The axis is a straight or round edge or a cylinder's face ([edge] or
  * [face]), a construction axis ([axisFeature]), or else [axis] through the
- * origin.
+ * origin. Planar takes a flat face, Ball a ball, round edge or flat face for
+ * its centre.
+ *
+ * Turns are kept within [turnMin] and [turnMax], slides within [slideMin]
+ * and [slideMax], where set. A Turn joint geared to an earlier one
+ * ([linkedTo]) also turns by that one's turn times [ratio]; with no ratio,
+ * that's the teeth of the gear it moves over the teeth of this one's,
+ * turning the other way.
  */
 data class JointFeature(
     override val id: Int,
@@ -100,8 +110,22 @@ data class JointFeature(
     val axis: Axis3 = Axis3.Z,
     val value: Double = 0.0,
     val value2: Double = 0.0,
+    val value3: Double = 0.0,
+    val turnMin: Double? = null,
+    val turnMax: Double? = null,
+    val slideMin: Double? = null,
+    val slideMax: Double? = null,
+    val linkedTo: Int? = null,
+    val ratio: Double? = null,
 ) : Feature() {
     override fun key() = this
+
+    /** An angle kept within the turn limits. */
+    fun turnWithin(a: Double) = within(a, turnMin, turnMax)
+    /** A distance kept within the slide limits. */
+    fun slideWithin(s: Double) = within(s, slideMin, slideMax)
+
+    private fun within(x: Double, low: Double?, high: Double?) = if (low != null && x < low) low else if (high != null && x > high) high else x
 }
 
 enum class MeshEdit { Reduce, Remesh, Smooth, Hollow }
