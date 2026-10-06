@@ -7,6 +7,8 @@
 
 Any size in a sketch or a tool can then use the names. Change a parameter and everything that uses it changes, so a box can be made bigger by changing one number.
 
+**Save as CSV** saves the table as a CSV file with each parameter's name, expression and value, to keep or change in a spreadsheet. **Read CSV** reads one back: parameters with the same name take its expression, and new names are added. A row with no expression takes its value. The first row can be a heading, and the cells can be split by commas or semicolons.
+
 ## Configurations
 
 A configuration keeps a set of parameter values and which steps are turned off, under a name. Use them for versions of a part, like a small and a large size, or with and without a lid.

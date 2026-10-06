@@ -708,6 +708,7 @@ class AppController(
 
         override fun saveAs() = files.create(state.title + ".pmet", ::writeDesign)
         override fun openFile() = files.open(::opened)
+        override fun readFile(then: (String, ByteArray?) -> Unit) = files.open(then)
         override fun handOff(to: String, request: ExportRequest) = this@AppController.handOff(to, request)
 
         override fun today() = files.today() ?: com.rm.parrotmetric.ui.drawing.DrawingState.today()
