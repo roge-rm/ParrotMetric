@@ -56,6 +56,21 @@ private fun onPageHidden(then: () -> Unit): Unit = js("""{
     window.addEventListener('pagehide', () => then());
 }""")
 
+/**
+ * Tells wheel events apart before Compose gets them: 2 a pinch on a touchpad (sent with Ctrl), 1 a
+ * touchpad's two-finger scroll (sideways, or not in whole mouse notches), 0 a mouse wheel. Deltas in
+ * view pixels. The page's own zoom on a pinch is stopped.
+ */
+private fun onWheel(then: (Int, Double, Double) -> Unit): Unit = js("""{
+    window.addEventListener('wheel', (e) => {
+        const r = window.devicePixelRatio || 1;
+        if (e.ctrlKey) { e.preventDefault(); then(2, 0, e.deltaY); return; }
+        const notches = e.wheelDeltaY !== undefined && e.wheelDeltaY !== 0 && e.wheelDeltaY % 120 === 0;
+        const touchpad = e.deltaMode === 0 && (e.deltaX !== 0 || !notches);
+        then(touchpad ? 1 : 0, -e.deltaX * r, -e.deltaY * r);
+    }, { capture: true, passive: false });
+}""")
+
 /** Asks for a file; calls back with an object holding its name and bytes. */
 private fun pickFile(then: (JsAny) -> Unit): Unit = js(
     """(() => {
@@ -253,5 +268,9 @@ private fun WebApp() {
 
 @OptIn(ExperimentalComposeUiApi::class)
 fun main() {
+    onWheel { kind, dx, dy ->
+        com.rm.parrotmetric.ui.ScrollSource.pan = if (kind == 1) androidx.compose.ui.geometry.Offset(dx.toFloat(), dy.toFloat()) else null
+        com.rm.parrotmetric.ui.ScrollSource.zoom = if (kind == 2) kotlin.math.exp(-dy * 0.01).toFloat() else null
+    }
     ComposeViewport("root") { WebApp() }
 }

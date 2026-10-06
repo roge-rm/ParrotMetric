@@ -5,8 +5,9 @@ Everything works by touch, but with a mouse and a keyboard most things are quick
 
 ## The mouse
 
-- The middle button drags the view along, and Shift and the middle button turns it. Right drag turns it too, which is handy on a touchpad.
+- The middle button drags the view along, and Shift and the middle button turns it. Right drag turns it too, and Shift and a right drag drags it along, which is handy on a touchpad.
 - The wheel zooms towards the pointer. A double middle click fits everything in view.
+- In a browser, a two-finger scroll on a touchpad drags the view along and a pinch zooms.
 - A click picks one thing in place of what was picked, and Shift or Ctrl and a click adds to it or takes away.
 - A double-click on an edge also picks the edges running on smoothly from it.
 - Dragging on empty space picks what's in a box: to the right, what's wholly inside it; to the left, anything it touches.

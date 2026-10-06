@@ -41,14 +41,25 @@ interface ViewControls {
 }
 
 /**
+ * What the browser says about the scroll being handled, set just before Compose sees it: a touchpad's
+ * two-finger scroll and a mouse wheel look alike to Compose. A pan in view pixels, or a pinch's zoom;
+ * neither for a mouse wheel.
+ */
+object ScrollSource {
+    var pan: Offset? = null
+    var zoom: Float? = null
+}
+
+/**
  * The 3D view's gestures for the desktop and browser.
  *
  * With a finger: one finger orbits, two pan and pinch to zoom, a tap selects
  * and a double tap fits the view.
  *
  * With a mouse: the middle button pans, Shift and the middle button orbits,
- * as does the right button (for trackpads), and the wheel zooms towards the
- * pointer; a double middle click fits the view. A click selects, Shift or
+ * as does the right button, with Shift panning (for touchpads), and the wheel
+ * zooms towards the pointer; in a browser a touchpad's two-finger scroll pans
+ * and a pinch zooms; a double middle click fits the view. A click selects, Shift or
  * Ctrl adding to the selection; a left drag selects with a box; a right
  * click opens the menu. [onBox] gets the box as it's dragged, then null.
  */
@@ -89,7 +100,8 @@ fun Modifier.viewGestures(controls: ViewControls, onBox: (Rect?) -> Unit = {}): 
                             else -> 1
                         }
                         adding = event.keyboardModifiers.isShiftPressed || event.keyboardModifiers.isCtrlPressed
-                        orbiting = button == 2 || (button == 3 && event.keyboardModifiers.isShiftPressed)
+                        // Shift swaps the two: right drag turns and Shift-right pans, for touchpads; middle pans and Shift-middle turns.
+                        orbiting = (button == 2) != event.keyboardModifiers.isShiftPressed
                     } else if (!mouse) {
                         // A second finger: it's a pan and pinch from here on.
                         dragging = true
@@ -164,6 +176,8 @@ fun Modifier.viewGestures(controls: ViewControls, onBox: (Rect?) -> Unit = {}): 
                 }
                 PointerEventType.Scroll -> {
                     val change = event.changes.first()
+                    ScrollSource.zoom?.let { controls.zoomAt(it, change.position.x, change.position.y); ScrollSource.zoom = null; continue }
+                    ScrollSource.pan?.let { controls.pan(it.x, it.y); ScrollSource.pan = null; continue }
                     val steps = change.scrollDelta.y
                     // Browsers give bigger steps than desktops; a notch is at most three.
                     if (steps != 0f) controls.zoomAt(1.15f.pow(-steps.coerceIn(-3f, 3f)), change.position.x, change.position.y)

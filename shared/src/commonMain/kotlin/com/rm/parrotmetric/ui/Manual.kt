@@ -297,8 +297,9 @@ object Manual {
         ManualSection("Mouse and keyboard", "Using ParrotMetric at a desk.", listOf(
             ManualBlock(ManualKind.Para, "Everything works by touch, but with a mouse and a keyboard most things are quicker."),
             ManualBlock(ManualKind.Heading, "The mouse"),
-            ManualBlock(ManualKind.Bullet, "The middle button drags the view along, and Shift and the middle button turns it. Right drag turns it too, which is handy on a touchpad."),
+            ManualBlock(ManualKind.Bullet, "The middle button drags the view along, and Shift and the middle button turns it. Right drag turns it too, and Shift and a right drag drags it along, which is handy on a touchpad."),
             ManualBlock(ManualKind.Bullet, "The wheel zooms towards the pointer. A double middle click fits everything in view."),
+            ManualBlock(ManualKind.Bullet, "In a browser, a two-finger scroll on a touchpad drags the view along and a pinch zooms."),
             ManualBlock(ManualKind.Bullet, "A click picks one thing in place of what was picked, and Shift or Ctrl and a click adds to it or takes away."),
             ManualBlock(ManualKind.Bullet, "A double-click on an edge also picks the edges running on smoothly from it."),
             ManualBlock(ManualKind.Bullet, "Dragging on empty space picks what's in a box: to the right, what's wholly inside it; to the left, anything it touches."),
