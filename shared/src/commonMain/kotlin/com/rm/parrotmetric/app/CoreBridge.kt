@@ -57,6 +57,14 @@ class CoreKernel(private val core: NativeCore) : Kernel {
         throw KernelException(e.message ?: "That couldn't be done")
     }
 
+    override fun projectView(bodies: List<Long>, towards: Vec3, right: Vec3, hidden: Boolean, fast: Double): Pair<List<ProfileCurve>, List<ProfileCurve>>? = try {
+        val d = core.projectView(bodies.toLongArray(), doubleArrayOf(towards.x, towards.y, towards.z, right.x, right.y, right.z), hidden, fast)
+        val seen = unpackCurves(d)
+        seen to unpackCurves(d.copyOfRange(1 + seen.size * 12, d.size))
+    } catch (e: RuntimeException) {
+        null
+    }
+
     override fun section(bodies: List<Long>, plane: SketchPlane): List<ProfileCurve>? =
         try { unpackCurves(core.section(bodies.toLongArray(), plane.numbers())) } catch (e: RuntimeException) { null }
 

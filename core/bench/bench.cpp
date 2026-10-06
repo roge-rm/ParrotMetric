@@ -28,6 +28,7 @@
 
 #include "display/display_mesh.h"
 #include "model/operations.h"
+#include "model/views.h"
 #include "io/exchange.h"
 #include "mesh/mesh_body.h"
 #include "mesh/repair.h"
@@ -141,6 +142,18 @@ int main(int argc, char** argv) {
         double tKnurlDisplay = best(1, [&] { BRepTools::Clean(knurled.shape); pm::Solid::fromShape(knurled.shape).display({0.05, 0.3}); });
         std::printf("%-34s %9.1f\n", "knob: 24 crossed grooves", tKnurl);
         std::printf("%-34s %9.1f\n", "knob: display at medium", tKnurlDisplay);
+        // A drawing's four views: front, top, right and isometric, with hidden lines.
+        const gp_Dir sides[4][2] = {{gp_Dir(0, -1, 0), gp::DX()}, {gp::DZ(), gp::DX()}, {gp::DX(), gp::DY()}, {gp_Dir(1, -1, 1), gp_Dir(1, 1, 0)}};
+        auto four = [&](const pm::NamedShape& s, double fast) {
+            return best(1, [&] {
+                for (const auto& v : sides) {
+                    if (fast > 0) pm::projectViewFast({s.shape}, v[0], v[1], true, fast);
+                    else pm::projectView({s.shape}, v[0], v[1], true);
+                }
+            });
+        };
+        std::printf("%-34s %9.1f\n", "drawing: box, 4 views exact", four(vented, 0));
+        std::printf("%-34s %9.1f\n", "drawing: knob, 4 views from triangles", four(knurled, 0.05));
         return 0;
     }
 

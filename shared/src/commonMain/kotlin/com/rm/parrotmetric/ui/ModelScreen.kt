@@ -138,6 +138,10 @@ interface ModelActions {
     fun saveAs()
     fun openFile()
     fun export(request: com.rm.parrotmetric.ui.design.ExportRequest)
+    /** Asks where to save a file named [name], then writes what [bytes] makes, off the main thread. */
+    fun saveFile(name: String, bytes: () -> ByteArray) {}
+    /** Today, year-month-day, for a drawing's title block. */
+    fun today(): String = com.rm.parrotmetric.ui.drawing.DrawingState.today()
     /** Hands the bodies to an app such as a slicer, one of [ModelState.handOffs]. */
     fun handOff(to: String, request: com.rm.parrotmetric.ui.design.ExportRequest) {}
     fun clearSelection()
@@ -382,6 +386,10 @@ fun ModelScreen(
             }
             if (state.screen == AppScreen.Help) {
                 Box(Modifier.fillMaxSize().then(refocus)) { HelpScreen(actions::closeSettings) }
+                return@BoxWithConstraints
+            }
+            if (state.screen == AppScreen.Drawing) {
+                com.rm.parrotmetric.ui.drawing.DrawingScreen(design, state.title, actions)
                 return@BoxWithConstraints
             }
             androidx.compose.runtime.CompositionLocalProvider(LocalFieldChain provides chain, LocalKeyboard provides keyboard) {

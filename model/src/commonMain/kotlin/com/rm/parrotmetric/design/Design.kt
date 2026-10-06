@@ -36,6 +36,9 @@ class Design {
     /** A named version of the design: its parameters' expressions and which features are off. */
     data class Configuration(val name: String, val parameters: Map<String, String>, val suppressed: Set<Int>)
 
+    /** The design's drawing sheet, if it has one. */
+    var drawing: com.rm.parrotmetric.drawing.Drawing? = null
+
     /** The design's configurations, and the one in use, if any. */
     val configurations = mutableListOf<Configuration>()
     var configuration: String? = null
@@ -89,6 +92,7 @@ class Design {
         configurations: List<Configuration> = emptyList(), configuration: String? = null,
         hiddenPlanes: Set<Int> = emptySet(),
     ) {
+        drawing = null
         this.hiddenPlanes.clear()
         this.hiddenPlanes += hiddenPlanes
         this.configurations.clear()
@@ -155,6 +159,7 @@ class Design {
         internal val configurations: List<Configuration> = emptyList(),
         internal val configuration: String? = null,
         internal val hiddenPlanes: Set<Int> = emptySet(),
+        internal val drawing: com.rm.parrotmetric.drawing.Drawing? = null,
     )
 
     fun snapshot() = Snapshot(
@@ -169,6 +174,7 @@ class Design {
         configurations.toList(),
         configuration,
         hiddenPlanes.toSet(),
+        drawing,
     )
 
     fun restore(s: Snapshot) {
@@ -191,5 +197,6 @@ class Design {
         configurations.clear()
         configurations += s.configurations
         configuration = s.configuration
+        drawing = s.drawing
     }
 }

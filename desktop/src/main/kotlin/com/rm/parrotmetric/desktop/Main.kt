@@ -99,6 +99,7 @@ private class DesktopFiles(private val data: File) : PlatformFiles {
     private val autosave get() = File(data, "autosave.pmet")
     private val settings get() = File(data, "settings.txt")
     override fun readSettings() = settings.takeIf { it.exists() }?.readText()
+    override fun today(): String = java.time.LocalDate.now().toString()
     override suspend fun writeSettings(text: String) {
         LocalFile(settings).write(text.encodeToByteArray())
     }

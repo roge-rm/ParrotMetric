@@ -82,6 +82,8 @@ object Icons {
     val axis = stroke("axis", "M4 20L20 4", "M8 20h-4v-4")
     val point = stroke("point", circle(12f, 12f, 3f), "M12 3v3M12 18v3M3 12h3M18 12h3")
     val measure = stroke("measure", "M4 20L20 4", "M4 16v4h4M16 4h4v4")
+    /** A sheet with a view and a title block. */
+    val drawing = stroke("drawing", "M3 5h18v14H3z", "M13 15h8", "M13 15v4", "M6 8h5v4H6z", "M14 8h4")
     val section = stroke("section", "M3 12h18", "M12 3a9 9 0 0 1 9 9H3a9 9 0 0 1 9-9z")
     // Sketch tools.
     val select = stroke("select", "M5 3l13 8-6 1.5L9 19z")

@@ -40,6 +40,7 @@
 #include "mesh/repair.h"
 #include "mesh/stl.h"
 #include "model/operations.h"
+#include "model/views.h"
 #include "model/store.h"
 #include "render/picture.h"
 #include "render/renderer.h"
@@ -1169,6 +1170,40 @@ JNIEXPORT jdoubleArray JNICALL Java_com_rm_parrotmetric_Core_bodyCentre(JNIEnv* 
 }
 
 /** Where bodies cross a plane (nine numbers), as sketch curves packed as for faceOutline. */
+/**
+ * A drawing's view of the solid bodies: view is the direction towards the viewer then the view's
+ * x direction. Seen curves after a count, then hidden ones the same way, 12 numbers each.
+ */
+JNIEXPORT jdoubleArray JNICALL Java_com_rm_parrotmetric_Core_projectView(JNIEnv* env, jobject, jlongArray handles, jdoubleArray view, jboolean hidden, jdouble fast) {
+    try {
+        auto v = doubles(env, view);
+        std::vector<TopoDS_Shape> shapes;
+        {
+            std::lock_guard<std::mutex> g(lock);
+            for (jlong h : longs(env, handles)) {
+                pm::Body b = store.get(h);
+                if (b.solid) shapes.push_back(b.solid->shape);
+            }
+        }
+        // fast: the tolerance to work from triangles at, 0 for the exact way, below 0 to choose: the
+        // exact way takes minutes on threads and knurls, so shapes like those are worked out from triangles.
+        if (fast < 0) fast = pm::viewEffort(shapes) > 600 ? 0.05 : 0;
+        pm::ProjectedView pv = fast > 0 ? pm::projectViewFast(shapes, gp_Dir(v[0], v[1], v[2]), gp_Dir(v[3], v[4], v[5]), hidden, fast)
+                                        : pm::projectView(shapes, gp_Dir(v[0], v[1], v[2]), gp_Dir(v[3], v[4], v[5]), hidden);
+        std::vector<double> out;
+        for (const auto* list : {&pv.visible, &pv.hidden}) {
+            out.push_back(double(list->size()));
+            for (const auto& c : *list) out.insert(out.end(), {double(c.kind), c.x1, c.y1, c.x2, c.y2, c.r, c.a0, c.a1, 0, 0, 0, 0});
+        }
+        jdoubleArray result = env->NewDoubleArray(jsize(out.size()));
+        env->SetDoubleArrayRegion(result, 0, jsize(out.size()), out.data());
+        return result;
+    } catch (const std::exception& e) {
+        fail(env, e.what());
+        return nullptr;
+    }
+}
+
 JNIEXPORT jdoubleArray JNICALL Java_com_rm_parrotmetric_Core_section(JNIEnv* env, jobject, jlongArray handles, jdoubleArray plane) {
     try {
         auto p = doubles(env, plane);

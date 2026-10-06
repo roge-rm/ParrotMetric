@@ -49,6 +49,7 @@ class AppHolder : ViewModel() {
         override fun readAutosave() = current.readAutosave()
         override suspend fun writeAutosave(text: String) = current.writeAutosave(text)
         override fun readSettings() = current.readSettings()
+        override fun today() = current.today()
         override suspend fun writeSettings(text: String) = current.writeSettings(text)
         override fun chooseFolder(then: (String?) -> Unit) = current.chooseFolder(then)
         override val hasFolders get() = true
@@ -127,6 +128,7 @@ class MainActivity : ComponentActivity() {
 
         private val settings get() = java.io.File(filesDir, "settings.txt")
         override fun readSettings() = settings.takeIf { it.exists() }?.readText()
+        override fun today(): String = java.time.LocalDate.now().toString()
         override suspend fun writeSettings(text: String) = withContext(Dispatchers.IO) { settings.writeText(text) }
 
         override suspend fun writeAutosave(text: String) = withContext(Dispatchers.IO) {

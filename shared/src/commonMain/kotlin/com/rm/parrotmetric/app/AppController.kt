@@ -42,6 +42,8 @@ interface PlatformFiles {
     suspend fun writeAutosave(text: String)
     /** The app's settings as "key=value" lines, or null if none are saved yet. */
     fun readSettings(): String?
+    /** Today here, as year-month-day; null to go by UTC. */
+    fun today(): String? = null
     suspend fun writeSettings(text: String)
 
     /** Asks for a projects folder; calls back on the main thread with a token for it, or null. Null here means there's no such thing. */
@@ -634,6 +636,19 @@ class AppController(
         override fun saveAs() = files.create(state.title + ".pmet", ::writeDesign)
         override fun openFile() = files.open(::opened)
         override fun handOff(to: String, request: ExportRequest) = this@AppController.handOff(to, request)
+
+        override fun today() = files.today() ?: com.rm.parrotmetric.ui.drawing.DrawingState.today()
+
+        override fun saveFile(name: String, bytes: () -> ByteArray) = files.create(name) { sink ->
+            scope.launch {
+                val error = try {
+                    if (sink.write(withContext(Dispatchers.Default) { bytes() })) null else "Couldn't write the file"
+                } catch (e: RuntimeException) {
+                    e.message ?: "Couldn't save"
+                }
+                design.message = error ?: "Saved ${sink.name}"
+            }
+        }
 
         override fun export(request: ExportRequest) =
             files.create(state.title + "." + FileFormat.forLabel(request.format).extensions.first()) { export(request, it) }

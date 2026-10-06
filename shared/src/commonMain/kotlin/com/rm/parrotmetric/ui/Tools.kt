@@ -124,6 +124,7 @@ object Tools {
         },
         ToolDef("interference", "Interference", Icons.interference, ToolGroup.Inspect) { it.openSheet("interference") },
         ToolDef("parameters", "Parameters", Icons.parameters, ToolGroup.Inspect) { it.openSheet("parameters") },
+        ToolDef("drawing", "Drawing", Icons.drawing, ToolGroup.Inspect, key = "Shift+W") { it.actions.showScreen(AppScreen.Drawing) },
     )
 
     fun byId(id: String) = all.firstOrNull { it.id == id }

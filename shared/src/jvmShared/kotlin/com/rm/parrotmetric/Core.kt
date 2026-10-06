@@ -66,6 +66,7 @@ object Core : NativeCore {
     override external fun properties(body: Long): DoubleArray
     /** Where bodies cross a plane, as sketch curves; see jni.cpp. */
     override external fun section(bodies: LongArray, plane: DoubleArray): DoubleArray
+    override external fun projectView(bodies: LongArray, view: DoubleArray, hidden: Boolean, fast: Double): DoubleArray
     /** Middle and normal of the selected flat part of a mesh, or null. */
     override external fun selectedMeshPlane(): DoubleArray?
     override external fun retain(body: Long)

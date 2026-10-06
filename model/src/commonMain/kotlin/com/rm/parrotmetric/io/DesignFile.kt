@@ -96,6 +96,7 @@ object DesignFile {
             mapOf("name" to c.name, "parameters" to c.parameters, "suppressed" to c.suppressed.sorted())
         },
         "configuration" to design.configuration,
+        "drawing" to design.drawing?.let { DrawingFile.write(it) },
         // Only those of features still there.
         "hints" to design.hints.filterKeys { k -> design.feature(k.substringBefore(':').toIntOrNull() ?: -1) != null }
             .mapValues { it.value.toList() },
@@ -138,6 +139,7 @@ object DesignFile {
             configurations, (root["configuration"] as? Json.Str)?.value,
             (root["hiddenPlanes"] as? Json.Arr)?.items?.map { (it as Json.Num).value.toInt() }?.toSet() ?: emptySet(),
         )
+        into.drawing = (root["drawing"] as? Json.Obj)?.let { DrawingFile.read(it) }
         return (root["title"] as? Json.Str)?.value ?: "Untitled"
     }
 

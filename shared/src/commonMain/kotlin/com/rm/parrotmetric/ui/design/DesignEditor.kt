@@ -386,9 +386,39 @@ class DesignEditor(
 
     private fun changed(refit: Boolean = false) {
         version++
+        drawingVersion++
         onHistoryChanged()
         rebuild(refit = refit)
     }
+
+    // The drawing.
+
+    /** The newest rebuild's result, set while holding [lock]: its bodies stay alive until the next one. */
+    private var current: Built? = null
+
+    /** Goes up when the drawing changes. */
+    var drawingVersion by mutableIntStateOf(0)
+        private set
+
+    /** Changes the drawing ([change] gets a new one if there isn't one yet). Undo takes it back; nothing is rebuilt. */
+    fun changeDrawing(undoable: Boolean = true, change: (com.rm.parrotmetric.drawing.Drawing) -> com.rm.parrotmetric.drawing.Drawing) {
+        if (undoable) checkpoint()
+        design.drawing = change(design.drawing ?: com.rm.parrotmetric.drawing.Drawing())
+        drawingVersion++
+        onHistoryChanged()
+    }
+
+    /**
+     * How the shown solid bodies look from [side], for the drawing; null if they can't be worked out.
+     * Off the main thread, while no rebuild is using the kernel.
+     */
+    suspend fun projectView(side: com.rm.parrotmetric.drawing.ViewSide): com.rm.parrotmetric.drawing.ViewGeometry? =
+        withContext(Dispatchers.Default) {
+            lock.withLock {
+                val bodies = current?.bodies?.filter { !design.info(it.label).hidden }?.map { it.handle } ?: return@withLock null
+                kernel.projectView(bodies, side.towards, side.right, true)?.let { (seen, hidden) -> com.rm.parrotmetric.drawing.ViewGeometry(seen, hidden) }
+            }
+        }
 
     /**
      * The design as a .pmet file. A new sketch still being drawn ([drawing]:
@@ -604,6 +634,7 @@ class DesignEditor(
                 val result = withContext(Dispatchers.Default) {
                     lock.withLock {
                         val b = rebuilder.rebuild(features, hints, components)
+                        current = b
                         val sketches = sketchesToShow(features, draft)
                         val shown = sketches.mapNotNull { s -> b.sketchPlanes[s.id]?.let { s to it } }
                         val refit = refitNow || (!hadBodies && b.bodies.isNotEmpty())

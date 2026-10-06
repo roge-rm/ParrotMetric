@@ -45,6 +45,8 @@ import kotlin.coroutines.suspendCoroutine
 
 private fun glStart(): Boolean = js("globalThis.pmCore.ccall('pm_gl_start', 'number', ['string'], ['#pm-gl']) === 1")
 private fun glResize(width: Int, height: Int): Unit = js("globalThis.pmCore.ccall('pm_gl_resize', null, ['string', 'number', 'number'], ['#pm-gl', width, height])")
+/** Today in the browser's time zone, year-month-day (Sweden writes dates that way). */
+private fun localDate(): String = js("new Date().toLocaleDateString('sv-SE')")
 private fun pixelRatio(): Double = js("window.devicePixelRatio || 1")
 
 private fun storageGet(key: String): String? = js("(() => { try { return localStorage.getItem(key); } catch (e) { return null; } })()")
@@ -147,6 +149,7 @@ private object WebFiles : PlatformFiles {
     override fun readAutosave() = storageGet("parrotmetric.autosave")
     override suspend fun writeAutosave(text: String) = storageSet("parrotmetric.autosave", text)
     override fun readSettings() = storageGet("parrotmetric.settings")
+    override fun today(): String = localDate()
     override suspend fun writeSettings(text: String) = storageSet("parrotmetric.settings", text)
     override val http: Http = FetchHttp
     override val deviceName get() = "browser"

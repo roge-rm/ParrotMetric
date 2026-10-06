@@ -1173,7 +1173,19 @@ std::vector<SketchCurve> curvesOnPlane(const TopoDS_Shape& edges, const gp_Ax3& 
             out.push_back(c);
         } else {
             const int n = 24;
-            for (int i = 0; i < n; ++i) line(local(t0 + (t1 - t0) * i / n), local(t0 + (t1 - t0) * (i + 1) / n));
+            std::vector<gp_Pnt> pts;
+            for (int i = 0; i <= n; ++i) pts.push_back(local(t0 + (t1 - t0) * i / n));
+            // A curve that's straight, as a cylinder's outline seen side on, is one line.
+            gp_Vec chord(pts.front(), pts.back());
+            bool straight = chord.Magnitude() > 1e-7;
+            if (straight) {
+                gp_Dir u(chord);
+                for (const auto& p : pts) {
+                    if (gp_Vec(pts.front(), p).Crossed(gp_Vec(u)).Magnitude() > 1e-6 * std::max(1.0, chord.Magnitude())) { straight = false; break; }
+                }
+            }
+            if (straight) line(pts.front(), pts.back());
+            else for (int i = 0; i < n; ++i) line(pts[i], pts[i + 1]);
         }
     }
     return out;

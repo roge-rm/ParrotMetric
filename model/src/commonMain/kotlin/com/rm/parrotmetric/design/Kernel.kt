@@ -86,6 +86,14 @@ interface Kernel {
     fun overlapVolume(a: Long, b: Long): Double = 0.0
     /** Where bodies cross a plane, flattened onto it; null where that can't be worked out here. */
     fun section(bodies: List<Long>, plane: com.rm.parrotmetric.sketch.SketchPlane): List<com.rm.parrotmetric.sketch.ProfileCurve>? = null
+    /**
+     * A drawing's view of the solid bodies, looking back along [towards] with [right] across: the
+     * curves seen, then those hidden (only when asked), in the view's x, y, mm. Null where it can't.
+     * [fast] above 0 works from triangles at that tolerance, mm: much quicker for threads and knurls;
+     * 0 is the exact way, and below 0 lets the core choose.
+     */
+    fun projectView(bodies: List<Long>, towards: com.rm.parrotmetric.sketch.Vec3, right: com.rm.parrotmetric.sketch.Vec3, hidden: Boolean, fast: Double = -1.0):
+        Pair<List<com.rm.parrotmetric.sketch.ProfileCurve>, List<com.rm.parrotmetric.sketch.ProfileCurve>>? = null
     /** A named face's edges flattened onto a plane; null where that can't be worked out here. */
     fun faceOutline(body: Long, face: String, plane: com.rm.parrotmetric.sketch.SketchPlane): List<com.rm.parrotmetric.sketch.ProfileCurve>? = null
     /** Where a named corner of a body is (PointRef.Corner), or null if it hasn't got it. */

@@ -48,7 +48,7 @@ import androidx.compose.ui.unit.sp
 import com.rm.parrotmetric.ui.design.Segmented
 
 /** Which screen is up: the start menu, the model, or settings. */
-enum class AppScreen { Start, Model, Settings, Help }
+enum class AppScreen { Start, Model, Settings, Help, Drawing }
 
 /** How much detail curved surfaces get on screen: by the device's speed, or set. */
 enum class DisplayDetail(val label: String) {

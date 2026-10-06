@@ -81,6 +81,7 @@ interface NativeCore {
     fun properties(body: Long): DoubleArray
     /** Where bodies cross a plane, as sketch curves; see jni.cpp. */
     fun section(bodies: LongArray, plane: DoubleArray): DoubleArray
+    fun projectView(bodies: LongArray, view: DoubleArray, hidden: Boolean, fast: Double): DoubleArray
     /** Middle and normal of the selected flat part of a mesh, or null. */
     fun selectedMeshPlane(): DoubleArray?
     fun retain(body: Long)
