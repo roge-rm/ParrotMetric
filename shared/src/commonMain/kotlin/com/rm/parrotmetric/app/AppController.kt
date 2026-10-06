@@ -212,13 +212,14 @@ class AppController(
     /** Writes the design to autosave now, if one is open: when the app goes to the background or closes. */
     suspend fun saveNow() {
         autosaveJob?.cancel()
-        write()
+        write(sculpted = true)
     }
 
-    private suspend fun write() {
+    /** With [sculpted], what's being sculpted goes in too: packing it holds up drawing a moment, so not every time. */
+    private suspend fun write(sculpted: Boolean = false) {
         if (!designOpen) return
         unsaved = false
-        files.writeAutosave(autosaveContent())
+        files.writeAutosave(autosaveContent(sculpted))
         // Kept in the projects folder too, so sync apps carry each change: unless it was
         // saved to a file of its own somewhere else.
         if (folder != null && document == null) writeToFolder(quiet = true)
@@ -304,13 +305,14 @@ class AppController(
         if (!designOpen) return null
         autosaveJob?.cancel()
         unsaved = false
-        return autosaveContent()
+        return autosaveContent(sculpted = true)
     }
 
-    /** The design, with a new sketch that's still open. */
-    private fun autosaveContent(): String {
+    /** The design, with a new sketch that's still open, and with [sculpted] what's being sculpted. */
+    private fun autosaveContent(sculpted: Boolean = false): String {
         val drawing = newSketch?.let { (ref, name) -> state.sketch?.let { Triple(name, ref, it.sketch) } }
-        return design.fileText(state.title, drawing)
+        val mesh = if (sculpted && state.sculpt != null) core.sculptPack() else null
+        return design.fileText(state.title, drawing, mesh)
     }
 
     private fun opening() {

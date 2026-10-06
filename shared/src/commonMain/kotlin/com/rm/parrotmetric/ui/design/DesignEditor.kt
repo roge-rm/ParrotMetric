@@ -428,7 +428,16 @@ class DesignEditor(
      * The design as a .pmet file. A new sketch still being drawn ([drawing]:
      * its name, plane and sketch) goes in as if finished, so autosave keeps it.
      */
-    fun fileText(title: String, drawing: Triple<String, PlaneRef, Sketch>? = null): String {
+    fun fileText(title: String, drawing: Triple<String, PlaneRef, Sketch>? = null, sculpted: ByteArray? = null): String {
+        if (sculpted != null && sculpted.isNotEmpty() && sculpting != null) {
+            // As if Done were pressed, keeping the session going.
+            val before = design.snapshot()
+            val (editing, body) = sculpting!!
+            val old = editing?.let { design.feature(it) } as? com.rm.parrotmetric.design.SculptFeature
+            if (old != null) design.replace(com.rm.parrotmetric.design.SculptFeature(old.id, old.name, old.body, sculpted))
+            else design.add(com.rm.parrotmetric.design.SculptFeature(design.newId(), "Sculpt", body, sculpted))
+            return try { DesignFile.write(design, title) } finally { design.restore(before) }
+        }
         if (drawing == null || drawing.third.curves.isEmpty()) return DesignFile.write(design, title)
         val before = design.snapshot()
         design.add(SketchFeature(design.newId(), drawing.first, drawing.second, drawing.third))

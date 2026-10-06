@@ -200,3 +200,13 @@ TEST_CASE("Remeshing leaves no empty slots to draw") {
     REQUIRE(s.undo());
     CHECK(s.triangles().size() == s.triangleCount());
 }
+
+TEST_CASE("Evening out a block keeps its edges sharp") {
+    pm::Mesh box = pm::MeshBody::box(20, 20, 20).toMesh();
+    pm::Sculpt s(box);
+    s.evenOut(1.0f);
+    auto b = s.bounds();
+    // Still a 20 mm block, corners and all.
+    for (int k = 0; k < 3; ++k) CHECK_THAT(b[size_t(k) + 3] - b[size_t(k)], WithinAbs(20, 0.05));
+    CHECK_THAT(pm::volume(s.mesh()), WithinAbs(8000, 40));
+}

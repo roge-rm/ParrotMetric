@@ -97,7 +97,8 @@ fun SculptOverlay(editor: SculptEditor, actions: ModelActions) {
                                     mouse && !event.buttons.isPrimaryPressed -> Gesture.None
                                     editor.begin(
                                         change.position.x, change.position.y, pressure, smooth = shift,
-                                        inverted = event.keyboardModifiers.isCtrlPressed || event.keyboardModifiers.isMetaPressed,
+                                        // The pen's eraser end does the opposite, as Ctrl does.
+                                        inverted = event.keyboardModifiers.isCtrlPressed || event.keyboardModifiers.isMetaPressed || change.type == PointerType.Eraser,
                                     ) -> Gesture.Stroke
                                     else -> Gesture.Orbit
                                 }
@@ -166,7 +167,7 @@ fun SculptOverlay(editor: SculptEditor, actions: ModelActions) {
             }
         },
     ) {
-        val at = editor.cursor
+        val at = editor.brushAt ?: editor.cursor
         if (at != null) {
             val radius = editor.size * LocalDensity.current.density
             val colour = when {
@@ -174,9 +175,12 @@ fun SculptOverlay(editor: SculptEditor, actions: ModelActions) {
                 editor.invert -> Palette.sketch
                 else -> Palette.text
             }
+            val pointer = editor.cursor
             Canvas(Modifier.fillMaxSize()) {
                 drawCircle(colour.copy(alpha = 0.85f), radius, at, style = Stroke(1.5f * density))
                 drawCircle(colour.copy(alpha = 0.35f), radius * 0.08f + 1.5f * density, at)
+                // The string to the pointer, while the brush trails it.
+                if (pointer != null && pointer != at && editor.brushAt != null) drawLine(colour.copy(alpha = 0.4f), at, pointer, 1f * density)
             }
         }
     }
@@ -296,6 +300,15 @@ private fun MoreOptions(editor: SculptEditor) {
                         colors = SliderDefaults.colors(thumbColor = Palette.mint, activeTrackColor = Palette.mint, inactiveTrackColor = Palette.line),
                     )
                     Text("Fine", fontSize = 12.sp, color = Palette.muted)
+                }
+                Text("Steady lines", fontSize = 12.sp, color = Palette.muted)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Off", fontSize = 12.sp, color = Palette.muted)
+                    Slider(
+                        value = editor.steady, onValueChange = { editor.steady = it; editor.keep() }, modifier = Modifier.weight(1f),
+                        colors = SliderDefaults.colors(thumbColor = Palette.mint, activeTrackColor = Palette.mint, inactiveTrackColor = Palette.line),
+                    )
+                    Text("Most", fontSize = 12.sp, color = Palette.muted)
                 }
                 Toggle("Pen pressure changes strength", editor.pressureStrength) { editor.pressureStrength = it; editor.keep() }
                 Toggle("Pen pressure changes size", editor.pressureSize) { editor.pressureSize = it; editor.keep() }

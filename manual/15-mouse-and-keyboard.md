@@ -31,3 +31,11 @@ Press **?** for the list of every key, **S** to find a tool by typing its name a
 - While a size, text or pattern sheet is open, typing goes into it, not to the tools.
 - **Ctrl+Enter** finishes the sketch.
 - With **Select**, dragging on empty space picks what's in a box, the same as on the model: to the right what's wholly inside, to the left anything it touches. Hold **Shift** to add to what's picked. Double-click a curve to pick its whole outline.
+
+## Sculpting
+
+- **D** draw, **C** clay, **Shift+C** crease, **S** smooth, **F** flatten, **I** inflate, **P** pinch, **G** grab, **Shift+G** pull, **L** layer and **M** mask.
+- **[** and **]** make the brush smaller and bigger, and **X** inverts it.
+- Shift while stroking smooths, and Ctrl does the opposite of the brush.
+- **Shift+D** makes it finer all over.
+- **Ctrl+Z** undoes a stroke, and **Ctrl+Enter** is **Done**.

@@ -863,8 +863,10 @@ bool Sculpt::collapseEdge(uint32_t a, uint32_t b) {
     std::set_intersection(na.begin(), na.end(), nb.begin(), nb.end(), std::back_inserter(both));
     if (both.size() != 2) return false;
     if (vertTris_[c].size() <= 3 || vertTris_[d].size() <= 3) return false;
+    // Where they meet: halfway, or a point on a sharp edge stays where it is so the edge isn't worn away.
     float mid[3];
-    for (int k = 0; k < 3; ++k) mid[k] = (verts_[a].p[k] + verts_[b].p[k]) / 2;
+    bool sa = sharp(a), sb = sharp(b);
+    for (int k = 0; k < 3; ++k) mid[k] = sa && !sb ? verts_[a].p[k] : sb && !sa ? verts_[b].p[k] : (verts_[a].p[k] + verts_[b].p[k]) / 2;
     // No triangle may turn over.
     for (uint32_t v : {a, b})
         for (uint32_t t : vertTris_[v]) {
@@ -962,10 +964,30 @@ void Sculpt::refine(const std::vector<uint32_t>& region, float longest, float sh
     normalsAround(live);
 }
 
+bool Sculpt::sharp(uint32_t v) const {
+    // Any two triangles round it more than about 40 degrees apart.
+    const auto& around = vertTris_[v];
+    float n[16][3];
+    size_t count = std::min<size_t>(around.size(), 16);
+    for (size_t i = 0; i < count; ++i) {
+        faceNormal(around[i], n[i]);
+        normalise(n[i]);
+    }
+    for (size_t i = 0; i < count; ++i)
+        for (size_t j = i + 1; j < count; ++j)
+            if (dot(n[i], n[j]) < 0.766f) return true;
+    return false;
+}
+
 void Sculpt::relax(const std::vector<uint32_t>& region) {
     std::vector<std::array<float, 3>> goal(region.size());
     for (size_t i = 0; i < region.size(); ++i) {
         uint32_t v = region[i];
+        // Points on a sharp edge stay, or sliding would round it off.
+        if (sharp(v)) {
+            for (int k = 0; k < 3; ++k) goal[i][size_t(k)] = verts_[v].p[k];
+            continue;
+        }
         float sum[3] = {0, 0, 0};
         int count = 0;
         for (uint32_t t : vertTris_[v])

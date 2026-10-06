@@ -840,4 +840,9 @@ object WebCore : NativeCore {
         args.bytes(packed)
         return call(97, args).long()
     }
+
+    override fun sculptPack(): ByteArray {
+        val args = Args()
+        return call(98, args).bytes()!!
+    }
 }

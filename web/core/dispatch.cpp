@@ -102,6 +102,7 @@ JNIEXPORT jdoubleArray JNICALL Java_com_rm_parrotmetric_Core_sculptInfo(JNIEnv*,
 JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_sculptChange(JNIEnv*, jobject, jint, jdouble);
 JNIEXPORT jbyteArray JNICALL Java_com_rm_parrotmetric_Core_sculptFinish(JNIEnv*, jobject, jboolean);
 JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_sculptedBody(JNIEnv*, jobject, jint, jbyteArray);
+JNIEXPORT jbyteArray JNICALL Java_com_rm_parrotmetric_Core_sculptPack(JNIEnv*, jobject);
 }
 
 namespace pmweb {
@@ -918,6 +919,11 @@ void dispatch(int call, Reader& in, Writer& out, JNIEnv* env) {
             auto a0 = in.i32();
             auto a1 = in.bytes();
             auto r = Java_com_rm_parrotmetric_Core_sculptedBody(env, nullptr, a0, a1);
+            if (!failed()) out.put(r);
+            break;
+        }
+        case 98: {  // sculptPack
+            auto r = Java_com_rm_parrotmetric_Core_sculptPack(env, nullptr);
             if (!failed()) out.put(r);
             break;
         }

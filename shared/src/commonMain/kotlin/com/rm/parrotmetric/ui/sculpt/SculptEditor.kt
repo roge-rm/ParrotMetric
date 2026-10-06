@@ -57,6 +57,8 @@ class SculptEditor(
     var dynamic by mutableStateOf(remembered.dynamic)
     /** 0 coarse to 1 fine. */
     var detail by mutableFloatStateOf(remembered.detail)
+    /** How far the brush trails the pointer, 0 to 1, for smooth lines. */
+    var steady by mutableFloatStateOf(remembered.steady)
     var pressureSize by mutableStateOf(remembered.pressureSize)
     var pressureStrength by mutableStateOf(remembered.pressureStrength)
 
@@ -88,19 +90,38 @@ class SculptEditor(
             x, y, pressure.coerceIn(0.05f, 1f), b.ordinal, size * density, s, invert != inverted, mirror, dynamic, detail, pressureSize, pressureStrength,
         )
         stroking = ok
-        if (ok) redraw {}
+        if (ok) {
+            brushAt = Offset(x, y)
+            redraw {}
+        }
         return ok
     }
 
+    /** Where the brush is, which with [steady] trails the pointer. */
+    var brushAt by mutableStateOf<Offset?>(null)
+        private set
+
     fun move(x: Float, y: Float, pressure: Float) {
         if (!stroking) return
-        core.sculptMove(x, y, pressure.coerceIn(0.05f, 1f))
+        var at = Offset(x, y)
+        val from = brushAt
+        val rope = steady * 80f * density
+        if (from != null && rope > 0f) {
+            // On a string: the brush moves only once the pointer pulls it taut.
+            val d = at - from
+            val len = d.getDistance()
+            if (len <= rope) return
+            at = from + d * ((len - rope) / len)
+        }
+        brushAt = at
+        core.sculptMove(at.x, at.y, pressure.coerceIn(0.05f, 1f))
         redraw {}
     }
 
     fun end() {
         if (!stroking) return
         stroking = false
+        brushAt = null
         core.sculptEnd()
         refresh()
         redraw {}
@@ -151,7 +172,7 @@ class SculptEditor(
 
     /** The settings carry on to the next session. */
     fun keep() {
-        remembered = Settings(brush, size, strengths.toMap(), mirror, dynamic, detail, pressureSize, pressureStrength)
+        remembered = Settings(brush, size, strengths.toMap(), mirror, dynamic, detail, pressureSize, pressureStrength, steady)
     }
 
     private class Settings(
@@ -163,6 +184,7 @@ class SculptEditor(
         val detail: Float = 0.5f,
         val pressureSize: Boolean = false,
         val pressureStrength: Boolean = true,
+        val steady: Float = 0f,
     )
 
     companion object {

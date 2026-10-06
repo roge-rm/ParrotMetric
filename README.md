@@ -3,7 +3,7 @@
 ParrotMetric is a parametric 3D modeller for Android 8.1 and up.
 It also runs on Linux, on Windows and in a web browser.
 
-You draw sketches with constraints and dimensions, turn them into solids with extrude, revolve, sweep, loft and the rest, then round, cut, shell, pattern and join them into parts. Every step stays in the history, so you can go back and change an early one and everything after it rebuilds.
+You draw sketches with constraints and dimensions, turn them into solids with extrude, revolve, sweep, loft and the rest, then round, cut, shell, pattern and join them into parts. Every step stays in the history, so you can go back and change an early one and everything after it rebuilds. For organic shapes there's sculpting too.
 
 It's made for designing things to 3D print. It works by touch first, but it also has proper mouse and keyboard controls for when you're at a desk. Everything runs on the device. The only time it goes online is if you give it a WebDAV server to keep your designs on.
 
@@ -79,6 +79,13 @@ The box has rounded corners, a hollow, vents and a lid on a hinge joint, with it
 - STL, 3MF and OBJ files come in as mesh bodies and get repaired on the way in
 - Cut them, join and cut them with solids, sketch on their flat areas, and turn small ones into solids
 - Reduce, remesh and smooth
+
+### Sculpting
+
+- Sculpt any body, or start from a ball or a block, like clay
+- Draw, Clay, Crease, Smooth, Flatten, Inflate, Pinch, Grab, Pull, Layer and Mask brushes
+- Mirror across X, Y and Z, detail added under the brush as you work, steady lines and pen pressure
+- Kept as a step in the history, and exported like any mesh
 
 ### Surfaces
 

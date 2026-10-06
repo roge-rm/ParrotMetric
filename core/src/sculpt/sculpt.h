@@ -160,6 +160,8 @@ private:
     bool collapseEdge(uint32_t a, uint32_t b);
     void refine(const std::vector<uint32_t>& region, float longest, float shortest);
     void relax(const std::vector<uint32_t>& region);
+    /** On a sharp edge or corner. */
+    bool sharp(uint32_t v) const;
     uint32_t newVertex();
     uint32_t newTriangle(const std::array<uint32_t, 3>& t);
     void killTriangle(uint32_t t);

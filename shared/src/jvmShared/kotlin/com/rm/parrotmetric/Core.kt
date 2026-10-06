@@ -94,6 +94,7 @@ object Core : NativeCore {
     override external fun sculptChange(what: Int, edge: Double)
     override external fun sculptFinish(keep: Boolean): ByteArray
     override external fun sculptedBody(id: Int, packed: ByteArray): Long
+    override external fun sculptPack(): ByteArray
     /** A face's edges as sketch curves on a plane; see jni.cpp. */
     override external fun faceOutline(body: Long, face: String, plane: DoubleArray): DoubleArray
     override external fun shownTriangles(): Int

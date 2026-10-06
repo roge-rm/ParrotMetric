@@ -2250,6 +2250,17 @@ JNIEXPORT jbyteArray JNICALL Java_com_rm_parrotmetric_Core_sculptFinish(JNIEnv* 
     }
 }
 
+/** The mesh being sculpted as it is now, packed, without stopping; empty if none. */
+JNIEXPORT jbyteArray JNICALL Java_com_rm_parrotmetric_Core_sculptPack(JNIEnv* env, jobject) {
+    try {
+        std::lock_guard<std::mutex> g(lock);
+        if (!sculpt || sculpt->stroking()) return array(env, {});
+        return array(env, pm::packMesh(sculpt->mesh()));
+    } catch (const std::exception& e) {
+        return array(env, {});
+    }
+}
+
 /** A mesh body from a sculpt step's packed mesh. */
 JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_sculptedBody(JNIEnv* env, jobject, jint, jbyteArray packed) {
     try {

@@ -158,6 +158,8 @@ interface NativeCore {
     /** Stops sculpting, giving the packed mesh with [keep]. */
     fun sculptFinish(keep: Boolean): ByteArray
     fun sculptedBody(id: Int, packed: ByteArray): Long
+    /** The mesh being sculpted as it is now, packed, without stopping; empty if none. */
+    fun sculptPack(): ByteArray
 }
 
 /** File formats, by the numbers the core uses. */
