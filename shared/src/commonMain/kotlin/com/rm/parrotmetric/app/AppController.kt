@@ -544,6 +544,40 @@ class AppController(
 
         private val pages = setOf(AppScreen.Settings, AppScreen.Help)
 
+        override fun insertDesign(name: String?) {
+            if (name == null) {
+                files.open { file, bytes -> if (bytes == null) design.message = "Couldn't read the file" else insertText(file, bytes.decodeToString()) }
+                return
+            }
+            if (name == folderFile) {
+                design.message = "A design can't go in itself"
+                return
+            }
+            val f = folder ?: return
+            scope.launch {
+                val bytes = withContext(Dispatchers.Default) { runCatching { f.read(name) }.getOrNull() }
+                if (bytes == null) design.message = "Couldn't read $name" else insertText(name, bytes.decodeToString())
+            }
+        }
+
+        private fun insertText(name: String, text: String) {
+            if (runCatching { com.rm.parrotmetric.io.DesignFile.summary(text) }.getOrNull() == null) design.message = "$name isn't a design"
+            else design.insertDesign(name, text)
+        }
+
+        override fun updateLinks() {
+            scope.launch {
+                val n = bringLinksUpToDate()
+                design.message = if (n == 0) "Inserted designs are up to date" else "Brought $n up to date from their files"
+            }
+        }
+
+        /** Inserted designs read again from the projects folder; how many changed. */
+        private suspend fun bringLinksUpToDate(): Int {
+            val f = folder ?: return 0
+            return design.updateLinks { name -> withContext(Dispatchers.Default) { runCatching { f.read(name)?.decodeToString() }.getOrNull() } }
+        }
+
         override fun insertCanvas() = files.open { name, bytes ->
             if (bytes == null) design.message = "Couldn't read the file" else design.startCanvas(name, bytes)
         }
@@ -586,6 +620,7 @@ class AppController(
                     folderText = text
                     rememberLastFile()
                     opening()
+                    bringLinksUpToDate().let { n -> if (n > 0) design.message = "Brought $n inserted ${if (n == 1) "design" else "designs"} up to date" }
                 } catch (e: IllegalArgumentException) {
                     design.message = e.message
                 }

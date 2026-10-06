@@ -23,6 +23,8 @@
 #include <TopoDS_Compound.hxx>
 
 #include <algorithm>
+#include <array>
+#include <map>
 #include <atomic>
 #include <unordered_map>
 #include <cmath>
@@ -71,6 +73,8 @@ struct Shown {
 std::vector<Shown> shown;
 /** Threads drawn as a symbol, shown with the bodies from the next show(). */
 std::vector<pm::DisplayMesh> threadMarks;
+/** How far each body is drawn from where it is, mm, by handle, for exploded views. */
+std::map<jlong, std::array<float, 3>> bodyOffsets;
 std::vector<pm::Body> shownBodies;  // The bodies of the last show(), in order, for measuring.
 std::vector<pm::Pick> selection;
 std::unordered_map<int, pm::Picture> pictures;  // Canvas pictures by key, under lock.
@@ -1417,6 +1421,20 @@ JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_show(JNIEnv* env, jobject, 
         s.cornerNames = c.cornerNames;
         triangles += c.triangles;
         meshes.push_back(*c.mesh);
+        {
+            std::lock_guard<std::mutex> g(lock);
+            auto off = bodyOffsets.find(h[i]);
+            if (off != bodyOffsets.end()) {
+                auto& m = meshes.back();
+                auto shift = [&](std::vector<float>& v) {
+                    for (size_t k = 0; k + 2 < v.size(); k += 3)
+                        for (int a = 0; a < 3; ++a) v[k + a] += off->second[a];
+                };
+                shift(m.positions);
+                shift(m.corners);
+                for (auto& e : m.edges) shift(e.points);
+            }
+        }
         if (i < tints.size() && tints[i] >= 0) {
             int t = tints[i];
             meshes.back().faceColour[0] = float((t >> 16) & 255) / 255;
@@ -2392,6 +2410,16 @@ JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_threadMarks(JNIEnv* env, jo
     }
     std::lock_guard<std::mutex> g(lock);
     threadMarks = std::move(marks);
+}
+
+/** Draws these bodies moved by these offsets (x, y, z each) from the next show(), for an exploded view; others where they are. */
+JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_bodyOffsets(JNIEnv* env, jobject, jlongArray bodies, jdoubleArray offsets) {
+    auto h = longs(env, bodies);
+    auto o = doubles(env, offsets);
+    std::lock_guard<std::mutex> g(lock);
+    bodyOffsets.clear();
+    for (size_t i = 0; i < h.size() && i * 3 + 2 < o.size(); ++i)
+        bodyOffsets[h[i]] = {float(o[i * 3]), float(o[i * 3 + 1]), float(o[i * 3 + 2])};
 }
 
 JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_fastener(JNIEnv* env, jobject, jint id, jdoubleArray seat, jint kind, jdouble d, jdouble length,

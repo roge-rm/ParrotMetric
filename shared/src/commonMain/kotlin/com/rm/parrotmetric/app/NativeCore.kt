@@ -168,6 +168,8 @@ interface NativeCore {
     fun gear(id: Int, plane: DoubleArray, u: Double, v: Double, turn: Double, module: Double, teeth: Int, pressureAngle: Double, thickness: Double, helix: Double, herringbone: Boolean, bore: Double, clearance: Double): Long
     /** Threads drawn as a symbol from the next show(): a face of a body and its pitch each. */
     fun threadMarks(bodies: LongArray, faces: Array<String>, pitches: DoubleArray)
+    /** Bodies drawn moved by these offsets, x, y and z each, from the next show(), for an exploded view. */
+    fun bodyOffsets(bodies: LongArray, offsets: DoubleArray)
     /** A screw, nut or washer; see pm::fastener. */
     fun fastener(id: Int, seat: DoubleArray, kind: Int, d: Double, length: Double, head: Double, headHeight: Double, socket: Double, angle: Double): Long
 }

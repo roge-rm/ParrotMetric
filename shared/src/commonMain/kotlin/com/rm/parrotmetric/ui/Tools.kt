@@ -50,7 +50,8 @@ object Tools {
 
         ToolDef("extrude", "Extrude", Icons.extrude, ToolGroup.Create, key = "E", suggest = ::areas) { it.design.startExtrude() },
         ToolDef("revolve", "Revolve", Icons.revolve, ToolGroup.Create, key = "Shift+E", suggest = ::areas) { it.design.startRevolve() },
-        ToolDef("open", "Import", Icons.open, ToolGroup.Create) { it.actions.openFile() },
+        ToolDef("open", "Import", Icons.open, ToolGroup.Create, cluster = "Bring in") { it.actions.openFile() },
+        ToolDef("insert", "Insert a design", Icons.insertDesign, ToolGroup.Create, cluster = "Bring in") { it.openSheet("insert") },
         ToolDef("sweep", "Sweep", Icons.sweep, ToolGroup.Create, cluster = "Sweep and loft", suggest = { it.selectedAreas > 0 }) { it.design.startSweep() },
         ToolDef("loft", "Loft", Icons.loft, ToolGroup.Create, cluster = "Sweep and loft") { it.design.startLoft() },
         ToolDef("pipe", "Pipe", Icons.pipe, ToolGroup.Create, cluster = "Sweep and loft") { it.design.startPipe() },
@@ -132,6 +133,7 @@ object Tools {
         },
         ToolDef("interference", "Interference", Icons.interference, ToolGroup.Inspect) { it.openSheet("interference") },
         ToolDef("parameters", "Parameters", Icons.parameters, ToolGroup.Inspect) { it.openSheet("parameters") },
+        ToolDef("partslist", "Bill of materials", Icons.partsList, ToolGroup.Inspect) { it.openSheet("partslist") },
         ToolDef("drawing", "Drawing", Icons.drawing, ToolGroup.Inspect, key = "Shift+W") { it.actions.showScreen(AppScreen.Drawing) },
     )
 

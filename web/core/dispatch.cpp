@@ -106,6 +106,7 @@ JNIEXPORT jbyteArray JNICALL Java_com_rm_parrotmetric_Core_sculptPack(JNIEnv*, j
 JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_sculptLook(JNIEnv*, jobject, jint, jboolean);
 JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_gear(JNIEnv*, jobject, jint, jdoubleArray, jdouble, jdouble, jdouble, jdouble, jint, jdouble, jdouble, jdouble, jboolean, jdouble, jdouble);
 JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_threadMarks(JNIEnv*, jobject, jlongArray, jobjectArray, jdoubleArray);
+JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_bodyOffsets(JNIEnv*, jobject, jlongArray, jdoubleArray);
 JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_fastener(JNIEnv*, jobject, jint, jdoubleArray, jint, jdouble, jdouble, jdouble, jdouble, jdouble, jdouble);
 }
 
@@ -971,7 +972,13 @@ void dispatch(int call, Reader& in, Writer& out, JNIEnv* env) {
             Java_com_rm_parrotmetric_Core_threadMarks(env, nullptr, a0, a1, a2);
             break;
         }
-        case 102: {  // fastener
+        case 102: {  // bodyOffsets
+            auto a0 = in.longs();
+            auto a1 = in.doubles();
+            Java_com_rm_parrotmetric_Core_bodyOffsets(env, nullptr, a0, a1);
+            break;
+        }
+        case 103: {  // fastener
             auto a0 = in.i32();
             auto a1 = in.doubles();
             auto a2 = in.i32();

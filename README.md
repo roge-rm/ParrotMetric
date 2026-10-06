@@ -59,6 +59,7 @@ The box has rounded corners, a hollow, vents and a lid on a hinge joint, with it
 - Gears, straight, helical or herringbone, placed to mesh with each other
 - Box, cylinder, sphere, torus and cone, without a sketch
 - Each one can make a new body, or join, cut or intersect with what it touches
+- Insert other designs as components, kept up to date from their files, with a bill of materials and an exploded view
 
 ### Changing them
 

@@ -179,6 +179,10 @@ interface ModelActions {
     fun setDetail(detail: DisplayDetail)
     /** Asks for a picture to lay on a plane. */
     fun insertCanvas()
+    /** Builds another design into this one: from the projects folder by name, or with null one picked from the files. */
+    fun insertDesign(name: String?) {}
+    /** Brings inserted designs up to date from their files. */
+    fun updateLinks() {}
     fun quit()
     /** Opens a design from the projects folder. */
     fun openProject(name: String) {}
@@ -472,6 +476,10 @@ fun ModelScreen(
                         com.rm.parrotmetric.ui.design.PrintCheckSheet(design) { design.stopPrintCheck(); sheet = null }
                     } else if (sheet == "interference") {
                         com.rm.parrotmetric.ui.design.InterferenceSheet(design) { sheet = null }
+                    } else if (sheet == "insert") {
+                        com.rm.parrotmetric.ui.design.InsertSheet(state.projects.map { it.name }, actions::insertDesign, actions::updateLinks) { sheet = null }
+                    } else if (sheet == "partslist") {
+                        com.rm.parrotmetric.ui.design.PartsListSheet(design) { sheet = null }
                     } else if (sheet == "parameters") {
                         com.rm.parrotmetric.ui.design.ParametersSheet(design) { sheet = null }
                     } else if (sheet == "export") {
@@ -867,7 +875,7 @@ private fun ExpandedModel(
                     Message(design)
                 }
             }
-            val docked = design.panel != null || sheet in setOf("measure", "section", "printcheck", "surfacecheck", "interference", "parameters", "export")
+            val docked = design.panel != null || sheet in setOf("measure", "section", "printcheck", "surfacecheck", "interference", "parameters", "export", "insert", "partslist")
             if (docked) Box(Modifier.width(380.dp)) {
                 when {
                     design.panel != null -> FeaturePanel(design)
@@ -877,6 +885,8 @@ private fun ExpandedModel(
                     sheet == "surfacecheck" -> com.rm.parrotmetric.ui.design.SurfaceCheckSheet(design) { design.stopPrintCheck(); setSheet(null) }
                     sheet == "interference" -> com.rm.parrotmetric.ui.design.InterferenceSheet(design) { setSheet(null) }
                     sheet == "parameters" -> com.rm.parrotmetric.ui.design.ParametersSheet(design) { setSheet(null) }
+                    sheet == "insert" -> com.rm.parrotmetric.ui.design.InsertSheet(state.projects.map { it.name }, actions::insertDesign, actions::updateLinks) { setSheet(null) }
+                    sheet == "partslist" -> com.rm.parrotmetric.ui.design.PartsListSheet(design) { setSheet(null) }
                     sheet == "export" -> com.rm.parrotmetric.ui.design.ExportSheet(design, { setSheet(null) }, state.handOffs, { to, r -> actions.handOff(to, r); setSheet(null) }) { actions.export(it); setSheet(null) }
                 }
             }

@@ -228,6 +228,9 @@ object DesignFile {
                 "turns" to f.turns, "section" to f.section, "square" to f.square, "operation" to f.operation.name,
             )
             is ThreadFeature -> mapOf("type" to "thread", "face" to f.face, "pitch" to f.pitch, "clearance" to f.clearance, "symbol" to f.symbol)
+            is com.rm.parrotmetric.design.LinkFeature -> mapOf(
+                "type" to "link", "file" to f.file, "text" to f.text, "component" to f.component, "dx" to f.dx, "dy" to f.dy, "dz" to f.dz,
+            )
             is com.rm.parrotmetric.design.FastenerFeature -> mapOf(
                 "type" to "fastener", "kind" to f.kind.name, "size" to f.size, "length" to f.length, "hole" to f.hole, "otherEnd" to f.otherEnd,
                 "plane" to plane(f.plane), "u" to f.u, "v" to f.v, "modelled" to f.modelled, "clearance" to f.clearance, "operation" to f.operation.name,
@@ -347,6 +350,7 @@ object DesignFile {
                 o.bool("square"), Operation.valueOf(o.str("operation")),
             )
             "thread" -> ThreadFeature(id, name, o.str("face"), o.num("pitch"), o.numOr("clearance", 0.0), o.bool("symbol"))
+            "link" -> com.rm.parrotmetric.design.LinkFeature(id, name, o.str("file"), o.str("text"), o.str("component"), o.num("dx"), o.num("dy"), o.num("dz"))
             "fastener" -> com.rm.parrotmetric.design.FastenerFeature(
                 id, name, com.rm.parrotmetric.design.FastenerKind.valueOf(o.str("kind")), o.str("size"), o.num("length"), (o["hole"] as? Json.Str)?.value,
                 o.bool("otherEnd"), plane(o.obj("plane")), o.num("u"), o.num("v"), o.bool("modelled"), o.num("clearance"), Operation.valueOf(o.str("operation")),

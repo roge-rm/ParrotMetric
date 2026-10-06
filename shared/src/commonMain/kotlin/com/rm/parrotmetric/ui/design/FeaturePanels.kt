@@ -116,6 +116,7 @@ fun FeaturePanel(editor: DesignEditor, maxHeight: androidx.compose.ui.unit.Dp = 
                 is DesignEditor.CoilDraft -> CoilSettings(editor, d)
                 is DesignEditor.GearDraft -> GearSettings(editor, d)
                 is DesignEditor.FastenerDraft -> FastenerSettings(editor, d)
+                is DesignEditor.LinkDraft -> LinkSettings(editor, d)
                 is DesignEditor.ThreadDraft -> ThreadSettings(editor, d)
                 is DesignEditor.LipDraft -> LipSettings(editor, d)
                 is DesignEditor.LoftDraft -> LoftSettings(editor, d)
@@ -434,6 +435,15 @@ private fun ThreadSettings(editor: DesignEditor, d: DesignEditor.ThreadDraft) {
         if (d.hole) "Takes a bolt ${tenths(d.across + 1.0825 * d.pitch)} across" else "Make its nut's hole ${tenths(d.across - 1.0825 * d.pitch)} across",
         fontSize = 12.sp, color = Palette.muted,
     )
+}
+
+@Composable
+private fun LinkSettings(editor: DesignEditor, d: DesignEditor.LinkDraft) {
+    Header(d.editing.component, Icons.insertDesign, Palette.create, null)
+    Text("From ${d.editing.file}", fontSize = 13.sp, color = Palette.muted)
+    Field(editor, d, "dx", "Move x", d.dx, "mm", allowNegative = true) { d.dx = it; editor.draftChanged() }
+    Field(editor, d, "dy", "Move y", d.dy, "mm", allowNegative = true) { d.dy = it; editor.draftChanged() }
+    Field(editor, d, "dz", "Move z", d.dz, "mm", allowNegative = true) { d.dz = it; editor.draftChanged() }
 }
 
 @Composable

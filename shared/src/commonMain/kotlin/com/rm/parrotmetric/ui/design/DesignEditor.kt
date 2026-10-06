@@ -55,6 +55,8 @@ import kotlin.math.sin
 interface Viewport {
     /** Threads to draw as a symbol from the next show(): each on a body's face. */
     fun threadMarks(marks: List<Pair<Long, com.rm.parrotmetric.design.ThreadMark>>) {}
+    /** Bodies drawn moved from where they are, from the next show(), for an exploded view. */
+    fun bodyOffsets(offsets: Map<Long, Vec3>) {}
     /** Shows these bodies, these sketches with their areas pickable, and construction planes, axes and points. Clears the selection. */
     fun show(
         bodies: List<Long>, sketches: List<Pair<SketchPlane, List<ProfileCurve>>>,
@@ -162,7 +164,7 @@ class DesignEditor(
                 is SketchFeature -> HistoryEntry.Kind.Sketch
                 is ExtrudeFeature, is RevolveFeature, is com.rm.parrotmetric.design.PrimitiveFeature, is com.rm.parrotmetric.design.SweepFeature,
                 is com.rm.parrotmetric.design.PipeFeature, is com.rm.parrotmetric.design.CoilFeature, is com.rm.parrotmetric.design.LoftFeature,
-                is com.rm.parrotmetric.design.GearFeature,
+                is com.rm.parrotmetric.design.GearFeature, is com.rm.parrotmetric.design.LinkFeature,
                 is com.rm.parrotmetric.design.SculptFeature -> HistoryEntry.Kind.Create
                 is ImportFeature -> HistoryEntry.Kind.Import
                 is PlaneFeature, is AxisFeature, is PointFeature, is com.rm.parrotmetric.design.CanvasFeature -> HistoryEntry.Kind.Construct
@@ -185,6 +187,7 @@ class DesignEditor(
         is com.rm.parrotmetric.design.CoilFeature -> "coil"
         is com.rm.parrotmetric.design.GearFeature -> "gear"
         is com.rm.parrotmetric.design.FastenerFeature -> "fastener"
+        is com.rm.parrotmetric.design.LinkFeature -> "insert"
         is com.rm.parrotmetric.design.PatchFeature -> "patch"
         is com.rm.parrotmetric.design.StitchFeature -> "stitch"
         is com.rm.parrotmetric.design.ThickenFeature -> "thicken"
@@ -491,6 +494,89 @@ class DesignEditor(
         changed(refit = true)
     }
 
+    /**
+     * Builds another design into this one, from [text], its file's contents,
+     * as a new component. [file] is its name, to bring it up to date from later.
+     */
+    fun insertDesign(file: String, text: String) {
+        val title = file.removeSuffix(".pmet")
+        val taken = design.bodies.values.mapNotNull { it.component }.toSet() + design.features.filterIsInstance<com.rm.parrotmetric.design.LinkFeature>().map { it.component }
+        var component = title
+        var n = 2
+        while (component in taken) component = "$title ${n++}"
+        checkpoint()
+        design.add(com.rm.parrotmetric.design.LinkFeature(newId(), component, file, text, component))
+        changed(refit = true)
+    }
+
+    /**
+     * Brings inserted designs up to date from their files, as [read] gives
+     * them (null if one can't be read). How many changed.
+     */
+    suspend fun updateLinks(read: suspend (String) -> String?): Int {
+        val links = design.features.filterIsInstance<com.rm.parrotmetric.design.LinkFeature>()
+        if (links.isEmpty()) return 0
+        val texts = links.map { it.file }.distinct().associateWith { read(it) }
+        val changes = links.mapNotNull { l -> texts[l.file]?.takeIf { it != l.text }?.let { l.copy(text = it) } }
+        if (changes.isEmpty()) return 0
+        checkpoint()
+        changes.forEach { design.replace(it) }
+        changed()
+        return changes.size
+    }
+
+    /** How far apart components are drawn, 0 where they are. */
+    var explode by mutableStateOf(0.0)
+        private set
+
+    fun explodeBy(amount: Double) {
+        explode = amount
+        rebuild()
+    }
+
+    /**
+     * For an exploded view: each component, or body not in one, moved out
+     * from the middle of them all by [explode] times its own distance from it.
+     */
+    private fun explodeOffsets(bodies: List<com.rm.parrotmetric.design.BodyState>): Map<Long, Vec3> {
+        if (explode <= 0.0 || bodies.size < 2) return emptyMap()
+        val boxes = bodies.mapNotNull { b -> runCatching { kernel.bounds(b.handle) }.getOrNull()?.takeIf { it.size >= 6 }?.let { b to it } }
+        fun middle(list: List<DoubleArray>) = Vec3(
+            (list.minOf { it[0] } + list.maxOf { it[3] }) / 2, (list.minOf { it[1] } + list.maxOf { it[4] }) / 2, (list.minOf { it[2] } + list.maxOf { it[5] }) / 2,
+        )
+        if (boxes.isEmpty()) return emptyMap()
+        val all = middle(boxes.map { it.second })
+        val out = mutableMapOf<Long, Vec3>()
+        for ((_, group) in boxes.groupBy { (b, _) -> design.info(b.label).component ?: b.label }) {
+            val move = (middle(group.map { it.second }) - all) * explode
+            for ((b, _) in group) out[b.handle] = move
+        }
+        return out
+    }
+
+    /** A line of the parts list: what it is, how many, its size across x, y and z (mm) and volume of one (mm³). */
+    class PartLine(val name: String, val count: Int, val size: Triple<Double, Double, Double>?, val volume: Double?)
+
+    /** The parts: components, bodies not in one, and screws, nuts and washers, the same ones counted together. */
+    fun partsList(): List<PartLine> {
+        val b = built ?: return emptyList()
+        val shown = b.bodies.filter { !design.info(it.label).hidden }
+        val hardware = shown.filter { it.label in b.hardware }
+        val rest = shown - hardware.toSet()
+        // An inserted design's copies count as one part; so do components made alike from the same file.
+        val fileOf = design.features.filterIsInstance<com.rm.parrotmetric.design.LinkFeature>().associate { it.component to it.file }
+        val groups = rest.groupBy { design.info(it.label).component ?: design.nameOf(it.label) }
+        val lines = groups.entries.groupBy { (name, _) -> fileOf[name] ?: name }.map { (_, same) ->
+            val (name, members) = same.first()
+            val boxes = members.mapNotNull { m -> runCatching { kernel.bounds(m.handle) }.getOrNull()?.takeIf { it.size >= 6 } }
+            val size = if (boxes.isEmpty()) null else Triple(boxes.maxOf { it[3] } - boxes.minOf { it[0] }, boxes.maxOf { it[4] } - boxes.minOf { it[1] }, boxes.maxOf { it[5] } - boxes.minOf { it[2] })
+            val volume = members.sumOf { m -> kernel.properties(m.handle)?.getOrNull(0) ?: 0.0 }.takeIf { it > 0 }
+            PartLine(fileOf[name]?.removeSuffix(".pmet") ?: name, same.size, size, volume)
+        }
+        val fasteners = hardware.groupBy { b.hardware.getValue(it.label) }.map { (what, list) -> PartLine(what, list.size, null, null) }
+        return lines + fasteners.sortedBy { it.name }
+    }
+
     fun delete(id: Int) {
         checkpoint()
         design.remove(id)
@@ -672,6 +758,7 @@ class DesignEditor(
                         // Until the panel's picks are put back, a tap adds to them rather than starting afresh.
                         redrawing = draft != null
                         viewport.setAreasFirst(draft is LoftDraft)
+                        viewport.bodyOffsets(explodeOffsets(visible))
                         viewport.threadMarks(b.threads.mapNotNull { t -> visible.firstOrNull { t.face in kernel.faceNames(it.handle) }?.let { it.handle to t } })
                         viewport.show(
                             visible.map { it.handle }, shown.map { it.second to it.first.sketch.profileCurves() },
@@ -682,6 +769,8 @@ class DesignEditor(
                     }
                 }
                 built = result.first
+                // An inserted design's bodies go into its own component.
+                for ((l, component) in result.first.linked) if (design.info(l).component == null) design.bodies[l] = design.info(l).copy(component = component)
                 // New bodies go into the component that's taking them.
                 val labels = result.first.bodies.map { it.label }.toSet()
                 val into = activeComponent
@@ -1410,6 +1499,7 @@ class DesignEditor(
             is com.rm.parrotmetric.design.CoilFeature -> CoilDraft(f).also { it.planes = planeChoices() }
             is com.rm.parrotmetric.design.GearFeature -> GearDraft(f).also { it.planes = planeChoices() }
             is com.rm.parrotmetric.design.FastenerFeature -> FastenerDraft(f).also { it.planes = planeChoices() }
+            is com.rm.parrotmetric.design.LinkFeature -> LinkDraft(f)
             is com.rm.parrotmetric.design.ThreadFeature -> ThreadDraft(f).also { threadShape(it) }
             is com.rm.parrotmetric.design.LipFeature -> LipDraft(f).also { it.base = baseOf(f.face) }
             is com.rm.parrotmetric.design.LoftFeature -> LoftDraft(f)
@@ -1840,6 +1930,14 @@ class DesignEditor(
         )
         /** As it will be made, beside the gear it meshes with if any. */
         fun placed() = runCatching { com.rm.parrotmetric.design.meshed(feature(), design.features) }.getOrNull()
+        override fun missing() = ""
+    }
+
+    inner class LinkDraft(val editing: com.rm.parrotmetric.design.LinkFeature) : FeatureDraft() {
+        var dx by mutableStateOf(editing.dx)
+        var dy by mutableStateOf(editing.dy)
+        var dz by mutableStateOf(editing.dz)
+        override fun feature() = editing.copy(dx = dx, dy = dy, dz = dz)
         override fun missing() = ""
     }
 

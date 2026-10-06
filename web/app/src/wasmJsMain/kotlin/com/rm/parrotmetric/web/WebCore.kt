@@ -888,6 +888,13 @@ object WebCore : NativeCore {
         call(101, args)
     }
 
+    override fun bodyOffsets(bodies: LongArray, offsets: DoubleArray) {
+        val args = Args()
+        args.longs(bodies)
+        args.doubles(offsets)
+        call(102, args)
+    }
+
     override fun fastener(id: Int, seat: DoubleArray, kind: Int, d: Double, length: Double, head: Double, headHeight: Double, socket: Double, angle: Double): Long {
         val args = Args()
         args.int(id)
@@ -899,6 +906,6 @@ object WebCore : NativeCore {
         args.double(headHeight)
         args.double(socket)
         args.double(angle)
-        return call(102, args).long()
+        return call(103, args).long()
     }
 }

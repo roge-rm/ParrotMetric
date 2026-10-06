@@ -85,6 +85,7 @@ class DesignFileTest {
             com.rm.parrotmetric.design.CoilFeature(d.newId(), "Coil", top, 1.0, 2.0, 20.0, 5.0, 3.5, 2.0, true, Operation.Cut),
             com.rm.parrotmetric.design.ThreadFeature(d.newId(), "Thread", "F2.side", 1.25),
             com.rm.parrotmetric.design.ThreadFeature(d.newId(), "Drawn", "F2.side", 1.25, 0.1, symbol = true),
+            com.rm.parrotmetric.design.LinkFeature(d.newId(), "Lid", "Lid.pmet", "{\"format\":\"parrotmetric\"}", "Lid", 1.0, 2.0, 3.0),
             com.rm.parrotmetric.design.FastenerFeature(d.newId(), "Bolt", com.rm.parrotmetric.design.FastenerKind.Countersunk, "#8-32", 12.0, "F2.side", true, top, 1.0, 2.0, true, 0.2, Operation.Cut),
             com.rm.parrotmetric.design.GearFeature(d.newId(), "Gear", top, 1.0, 2.0, 1.5, 24, 6.0, 0.35, 0.3, true, 4.0, 0.15, Operation.NewBody, 0.1),
             com.rm.parrotmetric.design.GearFeature(d.newId(), "Gear 2", top, 0.0, 0.0, 1.5, 12, 6.0, meshWith = 1, around = 0.5),

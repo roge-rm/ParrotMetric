@@ -161,6 +161,12 @@ object Parametrics {
                 "v" -> f.copy(v = v)
                 else -> f
             }
+            is LinkFeature -> when (field) {
+                "dx" -> f.copy(dx = v)
+                "dy" -> f.copy(dy = v)
+                "dz" -> f.copy(dz = v)
+                else -> f
+            }
             is FastenerFeature -> when (field) {
                 "length" -> f.copy(length = v)
                 "clearance" -> f.copy(clearance = v)

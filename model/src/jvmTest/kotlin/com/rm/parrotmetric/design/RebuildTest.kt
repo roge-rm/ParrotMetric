@@ -623,6 +623,29 @@ class RebuildTest {
     }
 
     @Test
+    fun anInsertedDesignBringsItsShownBodiesIn() {
+        val k = FakeKernel()
+        val part = Design()
+        extrude(part, sketchAt(part, 0.0, 10.0), Operation.NewBody)
+        extrude(part, sketchAt(part, 20.0, 5.0), Operation.NewBody)
+        part.bodies["Body 2"] = Design.BodyInfo(hidden = true)
+        val text = com.rm.parrotmetric.io.DesignFile.write(part, "Part")
+        val d = Design()
+        extrude(d, sketchAt(d, 0.0, 10.0), Operation.NewBody)
+        val link = LinkFeature(d.newId(), "Part", "Part.pmet", text, "Part", dx = 100.0)
+        d.add(link)
+        d.add(LinkFeature(d.newId(), "Part 2", "Part.pmet", text, "Part 2"))
+        val built = Rebuilder(k).rebuild(d.active)
+        assertTrue(built.errors.isEmpty(), built.errors.toString())
+        // The hidden body stays out; each copy is a new body in its own component.
+        assertEquals(listOf("Body 1", "Body 2", "Body 3"), built.bodies.map { it.label })
+        assertEquals(mapOf("Body 2" to "Part", "Body 3" to "Part 2"), built.linked)
+        assertTrue("transform ${link.id} l0." in k.calls)
+        val broken = Rebuilder(k).rebuild(listOf(LinkFeature(9, "Bad", "Bad.pmet", "nonsense", "Bad")))
+        assertEquals("Bad.pmet can't be read", broken.errors[9])
+    }
+
+    @Test
     fun threadsCanBeOnlyDrawnAndFastenersCarryTheirs() {
         val k = FakeKernel()
         val d = Design()

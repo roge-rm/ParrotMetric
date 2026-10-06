@@ -31,6 +31,10 @@ class Built(
     val hints: Map<String, DoubleArray> = emptyMap(),
     /** Threads drawn as a symbol rather than cut. */
     val threads: List<ThreadMark> = emptyList(),
+    /** Bodies from inserted designs, by label, and the component each goes in. */
+    val linked: Map<String, String> = emptyMap(),
+    /** Screws, nuts and washers made as bodies, by label, and what each is, as "Socket cap M3 × 10". */
+    val hardware: Map<String, String> = emptyMap(),
 )
 
 /**
@@ -65,6 +69,10 @@ class Rebuilder(private val kernel: Kernel) {
         var repeats: List<Pair<Int, DoubleArray>> = emptyList()
         /** Threads it drew as a symbol. */
         var threads: List<ThreadMark> = emptyList()
+        /** Bodies it brought in from another design, by label, and their component. */
+        var linked: Map<String, String> = emptyMap()
+        /** Fasteners it made as bodies, by label, and what each is. */
+        var hardware: Map<String, String> = emptyMap()
     }
 
     private val steps = mutableListOf<Step>()
@@ -116,6 +124,8 @@ class Rebuilder(private val kernel: Kernel) {
             steps.withIndex().mapNotNull { (i, s) -> if (s.found.isNotEmpty()) features[i].id to s.found else null }.toMap(),
             this.hints.toMap(),
             steps.filter { it.error == null }.flatMap { it.threads },
+            steps.fold(emptyMap()) { m, s -> m + s.linked },
+            steps.filter { it.error == null }.fold(emptyMap()) { m, s -> m + s.hardware },
         )
     }
 
@@ -369,6 +379,7 @@ class Rebuilder(private val kernel: Kernel) {
             }
         }
         is FastenerFeature -> fastener(f, bodies, planes, made)
+        is LinkFeature -> link(f, bodies, planes, made)
         is LoftFeature -> {
             if (f.sections.size < 2) throw KernelException("Pick areas in at least two sketches")
             val sections = f.sections.map { s ->
@@ -865,6 +876,28 @@ class Rebuilder(private val kernel: Kernel) {
         return Step(f.key(), out, planes, null, made)
     }
 
+    /** Another design's shown bodies, built from its copy, moved into place as new bodies. */
+    private fun link(f: LinkFeature, bodies: List<BodyState>, planes: Map<Int, SketchPlane>, made: Int): Step {
+        val child = Design()
+        try {
+            com.rm.parrotmetric.io.DesignFile.read(f.text, child)
+        } catch (e: IllegalArgumentException) {
+            throw KernelException("${f.file} can't be read")
+        }
+        val inner = Rebuilder(kernel)
+        try {
+            val built = inner.rebuild(Parametrics.apply(child, child.built), components = child.bodies.mapNotNull { (l, i) -> i.component?.let { l to it } }.toMap())
+            val shown = built.bodies.filter { !child.info(it.label).hidden }
+            if (shown.isEmpty()) throw KernelException("${f.file} has no bodies to show")
+            val m = Transforms.translate(Vec3(f.dx, f.dy, f.dz))
+            val added = shown.mapIndexed { i, b -> BodyState("Body ${made + i + 1}", kernel.transform(f.id, b.handle, m, "l$i.")) }
+            keep(bodies)
+            return Step(f.key(), bodies + added, planes, null, made + added.size).also { s -> s.linked = added.associate { it.label to f.component } }
+        } finally {
+            inner.clear()
+        }
+    }
+
     /** A screw, nut or washer, seated in its hole or standing on its plane. */
     private fun fastener(f: FastenerFeature, bodies: List<BodyState>, planes: Map<Int, SketchPlane>, made: Int): Step {
         val size = Fasteners.size(f.size) ?: throw KernelException("There's no ${f.size}")
@@ -915,6 +948,10 @@ class Rebuilder(private val kernel: Kernel) {
         }
         val step = applyTool(f, tool, f.operation, bodies, planes, made)
         if (!threaded && f.kind != FastenerKind.Washer && f.operation != Operation.Cut) step.threads = listOf(ThreadMark("F${f.id}.thread", size.pitch))
+        if (f.operation == Operation.NewBody) {
+            val what = "${f.kind.label} ${size.name}" + if (f.kind.screw) " × ${f.length.toString().removeSuffix(".0")}" else ""
+            step.hardware = (step.bodies.map { it.label } - bodies.map { it.label }.toSet()).associateWith { what }
+        }
         return step
     }
 

@@ -226,6 +226,8 @@ class CoreViewport(private val core: NativeCore, private val gl: (() -> Unit) ->
 
     override fun threadMarks(marks: List<Pair<Long, com.rm.parrotmetric.design.ThreadMark>>) =
         core.threadMarks(marks.map { it.first }.toLongArray(), marks.map { it.second.face }.toTypedArray(), marks.map { it.second.pitch }.toDoubleArray())
+    override fun bodyOffsets(offsets: Map<Long, com.rm.parrotmetric.sketch.Vec3>) =
+        core.bodyOffsets(offsets.keys.toLongArray(), offsets.values.flatMap { listOf(it.x, it.y, it.z) }.toDoubleArray())
     override fun canvasImage(key: Int, bytes: ByteArray) = core.canvasImage(key, bytes)
     override fun selectedPlanes() = core.selectedPlanes().toList()
     override fun measure() = core.measure().toList()

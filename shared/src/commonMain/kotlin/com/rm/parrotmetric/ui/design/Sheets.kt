@@ -21,6 +21,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -472,5 +473,51 @@ fun SectionSheet(editor: DesignEditor, close: () -> Unit) {
             colors = androidx.compose.material3.SliderDefaults.colors(thumbColor = Palette.mint, activeTrackColor = Palette.mint),
         )
         Toggle("Keep the other side", editor.sectionFlip) { editor.sectionFlip = it; editor.updateSection() }
+    }
+}
+
+/** Designs in the projects folder to build into this one, or one picked from the files. */
+@Composable
+fun InsertSheet(projects: List<String>, pick: (String?) -> Unit, update: () -> Unit, close: () -> Unit) {
+    SheetFrame("Insert a design", close) {
+        for (p in projects) {
+            Surface(onClick = { pick(p); close() }, shape = RoundedCornerShape(14.dp), color = Palette.ground, contentColor = Palette.text, modifier = Modifier.fillMaxWidth()) {
+                Text(p.removeSuffix(".pmet"), Modifier.padding(horizontal = 14.dp, vertical = 11.dp), fontSize = 15.sp)
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TextButton(onClick = { pick(null); close() }) { Text("From a file…", color = Palette.mint) }
+            TextButton(onClick = { update(); close() }) { Text("Update inserted ones", color = Palette.mint) }
+        }
+    }
+}
+
+/** The parts: each component, body and fastener with how many, its size and volume; and the exploded view. */
+@Composable
+fun PartsListSheet(editor: DesignEditor, close: () -> Unit) {
+    val lines = remember(editor.version, editor.built) { editor.partsList() }
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+    SheetFrame("Bill of materials", close) {
+        if (lines.isEmpty()) Text("No bodies yet", fontSize = 14.sp, color = Palette.muted)
+        for (l in lines) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("${l.count} ×", Modifier.width(36.dp), fontSize = 15.sp, color = Palette.muted)
+            Column(Modifier.weight(1f)) {
+                Text(l.name, fontSize = 15.sp, color = Palette.text)
+                val about = listOfNotNull(
+                    l.size?.let { (x, y, z) -> "${round1(x)} × ${round1(y)} × ${round1(z)} mm" },
+                    l.volume?.let { "${round1(it / 1000)} cm³" },
+                ).joinToString(", ")
+                if (about.isNotEmpty()) Text(about, fontSize = 12.sp, color = Palette.muted)
+            }
+        }
+        if (lines.isNotEmpty()) TextButton(onClick = {
+            val text = (listOf("Count\tPart\tSize (mm)\tVolume (cm³)") + lines.map { l ->
+                listOf(l.count.toString(), l.name, l.size?.let { (x, y, z) -> "${round1(x)} × ${round1(y)} × ${round1(z)}" } ?: "", l.volume?.let { round1(it / 1000) } ?: "").joinToString("\t")
+            }).joinToString("\n")
+            clipboard.setText(androidx.compose.ui.text.AnnotatedString(text))
+            editor.message = "Copied"
+        }) { Text("Copy the list", color = Palette.mint) }
+        Text("Explode", fontSize = 13.sp, color = Palette.muted)
+        Slider(value = editor.explode.toFloat(), onValueChange = { editor.explodeBy(it.toDouble()) }, valueRange = 0f..2f)
     }
 }

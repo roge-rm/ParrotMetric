@@ -13,7 +13,7 @@ The same words are in the app, under **Help** on the start screen and in the men
 7. [Meshes](07-meshes.md) - STL, 3MF and OBJ files, and what you can do with them.
 8. [Sculpting](08-sculpting.md) - pushing, pulling and smoothing a shape like clay, with brushes.
 9. [Surfaces](09-surfaces.md) - thin sheets with no thickness, and making solids from them.
-10. [Components and joints](10-components-and-joints.md) - grouping bodies into parts, and parts that move.
+10. [Components and joints](10-components-and-joints.md) - grouping bodies into parts, designs made of other designs, and parts that move.
 11. [Checking a part](11-checking-a-part.md) - measuring, sections, and checks for printing.
 12. [Drawings](12-drawings.md) - a sheet of views with sizes and notes, to print or send as PDF, DXF or SVG.
 13. [Parameters and configurations](13-parameters-and-configurations.md) - named sizes, and versions of a part.
