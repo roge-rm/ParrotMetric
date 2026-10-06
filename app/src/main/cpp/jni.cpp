@@ -71,6 +71,8 @@ struct Shown {
     std::shared_ptr<pm::DisplayMesh> mesh;          // Mesh bodies: what was drawn, for finding a picked flat area.
 };
 std::vector<Shown> shown;
+/** Where the last tap or click was, view pixels. */
+float lastTapX = -1, lastTapY = -1;
 /** Threads drawn as a symbol, shown with the bodies from the next show(). */
 std::vector<pm::DisplayMesh> threadMarks;
 /** How far each body is drawn from where it is, mm, by handle, for exploded views. */
@@ -1549,6 +1551,8 @@ JNIEXPORT jint JNICALL Java_com_rm_parrotmetric_Core_shownTriangles(JNIEnv*, job
  */
 JNIEXPORT jintArray JNICALL Java_com_rm_parrotmetric_Core_tap(JNIEnv* env, jobject, jfloat x, jfloat y) {
     std::lock_guard<std::mutex> g(lock);
+    lastTapX = x;
+    lastTapY = y;
     // A finger covers thin edges and corners, so it reaches a little way for them.
     pm::Pick p = pickable(renderer.pickNear(x, y, 12, [](const pm::Pick& q) { return pickable(q).kind != pm::Pick::None; }));
     if (p.kind == pm::Pick::None) {
@@ -1565,6 +1569,8 @@ JNIEXPORT jintArray JNICALL Java_com_rm_parrotmetric_Core_tap(JNIEnv* env, jobje
 /** A click: selects what's under the point in place of the selection, or with add, adds it or takes it out. */
 JNIEXPORT jintArray JNICALL Java_com_rm_parrotmetric_Core_click(JNIEnv* env, jobject, jfloat x, jfloat y, jboolean add) {
     std::lock_guard<std::mutex> g(lock);
+    lastTapX = x;
+    lastTapY = y;
     pm::Pick p = pickable(renderer.pickNear(x, y, 5, [](const pm::Pick& q) { return pickable(q).kind != pm::Pick::None; }));
     auto it = std::find(selection.begin(), selection.end(), p);
     if (!add) {
@@ -2057,7 +2063,8 @@ JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_meshEdit(JNIEnv* env, jobj
         switch (kind) {
             case 0: out.mesh = m.reduced(size); break;
             case 1: out.mesh = m.remeshed(size); break;
-            default: out.mesh = m.smoothed(size, steps); break;
+            case 3: out.mesh = m.hollowed(size); break;
+            case 2: out.mesh = m.smoothed(size, steps); break;
         }
         g.lock();
         return store.add(std::move(out));
@@ -2410,6 +2417,132 @@ JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_threadMarks(JNIEnv* env, jo
     }
     std::lock_guard<std::mutex> g(lock);
     threadMarks = std::move(marks);
+}
+
+/**
+ * The point on a shown mesh body under the last tap or click, as the last
+ * frame was drawn, and the body's place in the shown list: four numbers, or
+ * null if there's no mesh there or that tap was asked about already.
+ */
+JNIEXPORT jdoubleArray JNICALL Java_com_rm_parrotmetric_Core_tappedMeshPoint(JNIEnv* env, jobject) {
+    std::lock_guard<std::mutex> g(lock);
+    const float x = lastTapX, y = lastTapY;
+    if (x < 0) return nullptr;
+    // Each tap is answered once.
+    lastTapX = lastTapY = -1;
+    float inv[16];
+    if (!pm::Sculpt::invert(renderer.viewProjection(), inv)) return nullptr;
+    float w = float(renderer.width()), h = float(renderer.height());
+    if (w <= 0 || h <= 0) return nullptr;
+    float nx = 2 * x / w - 1, ny = 1 - 2 * y / h;
+    auto unproject = [&](float z, double* out) {
+        float v[4] = {nx, ny, z, 1}, o[4];
+        for (int r = 0; r < 4; ++r) o[r] = inv[r] * v[0] + inv[4 + r] * v[1] + inv[8 + r] * v[2] + inv[12 + r] * v[3];
+        for (int k = 0; k < 3; ++k) out[k] = o[k] / o[3];
+    };
+    double from[3], to[3];
+    unproject(-1, from);
+    unproject(1, to);
+    double dir[3] = {to[0] - from[0], to[1] - from[1], to[2] - from[2]};
+    double best = 1e300, hit[4] = {0, 0, 0, -1};
+    for (size_t s = 0; s < shown.size(); ++s) {
+        if (!shown[s].mesh) continue;
+        const pm::DisplayMesh& d = *shown[s].mesh;
+        for (size_t t = 0; t + 2 < d.indices.size(); t += 3) {
+            // Möller-Trumbore.
+            const float* a = &d.positions[d.indices[t] * 3];
+            const float* b = &d.positions[d.indices[t + 1] * 3];
+            const float* c = &d.positions[d.indices[t + 2] * 3];
+            double e1[3] = {double(b[0]) - a[0], double(b[1]) - a[1], double(b[2]) - a[2]};
+            double e2[3] = {double(c[0]) - a[0], double(c[1]) - a[1], double(c[2]) - a[2]};
+            double p[3] = {dir[1] * e2[2] - dir[2] * e2[1], dir[2] * e2[0] - dir[0] * e2[2], dir[0] * e2[1] - dir[1] * e2[0]};
+            double det = e1[0] * p[0] + e1[1] * p[1] + e1[2] * p[2];
+            if (std::abs(det) < 1e-12) continue;
+            double tv[3] = {from[0] - a[0], from[1] - a[1], from[2] - a[2]};
+            double u = (tv[0] * p[0] + tv[1] * p[1] + tv[2] * p[2]) / det;
+            if (u < 0 || u > 1) continue;
+            double q[3] = {tv[1] * e1[2] - tv[2] * e1[1], tv[2] * e1[0] - tv[0] * e1[2], tv[0] * e1[1] - tv[1] * e1[0]};
+            double v = (dir[0] * q[0] + dir[1] * q[1] + dir[2] * q[2]) / det;
+            if (v < 0 || u + v > 1) continue;
+            double along = (e2[0] * q[0] + e2[1] * q[1] + e2[2] * q[2]) / det;
+            if (along < 0 || along >= best) continue;
+            best = along;
+            for (int k = 0; k < 3; ++k) hit[k] = from[k] + dir[k] * along;
+            hit[3] = double(s);
+        }
+    }
+    if (hit[3] < 0) return nullptr;
+    jdoubleArray out = env->NewDoubleArray(4);
+    env->SetDoubleArrayRegion(out, 0, 4, hit);
+    return out;
+}
+
+/** A mesh body hollowed, or erased at spots (x, y, z, radius each) and filled; see pm::MeshBody. */
+JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_meshErase(JNIEnv* env, jobject, jint, jlong body, jdoubleArray spots) {
+    try {
+        auto s = doubles(env, spots);
+        std::vector<std::array<double, 4>> list;
+        for (size_t i = 0; i + 3 < s.size(); i += 4) list.push_back({s[i], s[i + 1], s[i + 2], s[i + 3]});
+        std::unique_lock<std::mutex> g(lock);
+        const pm::Body b = store.get(body);
+        g.unlock();
+        pm::Body out;
+        out.mesh = b.asMesh().erased(list);
+        g.lock();
+        return store.add(std::move(out));
+    } catch (const std::exception& e) {
+        fail(env, e.what());
+        return 0;
+    }
+}
+
+/** Each separate piece of a body, biggest first: a mesh's, or a solid's solids. */
+JNIEXPORT jlongArray JNICALL Java_com_rm_parrotmetric_Core_separate(JNIEnv* env, jobject, jint id, jlong body) {
+    try {
+        std::unique_lock<std::mutex> g(lock);
+        const pm::Body b = store.get(body);
+        g.unlock();
+        std::vector<pm::Body> pieces;
+        if (b.mesh) {
+            for (auto& m : b.mesh->parts()) {
+                pm::Body p;
+                p.mesh = m;
+                pieces.push_back(std::move(p));
+            }
+        } else {
+            pm::NamedShape s = b.solid ? *b.solid : pm::NamedShape();
+            std::vector<std::pair<double, TopoDS_Shape>> solids;
+            for (TopExp_Explorer e(s.shape, TopAbs_SOLID); e.More(); e.Next()) {
+                GProp_GProps props;
+                BRepGProp::VolumeProperties(e.Current(), props);
+                solids.push_back({props.Mass(), e.Current()});
+            }
+            std::sort(solids.begin(), solids.end(), [](const auto& a, const auto& c) { return a.first > c.first; });
+            for (const auto& [v, shape] : solids) {
+                pm::Body p;
+                pm::NamedShape piece;
+                piece.shape = shape;
+                // Each piece keeps the names its faces had.
+                for (TopExp_Explorer f(shape, TopAbs_FACE); f.More(); f.Next())
+                    if (s.names.IsBound(f.Current())) piece.names.Bind(f.Current(), s.names.Find(f.Current()));
+                for (TopExp_Explorer f(shape, TopAbs_EDGE); f.More(); f.Next())
+                    if (s.names.IsBound(f.Current())) piece.names.Bind(f.Current(), s.names.Find(f.Current()));
+                p.solid = piece;
+                pieces.push_back(std::move(p));
+            }
+        }
+        if (pieces.size() < 2) throw std::runtime_error("It's all one piece");
+        std::vector<jlong> handles;
+        g.lock();
+        for (auto& p : pieces) handles.push_back(store.add(std::move(p)));
+        g.unlock();
+        jlongArray out = env->NewLongArray(jsize(handles.size()));
+        env->SetLongArrayRegion(out, 0, jsize(handles.size()), handles.data());
+        return out;
+    } catch (const std::exception& e) {
+        fail(env, e.what());
+        return nullptr;
+    }
 }
 
 /** Draws these bodies moved by these offsets (x, y, z each) from the next show(), for an exploded view; others where they are. */

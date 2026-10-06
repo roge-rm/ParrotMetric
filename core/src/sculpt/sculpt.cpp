@@ -1391,6 +1391,8 @@ float Sculpt::averageEdge() const {
     return n ? float(sum / double(n)) : 1.0f;
 }
 
+bool Sculpt::invert(const float m[16], float inv[16]) { return invert4(m, inv); }
+
 Mesh Sculpt::sphere(float radius, int levels) {
     const float g = (1 + std::sqrt(5.0f)) / 2;
     std::vector<std::array<float, 3>> v = {

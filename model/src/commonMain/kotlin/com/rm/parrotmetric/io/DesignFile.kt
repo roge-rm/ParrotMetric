@@ -228,6 +228,8 @@ object DesignFile {
                 "turns" to f.turns, "section" to f.section, "square" to f.square, "operation" to f.operation.name,
             )
             is ThreadFeature -> mapOf("type" to "thread", "face" to f.face, "pitch" to f.pitch, "clearance" to f.clearance, "symbol" to f.symbol)
+            is com.rm.parrotmetric.design.MeshEraseFeature -> mapOf("type" to "meshErase", "body" to f.body, "spots" to f.spots)
+            is com.rm.parrotmetric.design.SeparateFeature -> mapOf("type" to "separate", "body" to f.body)
             is com.rm.parrotmetric.design.LinkFeature -> mapOf(
                 "type" to "link", "file" to f.file, "text" to f.text, "component" to f.component, "dx" to f.dx, "dy" to f.dy, "dz" to f.dz,
             )
@@ -350,6 +352,8 @@ object DesignFile {
                 o.bool("square"), Operation.valueOf(o.str("operation")),
             )
             "thread" -> ThreadFeature(id, name, o.str("face"), o.num("pitch"), o.numOr("clearance", 0.0), o.bool("symbol"))
+            "meshErase" -> com.rm.parrotmetric.design.MeshEraseFeature(id, name, o.str("body"), o.arr("spots").map { (it as Json.Num).value })
+            "separate" -> com.rm.parrotmetric.design.SeparateFeature(id, name, o.str("body"))
             "link" -> com.rm.parrotmetric.design.LinkFeature(id, name, o.str("file"), o.str("text"), o.str("component"), o.num("dx"), o.num("dy"), o.num("dz"))
             "fastener" -> com.rm.parrotmetric.design.FastenerFeature(
                 id, name, com.rm.parrotmetric.design.FastenerKind.valueOf(o.str("kind")), o.str("size"), o.num("length"), (o["hole"] as? Json.Str)?.value,

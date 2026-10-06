@@ -145,6 +145,15 @@ private class FakeKernel : Kernel {
         calls += "fastener $id $kind ${seat.origin} ${seat.normal} $d"
         return make(Box(seat.origin.z - length, seat.origin.z + headHeight, listOf("F$id.thread", "F$id.f0")))
     }
+    override fun meshErase(id: Int, body: Long, spots: List<Double>): Long {
+        calls += "erase $id ${spots.size / 4}"
+        return make(bodies.getValue(body))
+    }
+    override fun separate(id: Int, body: Long): List<Long> {
+        calls += "separate $id"
+        val b = bodies.getValue(body)
+        return listOf(make(b.copy(to = b.from + 1)), make(b.copy(from = b.to - 1)))
+    }
     override fun coil(id: Int, plane: SketchPlane, u: Double, v: Double, diameter: Double, pitch: Double, turns: Double, section: Double, square: Boolean): Long {
         calls += "coil $id"
         return make(Box(u - diameter / 2, u + diameter / 2, listOf("F$id.c0")))
@@ -620,6 +629,23 @@ class RebuildTest {
         val flat = PlaneFeature(d.newId(), "Flat", PlaneFeature.Kind.ThreePoints, PlaneRef.Fixed(SketchPlane.Top), 0.0, 0.0, false, null, refs).also { d.add(it) }
         val built = Rebuilder(k).rebuild(d.active)
         assertEquals("The points are in a line", built.errors[flat.id])
+    }
+
+    @Test
+    fun aBodyIsErasedAtItsSpotsAndSeparatedIntoBodies() {
+        val k = FakeKernel()
+        val d = Design()
+        extrude(d, sketchAt(d, 0.0, 10.0), Operation.NewBody)
+        val erase = MeshEraseFeature(d.newId(), "Erase", "Body 1", listOf(1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 2.0))
+        d.add(erase)
+        d.add(SeparateFeature(d.newId(), "Separate", "Body 1"))
+        val built = Rebuilder(k).rebuild(d.active)
+        assertTrue(built.errors.isEmpty(), built.errors.toString())
+        assertTrue("erase ${erase.id} 2" in k.calls)
+        // The first piece keeps the body's label.
+        assertEquals(listOf("Body 1", "Body 2"), built.bodies.map { it.label })
+        val none = Rebuilder(k).rebuild(listOf(MeshEraseFeature(9, "Erase", "Body 1", emptyList())))
+        assertTrue(none.errors.containsKey(9))
     }
 
     @Test

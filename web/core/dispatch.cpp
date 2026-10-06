@@ -107,6 +107,9 @@ JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_sculptLook(JNIEnv*, jobject
 JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_gear(JNIEnv*, jobject, jint, jdoubleArray, jdouble, jdouble, jdouble, jdouble, jint, jdouble, jdouble, jdouble, jboolean, jdouble, jdouble);
 JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_threadMarks(JNIEnv*, jobject, jlongArray, jobjectArray, jdoubleArray);
 JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_bodyOffsets(JNIEnv*, jobject, jlongArray, jdoubleArray);
+JNIEXPORT jdoubleArray JNICALL Java_com_rm_parrotmetric_Core_tappedMeshPoint(JNIEnv*, jobject);
+JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_meshErase(JNIEnv*, jobject, jint, jlong, jdoubleArray);
+JNIEXPORT jlongArray JNICALL Java_com_rm_parrotmetric_Core_separate(JNIEnv*, jobject, jint, jlong);
 JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_fastener(JNIEnv*, jobject, jint, jdoubleArray, jint, jdouble, jdouble, jdouble, jdouble, jdouble, jdouble);
 }
 
@@ -978,7 +981,27 @@ void dispatch(int call, Reader& in, Writer& out, JNIEnv* env) {
             Java_com_rm_parrotmetric_Core_bodyOffsets(env, nullptr, a0, a1);
             break;
         }
-        case 103: {  // fastener
+        case 103: {  // tappedMeshPoint
+            auto r = Java_com_rm_parrotmetric_Core_tappedMeshPoint(env, nullptr);
+            if (!failed()) out.put(r);
+            break;
+        }
+        case 104: {  // meshErase
+            auto a0 = in.i32();
+            auto a1 = in.i64();
+            auto a2 = in.doubles();
+            auto r = Java_com_rm_parrotmetric_Core_meshErase(env, nullptr, a0, a1, a2);
+            if (!failed()) out.put(r);
+            break;
+        }
+        case 105: {  // separate
+            auto a0 = in.i32();
+            auto a1 = in.i64();
+            auto r = Java_com_rm_parrotmetric_Core_separate(env, nullptr, a0, a1);
+            if (!failed()) out.put(r);
+            break;
+        }
+        case 106: {  // fastener
             auto a0 = in.i32();
             auto a1 = in.doubles();
             auto a2 = in.i32();

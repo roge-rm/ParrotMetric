@@ -82,6 +82,10 @@ interface Kernel {
     fun bounds(body: Long): DoubleArray
     /** A body's volume (mm³), surface area (mm²) and centre of mass x, y, z. */
     fun properties(body: Long): DoubleArray? = null
+    /** A mesh body with the triangles near each spot (x, y, z and radius, four numbers each) taken away and the holes filled. */
+    fun meshErase(id: Int, body: Long, spots: List<Double>): Long = throw KernelException("Not here")
+    /** Each separate piece of a body, biggest first; throws if it's all one. */
+    fun separate(id: Int, body: Long): List<Long> = throw KernelException("Not here")
     /** A body cut where another body's surface passes through it; the tool is left as it is. */
     fun splitBy(id: Int, body: Long, tool: Long): List<Long>
     /** How much two bodies overlap, mm³. */

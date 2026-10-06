@@ -81,7 +81,7 @@ The box has rounded corners, a hollow, vents and a lid on a hinge joint, with it
 
 - STL, 3MF and OBJ files come in as mesh bodies and get repaired on the way in
 - Cut them, join and cut them with solids, sketch on their flat areas, and turn small ones into solids
-- Reduce, remesh and smooth
+- Reduce, remesh and smooth, hollow, erase and fill, and separate into pieces
 
 ### Sculpting
 

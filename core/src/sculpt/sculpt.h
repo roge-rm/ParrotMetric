@@ -138,6 +138,9 @@ public:
     Dirty takeDirty();
     static constexpr uint32_t kBlock = 1024;
 
+    /** A 4x4 matrix's inverse; false if it hasn't one. */
+    static bool invert(const float m[16], float inv[16]);
+
     /** An icosphere of the given radius, split [levels] times (20 * 4^levels triangles). */
     static Mesh sphere(float radius, int levels);
 

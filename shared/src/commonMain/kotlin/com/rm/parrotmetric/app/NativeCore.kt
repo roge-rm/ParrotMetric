@@ -170,6 +170,12 @@ interface NativeCore {
     fun threadMarks(bodies: LongArray, faces: Array<String>, pitches: DoubleArray)
     /** Bodies drawn moved by these offsets, x, y and z each, from the next show(), for an exploded view. */
     fun bodyOffsets(bodies: LongArray, offsets: DoubleArray)
+    /** The point on a shown mesh body under the last tap or click, and its place in the shown list; null if there's none. */
+    fun tappedMeshPoint(): DoubleArray?
+    /** A mesh body erased at spots (x, y, z and radius each) and filled. */
+    fun meshErase(id: Int, body: Long, spots: DoubleArray): Long
+    /** Each separate piece of a body, biggest first. */
+    fun separate(id: Int, body: Long): LongArray
     /** A screw, nut or washer; see pm::fastener. */
     fun fastener(id: Int, seat: DoubleArray, kind: Int, d: Double, length: Double, head: Double, headHeight: Double, socket: Double, angle: Double): Long
 }

@@ -99,6 +99,9 @@ object Core : NativeCore {
     override external fun gear(id: Int, plane: DoubleArray, u: Double, v: Double, turn: Double, module: Double, teeth: Int, pressureAngle: Double, thickness: Double, helix: Double, herringbone: Boolean, bore: Double, clearance: Double): Long
     override external fun threadMarks(bodies: LongArray, faces: Array<String>, pitches: DoubleArray)
     override external fun bodyOffsets(bodies: LongArray, offsets: DoubleArray)
+    override external fun tappedMeshPoint(): DoubleArray?
+    override external fun meshErase(id: Int, body: Long, spots: DoubleArray): Long
+    override external fun separate(id: Int, body: Long): LongArray
     override external fun fastener(id: Int, seat: DoubleArray, kind: Int, d: Double, length: Double, head: Double, headHeight: Double, socket: Double, angle: Double): Long
     /** A face's edges as sketch curves on a plane; see jni.cpp. */
     override external fun faceOutline(body: Long, face: String, plane: DoubleArray): DoubleArray

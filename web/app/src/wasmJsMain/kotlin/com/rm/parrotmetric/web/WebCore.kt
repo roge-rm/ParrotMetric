@@ -895,6 +895,26 @@ object WebCore : NativeCore {
         call(102, args)
     }
 
+    override fun tappedMeshPoint(): DoubleArray? {
+        val args = Args()
+        return call(103, args).doubles()
+    }
+
+    override fun meshErase(id: Int, body: Long, spots: DoubleArray): Long {
+        val args = Args()
+        args.int(id)
+        args.long(body)
+        args.doubles(spots)
+        return call(104, args).long()
+    }
+
+    override fun separate(id: Int, body: Long): LongArray {
+        val args = Args()
+        args.int(id)
+        args.long(body)
+        return call(105, args).longs()!!
+    }
+
     override fun fastener(id: Int, seat: DoubleArray, kind: Int, d: Double, length: Double, head: Double, headHeight: Double, socket: Double, angle: Double): Long {
         val args = Args()
         args.int(id)
@@ -906,6 +926,6 @@ object WebCore : NativeCore {
         args.double(headHeight)
         args.double(socket)
         args.double(angle)
-        return call(103, args).long()
+        return call(106, args).long()
     }
 }

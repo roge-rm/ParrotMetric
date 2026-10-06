@@ -47,6 +47,19 @@ public:
      * sharpAngle degrees.
      */
     MeshBody smoothed(double sharpAngle, int steps) const;
+    /**
+     * Hollowed out, leaving walls [thickness] mm thick all round inside. The
+     * inside is found on a grid at most [cells] cells, so it's a little rough
+     * at about the grid's size; throws if that's too coarse for the walls.
+     */
+    MeshBody hollowed(double thickness, size_t cells = 6000000) const;
+    /**
+     * The triangles near each spot taken away (x, y, z and a radius each, mm)
+     * and each hole that leaves filled with a smooth patch.
+     */
+    MeshBody erased(const std::vector<std::array<double, 4>>& spots) const;
+    /** Each separate piece, biggest first. */
+    std::vector<MeshBody> parts() const;
     bool empty() const;
     /**
      * Where the mesh crosses a plane, as closed loops in the plane's own x

@@ -3,6 +3,7 @@
 
 #include "mesh/mesh_body.h"
 #include "mesh/stl.h"
+#include "sculpt/sculpt.h"
 
 using namespace pm;
 
@@ -38,4 +39,28 @@ TEST_CASE("a mesh can be reduced, remeshed and smoothed") {
     CHECK(fine.smoothed(30, 2).volume() == Catch::Approx(8000.0).epsilon(0.01));
     CHECK_THROWS(box.reduced(0));
     CHECK_THROWS(box.smoothed(30, 0));
+}
+
+TEST_CASE("a mesh can be hollowed, erased and filled, and separated") {
+    // Walls 2 thick inside a 40 cube: what's left is the cube less a 36 cube, give or take the grid.
+    MeshBody box = MeshBody::box(40, 40, 40);
+    MeshBody hollow = box.hollowed(2);
+    CHECK(hollow.volume() == Catch::Approx(64000.0 - 46656.0).epsilon(0.08));
+    CHECK(openEdgeCount(hollow.toMesh()) == 0);
+    CHECK(hollow.parts().size() == 1);
+    CHECK_THROWS(box.hollowed(25));
+    // Erasing a patch of a ball and filling it in keeps it closed and much the same.
+    MeshBody ball = MeshBody::fromMesh(Sculpt::sphere(20, 4));
+    MeshBody mended = ball.erased({{{0, 0, 20, 6}}});
+    CHECK(openEdgeCount(mended.toMesh()) == 0);
+    // The patch carries the ball's curve on across the hole, so little is lost.
+    CHECK(mended.volume() == Catch::Approx(ball.volume()).epsilon(0.002));
+    CHECK(mended.volume() < ball.volume());
+    CHECK_THROWS(ball.erased({{{100, 0, 0, 1}}}));
+    // Two boxes apart are two pieces, the bigger first.
+    MeshBody two = MeshBody::box(10, 10, 10).boolean(MeshBody::box(5, 5, 5).translated(20, 0, 0), BooleanOp::Join);
+    auto pieces = two.parts();
+    REQUIRE(pieces.size() == 2);
+    CHECK(pieces[0].volume() == Catch::Approx(1000.0));
+    CHECK(pieces[1].volume() == Catch::Approx(125.0));
 }

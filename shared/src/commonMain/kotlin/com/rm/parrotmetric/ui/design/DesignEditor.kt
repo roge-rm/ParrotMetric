@@ -57,6 +57,8 @@ interface Viewport {
     fun threadMarks(marks: List<Pair<Long, com.rm.parrotmetric.design.ThreadMark>>) {}
     /** Bodies drawn moved from where they are, from the next show(), for an exploded view. */
     fun bodyOffsets(offsets: Map<Long, Vec3>) {}
+    /** The point on a shown mesh body under the last tap, and its place among the bodies shown; null if there's none or it was asked for already. */
+    fun tappedMeshPoint(): Pair<Vec3, Int>? = null
     /** Shows these bodies, these sketches with their areas pickable, and construction planes, axes and points. Clears the selection. */
     fun show(
         bodies: List<Long>, sketches: List<Pair<SketchPlane, List<ProfileCurve>>>,
@@ -179,6 +181,8 @@ class DesignEditor(
     private fun toolFor(f: Feature): String? = when (f) {
         is com.rm.parrotmetric.design.PrimitiveFeature -> f.kind.name.lowercase()
         is com.rm.parrotmetric.design.MeshEditFeature -> f.kind.name.lowercase()
+        is com.rm.parrotmetric.design.MeshEraseFeature -> "erase"
+        is com.rm.parrotmetric.design.SeparateFeature -> "separate"
         is ExtrudeFeature -> "extrude"
         is RevolveFeature -> "revolve"
         is com.rm.parrotmetric.design.SweepFeature -> "sweep"
@@ -1494,6 +1498,8 @@ class DesignEditor(
         rebuild()
     }
     fun startMeshEdit(kind: com.rm.parrotmetric.design.MeshEdit) = openBodies(MeshEditDraft(null, kind))
+    fun startErase() = openBodies(EraseDraft(null))
+    fun startSeparate() = openBodies(SeparateDraft(null))
 
     private fun openBodies(d: BodyDraft) {
         d.planes = planeChoices()
@@ -1548,6 +1554,8 @@ class DesignEditor(
             is com.rm.parrotmetric.design.AlignFeature -> AlignDraft(f).also { alignPicks(it) }
             is com.rm.parrotmetric.design.ConvertFeature -> ConvertDraft(f)
             is com.rm.parrotmetric.design.MeshEditFeature -> MeshEditDraft(f, f.kind)
+            is com.rm.parrotmetric.design.MeshEraseFeature -> EraseDraft(f)
+            is com.rm.parrotmetric.design.SeparateFeature -> SeparateDraft(f)
             is com.rm.parrotmetric.design.RibFeature -> RibDraft(f, f.web)
             is com.rm.parrotmetric.design.PatchFeature -> PatchDraft(f)
             is com.rm.parrotmetric.design.EmbossFeature -> EmbossDraft(f)
@@ -1597,6 +1605,16 @@ class DesignEditor(
     fun selectionChanged() {
         if (measuring) measureLines = viewport.measure()
         when (val d = panel) {
+            is EraseDraft -> {
+                // Each tap on the mesh is a spot to erase; the pick itself isn't kept.
+                val (at, index) = viewport.tappedMeshPoint() ?: return
+                viewport.clearSelection()
+                val label = shownBodies.getOrNull(index)?.label ?: return
+                if (d.bodies.isEmpty()) d.bodies = listOf(label)
+                if (label != d.bodies.first()) return
+                d.spots = d.spots + listOf(at.x, at.y, at.z, d.radius)
+                rebuild()
+            }
             is JointDraft -> {
                 jointPick(d)
                 rebuild()
@@ -2432,11 +2450,32 @@ class DesignEditor(
             com.rm.parrotmetric.design.MeshEdit.Reduce -> 0.05
             com.rm.parrotmetric.design.MeshEdit.Remesh -> 1.0
             com.rm.parrotmetric.design.MeshEdit.Smooth -> 30.0
+            com.rm.parrotmetric.design.MeshEdit.Hollow -> 2.0
         }
 
         override fun feature(): Feature? = bodies.firstOrNull()?.let {
             com.rm.parrotmetric.design.MeshEditFeature(id, name, it, kind, size, steps.toInt())
         }
+        override fun missing() = "Tap the body"
+    }
+
+    inner class EraseDraft(editing: com.rm.parrotmetric.design.MeshEraseFeature?) : BodyDraft(editing) {
+        private val name = editing?.name ?: nextName("Erase", design.features.count { it is com.rm.parrotmetric.design.MeshEraseFeature })
+        /** x, y, z and radius of each spot. */
+        var spots by mutableStateOf(editing?.spots ?: emptyList())
+        /** The size of the next spot. */
+        var radius by mutableStateOf(editing?.spots?.getOrNull(3) ?: 5.0)
+        init { if (editing != null) bodies = listOf(editing.body) }
+        override fun feature(): Feature? = bodies.firstOrNull()?.takeIf { spots.size >= 4 }?.let {
+            com.rm.parrotmetric.design.MeshEraseFeature(id, name, it, spots)
+        }
+        override fun missing() = "Tap the mesh where to erase"
+    }
+
+    inner class SeparateDraft(editing: com.rm.parrotmetric.design.SeparateFeature?) : BodyDraft(editing) {
+        private val name = editing?.name ?: nextName("Separate", design.features.count { it is com.rm.parrotmetric.design.SeparateFeature })
+        init { if (editing != null) bodies = listOf(editing.body) }
+        override fun feature(): Feature? = bodies.firstOrNull()?.let { com.rm.parrotmetric.design.SeparateFeature(id, name, it) }
         override fun missing() = "Tap the body"
     }
 

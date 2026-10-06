@@ -616,6 +616,21 @@ class Rebuilder(private val kernel: Kernel) {
             val body = bodies.firstOrNull { it.label == f.body } ?: throw KernelException("${f.body} isn't there any more")
             replace(f, bodies, planes, made, body) { kernel.meshEdit(f.id, body.handle, f.kind.ordinal, f.size, f.steps) }
         }
+        is MeshEraseFeature -> {
+            val body = bodies.firstOrNull { it.label == f.body } ?: throw KernelException("${f.body} isn't there any more")
+            if (f.spots.size < 4) throw KernelException("Tap where to erase")
+            replace(f, bodies, planes, made, body) { kernel.meshErase(f.id, body.handle, f.spots) }
+        }
+        is SeparateFeature -> {
+            val body = bodies.firstOrNull { it.label == f.body } ?: throw KernelException("${f.body} isn't there any more")
+            val pieces = kernel.separate(f.id, body.handle)
+            var count = made
+            val out = bodies.flatMap { b ->
+                if (b != body) listOf(b.also { kernel.retain(it.handle) })
+                else pieces.mapIndexed { i, h -> BodyState(if (i == 0) b.label else "Body ${++count}", h) }
+            }
+            Step(f.key(), out, planes, null, count)
+        }
         is SculptFeature -> {
             val old = f.body?.let { l -> bodies.firstOrNull { it.label == l } }
             // If the body it was sculpted from has changed, its strokes are made again on it.

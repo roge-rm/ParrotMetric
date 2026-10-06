@@ -96,6 +96,11 @@ object Tools {
         ToolDef("smooth", "Smooth", Icons.meshEdit, ToolGroup.Modify, solid = false, mesh = true, cluster = "Triangles") {
             it.design.startMeshEdit(com.rm.parrotmetric.design.MeshEdit.Smooth)
         },
+        ToolDef("hollow", "Hollow", Icons.hollow, ToolGroup.Modify, solid = false, mesh = true, cluster = "Mesh") {
+            it.design.startMeshEdit(com.rm.parrotmetric.design.MeshEdit.Hollow)
+        },
+        ToolDef("erase", "Erase and fill", Icons.erase, ToolGroup.Modify, solid = false, mesh = true, cluster = "Mesh") { it.design.startErase() },
+        ToolDef("separate", "Separate", Icons.separate, ToolGroup.Modify, mesh = true, cluster = "Mesh") { it.design.startSeparate() },
         ToolDef("tosolid", "To solid", Icons.convert, ToolGroup.Modify, solid = false, mesh = true) { it.design.startConvert() },
         ToolDef("mirror", "Mirror", Icons.mirror, ToolGroup.Modify, key = "Shift+M", mesh = true, cluster = "Mirror and pattern") { it.design.startMirror() },
         ToolDef("pattern", "Pattern", Icons.pattern, ToolGroup.Modify, key = "P", mesh = true, cluster = "Mirror and pattern") { it.design.startPattern() },

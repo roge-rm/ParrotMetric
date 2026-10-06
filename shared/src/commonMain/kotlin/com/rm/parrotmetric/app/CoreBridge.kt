@@ -143,6 +143,8 @@ class CoreKernel(private val core: NativeCore) : Kernel {
     override fun sculptedBody(id: Int, packed: ByteArray, input: Long) = call { core.sculptedBody(id, packed, input) }
     override fun properties(body: Long) = call { core.properties(body) }
     override fun splitBy(id: Int, body: Long, tool: Long) = call { core.splitBy(id, body, tool).toList() }
+    override fun meshErase(id: Int, body: Long, spots: List<Double>) = call { core.meshErase(id, body, spots.toDoubleArray()) }
+    override fun separate(id: Int, body: Long) = call { core.separate(id, body).toList() }
     override fun overlapVolume(a: Long, b: Long) = call { core.overlapVolume(a, b) }
     /** A path as the core takes it: curves on a plane, or a body's edges. */
     private fun withPath(path: KernelPath, call: (DoubleArray, Curves, Long, Array<String>) -> Long): Long {
@@ -226,6 +228,7 @@ class CoreViewport(private val core: NativeCore, private val gl: (() -> Unit) ->
 
     override fun threadMarks(marks: List<Pair<Long, com.rm.parrotmetric.design.ThreadMark>>) =
         core.threadMarks(marks.map { it.first }.toLongArray(), marks.map { it.second.face }.toTypedArray(), marks.map { it.second.pitch }.toDoubleArray())
+    override fun tappedMeshPoint() = core.tappedMeshPoint()?.let { Vec3(it[0], it[1], it[2]) to it[3].toInt() }
     override fun bodyOffsets(offsets: Map<Long, com.rm.parrotmetric.sketch.Vec3>) =
         core.bodyOffsets(offsets.keys.toLongArray(), offsets.values.flatMap { listOf(it.x, it.y, it.z) }.toDoubleArray())
     override fun canvasImage(key: Int, bytes: ByteArray) = core.canvasImage(key, bytes)

@@ -110,6 +110,9 @@ class DesignFileTest {
             com.rm.parrotmetric.design.JointFeature(d.newId(), "Held", com.rm.parrotmetric.design.JointKind.Rigid, "Knob", null, axis = com.rm.parrotmetric.design.Axis3.X),
             com.rm.parrotmetric.design.ThickenFeature(d.newId(), "Thicken", "Body 1", 1.5, true),
             com.rm.parrotmetric.design.MeshEditFeature(d.newId(), "Smooth", "Body 2", com.rm.parrotmetric.design.MeshEdit.Smooth, 40.0, 3),
+            com.rm.parrotmetric.design.MeshEditFeature(d.newId(), "Hollow", "Body 2", com.rm.parrotmetric.design.MeshEdit.Hollow, 2.0),
+            com.rm.parrotmetric.design.MeshEraseFeature(d.newId(), "Erase", "Body 2", listOf(1.0, 2.0, 3.0, 4.5)),
+            com.rm.parrotmetric.design.SeparateFeature(d.newId(), "Separate", "Body 2"),
             com.rm.parrotmetric.design.FilletFeature(d.newId(), "Variable", listOf("F1.s1|F1.end"), 1.0, com.rm.parrotmetric.design.FilletKind.Variable, 3.0),
             com.rm.parrotmetric.design.MirrorFeature(d.newId(), "Mirror features", emptyList(), top, false, listOf(2, 5)),
             com.rm.parrotmetric.design.PatternFeature(

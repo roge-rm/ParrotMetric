@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.material3.TextButton
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -88,6 +89,8 @@ fun FeaturePanel(editor: DesignEditor, maxHeight: androidx.compose.ui.unit.Dp = 
                 is DesignEditor.MoveDraft -> MoveSettings(editor, d)
                 is DesignEditor.ConvertDraft -> Header("To solid", Icons.convert, Palette.modify, d.bodies.firstOrNull())
                 is DesignEditor.MeshEditDraft -> MeshEditSettings(editor, d)
+                is DesignEditor.EraseDraft -> EraseSettings(editor, d)
+                is DesignEditor.SeparateDraft -> Header("Separate", Icons.separate, Palette.modify, d.bodies.firstOrNull()?.let { editor.design.nameOf(it) })
                 is DesignEditor.RibDraft -> RibSettings(editor, d)
                 is DesignEditor.JointDraft -> JointSettings(editor, d)
                 is DesignEditor.EmbossDraft -> {
@@ -870,7 +873,7 @@ private fun RibSettings(editor: DesignEditor, d: DesignEditor.RibDraft) {
 @Composable
 private fun MeshEditSettings(editor: DesignEditor, d: DesignEditor.MeshEditDraft) {
     Header(d.kind.name, Icons.meshEdit, Palette.modify, d.bodies.firstOrNull()?.let { editor.design.nameOf(it) })
-    Segmented(listOf("Reduce", "Remesh", "Smooth"), d.kind.ordinal) {
+    Segmented(listOf("Reduce", "Remesh", "Smooth", "Hollow"), d.kind.ordinal) {
         d.kind = com.rm.parrotmetric.design.MeshEdit.entries[it]
         d.size = d.defaultSize(d.kind)
         d.exprs.remove("size")
@@ -883,8 +886,19 @@ private fun MeshEditSettings(editor: DesignEditor, d: DesignEditor.MeshEditDraft
             Field(editor, d, "steps", "Steps", d.steps, "", allowNegative = false) { d.steps = it; editor.draftChanged() }
             Field(editor, d, "size", "Sharp over", d.size, "°", allowNegative = false) { d.size = it; editor.draftChanged() }
         }
+        com.rm.parrotmetric.design.MeshEdit.Hollow -> Field(editor, d, "size", "Wall", d.size, "mm", allowNegative = false) { d.size = it; editor.draftChanged() }
     }
     Text("${editor.triangles} triangles shown", fontSize = 13.sp, color = Palette.muted)
+}
+
+@Composable
+private fun EraseSettings(editor: DesignEditor, d: DesignEditor.EraseDraft) {
+    val n = d.spots.size / 4
+    Header("Erase and fill", Icons.erase, Palette.modify, if (n == 0) null else count(n, "spot", "spots"))
+    NumberRow("Size", d.radius * 2, "mm", false) { d.radius = it / 2 }
+    if (n > 0) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        TextButton(onClick = { d.spots = d.spots.dropLast(4); editor.draftChanged() }) { Text("Take back the last", color = Palette.mint) }
+    }
 }
 
 @Composable

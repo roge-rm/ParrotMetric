@@ -17,6 +17,9 @@ With a mesh picked, **Modify** shows the tools that work on it:
 - **Reduce** uses fewer triangles, within the **Allowed error** you give.
 - **Remesh** makes the triangles even, none longer than the **Longest edge**.
 - **Smooth** rounds it off over a number of **Steps**, keeping edges sharper than the angle in **Sharp over**.
+- **Hollow** leaves walls the **Wall** thickness all round inside, for a lighter print or less resin. The inside follows the outside, a little rougher. On a large part with thin walls it says to make them thicker.
+- **Erase and fill** takes away the surface where you tap and fills each hole it leaves with a smooth patch that carries on the curve round it, to get rid of a bump, a seam or a bit of a scan you don't want. **Size** is how big the next spot is, and **Take back the last** takes the last spot back.
+- **Separate** makes each piece that isn't joined to the rest a body of its own, the biggest keeping the name. It works on solids too.
 - **To solid** turns a small mesh into a solid (the only one shown, if none is picked), joining flat triangles into faces, so Fillet and the other solid tools work on it. A big mesh gets slow, so reduce it first.
 - **Hole**, **Mirror**, **Pattern**, **Combine**, **Split**, **Move**, **Scale**, **Align** and **Joint** work as they do for solids.
 
