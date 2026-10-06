@@ -114,6 +114,8 @@ interface Kernel {
     fun sweep(id: Int, plane: SketchPlane, curves: List<ProfileCurve>, regions: List<RegionRef>, path: KernelPath): Long
     /** A round tube along a path; hollow when inner (a diameter) is more than 0. */
     fun pipe(id: Int, path: KernelPath, diameter: Double, inner: Double): Long
+    fun gear(id: Int, plane: SketchPlane, u: Double, v: Double, turn: Double, module: Double, teeth: Int, pressureAngle: Double, thickness: Double,
+             helix: Double, herringbone: Boolean, bore: Double, clearance: Double): Long
     fun coil(id: Int, plane: SketchPlane, u: Double, v: Double, diameter: Double, pitch: Double, turns: Double, section: Double, square: Boolean): Long
     /** The body with an ISO metric thread cut into a round face. */
     /** [clearance] moves the face away from the mating part first: a hole wider, a shaft thinner. */

@@ -69,6 +69,7 @@ object Tools {
         ToolDef("sphere", "Sphere", Icons.sphere, ToolGroup.Create, cluster = "Shapes") { it.design.startPrimitive(PrimitiveKind.Sphere) },
         ToolDef("torus", "Torus", Icons.torus, ToolGroup.Create, cluster = "Shapes") { it.design.startPrimitive(PrimitiveKind.Torus) },
         ToolDef("cone", "Cone", Icons.cone, ToolGroup.Create, cluster = "Shapes") { it.design.startPrimitive(PrimitiveKind.Cone) },
+        ToolDef("gear", "Gear", Icons.gear, ToolGroup.Create, cluster = "Shapes") { it.design.startGear() },
 
         ToolDef("fillet", "Fillet", Icons.fillet, ToolGroup.Modify, key = "F", suggest = ::edges) { it.design.startFillet() },
         ToolDef("chamfer", "Chamfer", Icons.chamfer, ToolGroup.Modify, key = "Shift+F", suggest = ::edges) { it.design.startChamfer() },

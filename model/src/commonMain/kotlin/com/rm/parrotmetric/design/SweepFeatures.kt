@@ -51,6 +51,43 @@ data class CoilFeature(
     override fun key() = this
 }
 
+/**
+ * An involute gear standing on a plane at ([u], [v]): [module] mm of pitch
+ * diameter a tooth, [teeth] of them, [thickness] mm high. [pressureAngle] and
+ * [helix] are radians, the helix 0 for straight teeth; [herringbone] turns
+ * them back halfway up. [bore] is a hole's diameter, 0 for none, and
+ * [clearance] mm comes off each tooth at the pitch circle. A tooth points
+ * [turn] radians round from the plane's x.
+ *
+ * With [meshWith], another gear step's id, it goes beside that one instead,
+ * [around] radians round from its x, turned to mesh, on its plane and with
+ * its module, pressure angle and helix (the other hand); [plane], [u], [v],
+ * [turn] and those are then unused.
+ */
+data class GearFeature(
+    override val id: Int,
+    override val name: String,
+    val plane: PlaneRef,
+    val u: Double,
+    val v: Double,
+    val module: Double,
+    val teeth: Int,
+    val thickness: Double,
+    val pressureAngle: Double = 20 * kotlin.math.PI / 180,
+    val helix: Double = 0.0,
+    val herringbone: Boolean = false,
+    val bore: Double = 0.0,
+    val clearance: Double = 0.1,
+    val operation: Operation = Operation.NewBody,
+    val turn: Double = 0.0,
+    val meshWith: Int? = null,
+    val around: Double = 0.0,
+) : Feature() {
+    override fun key() = this
+    /** Across the pitch circle, where it meets another gear: two gears' centres are half their two pitch diameters apart. */
+    val pitchDiameter get() = module * teeth
+}
+
 /** An ISO metric thread [pitch] mm a turn, cut into a round [face]: outside a shaft or inside a hole. */
 /** [clearance] (mm) moves the face away from the mating part first: a shaft gets smaller, a hole bigger, so printed threads fit. */
 data class ThreadFeature(override val id: Int, override val name: String, val face: String, val pitch: Double, val clearance: Double = 0.0) : Feature() {

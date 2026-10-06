@@ -96,6 +96,7 @@ object Core : NativeCore {
     override external fun sculptedBody(id: Int, packed: ByteArray, input: Long): Long
     override external fun sculptPack(): ByteArray
     override external fun sculptLook(look: Int, wire: Boolean)
+    override external fun gear(id: Int, plane: DoubleArray, u: Double, v: Double, turn: Double, module: Double, teeth: Int, pressureAngle: Double, thickness: Double, helix: Double, herringbone: Boolean, bore: Double, clearance: Double): Long
     /** A face's edges as sketch curves on a plane; see jni.cpp. */
     override external fun faceOutline(body: Long, face: String, plane: DoubleArray): DoubleArray
     override external fun shownTriangles(): Int

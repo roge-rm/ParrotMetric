@@ -170,6 +170,9 @@ class CoreKernel(private val core: NativeCore) : Kernel {
         (0 until flat.size / 12).map { flat.copyOfRange(it * 12, it * 12 + 12) }
     }
 
+    override fun gear(id: Int, plane: SketchPlane, u: Double, v: Double, turn: Double, module: Double, teeth: Int, pressureAngle: Double, thickness: Double,
+                      helix: Double, herringbone: Boolean, bore: Double, clearance: Double) =
+        call { core.gear(id, plane.numbers(), u, v, turn, module, teeth, pressureAngle, thickness, helix, herringbone, bore, clearance) }
     override fun coil(id: Int, plane: SketchPlane, u: Double, v: Double, diameter: Double, pitch: Double, turns: Double, section: Double, square: Boolean) =
         call { core.coil(id, plane.numbers(), u, v, diameter, pitch, turns, section, square) }
 

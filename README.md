@@ -55,7 +55,8 @@ The box has rounded corners, a hollow, vents and a lid on a hinge joint, with it
 
 - Extrude: a distance, both ways, two different ways, up to a face, through everything, with a taper, from an offset, or as a thin wall
 - Revolve round a line or an axis
-- Sweep along a path, Loft through several sketches, Pipe along a path, and Coil
+- Sweep along a path, Loft through several sketches (twisted, or following a guide), Pipe along a path, and Coil
+- Gears, straight, helical or herringbone, placed to mesh with each other
 - Box, cylinder, sphere, torus and cone, without a sketch
 - Each one can make a new body, or join, cut or intersect with what it touches
 

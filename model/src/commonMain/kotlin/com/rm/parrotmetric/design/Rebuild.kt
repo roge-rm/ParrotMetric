@@ -271,6 +271,12 @@ class Rebuilder(private val kernel: Kernel) {
             applyTool(f, kernel.sweep(f.id, plane, sketch.curves(), f.regions, pathOf(f.path, f, bodies, planes, all)), f.operation, bodies, planes, made)
         }
         is PipeFeature -> applyTool(f, kernel.pipe(f.id, pathOf(f.path, f, bodies, planes, all), f.diameter, f.inner), f.operation, bodies, planes, made)
+        is GearFeature -> {
+            val g = meshed(f, all)
+            val plane = resolvePlane(g.plane, bodies, f, planes)
+            val made1 = kernel.gear(f.id, plane, g.u, g.v, g.turn, g.module, g.teeth, g.pressureAngle, g.thickness, g.helix, g.herringbone, g.bore, g.clearance)
+            applyTool(f, made1, f.operation, bodies, planes, made)
+        }
         is CoilFeature -> {
             val plane = resolvePlane(f.plane, bodies, f, planes)
             applyTool(f, kernel.coil(f.id, plane, f.u, f.v, f.diameter, f.pitch, f.turns, f.section, f.square), f.operation, bodies, planes, made)
@@ -1262,4 +1268,26 @@ class Rebuilder(private val kernel: Kernel) {
         }
         return Step(f.key(), out, planes, null, made)
     }
+}
+
+/**
+ * A gear as it's made: placed and turned to mesh with the gear it goes beside,
+ * if any, following that one's own placing.
+ */
+fun meshed(f: GearFeature, all: List<Feature>, seen: Int = 0): GearFeature {
+    val with = f.meshWith ?: return f
+    if (seen > 50) throw KernelException("The gears mesh with each other in a ring")
+    val other = all.firstOrNull { it.id == with } as? GearFeature ?: throw KernelException("The gear it meshes with is gone")
+    val o = meshed(other, all, seen + 1)
+    val distance = o.module * (o.teeth + f.teeth) / 2
+    val stepO = 2 * kotlin.math.PI / o.teeth
+    val stepF = 2 * kotlin.math.PI / f.teeth
+    // How far through a tooth the other gear is where they meet; this one's the other way round, half a tooth on.
+    val phase = (f.around - o.turn) / stepO
+    val mine = 0.5 - (phase - kotlin.math.floor(phase))
+    return f.copy(
+        plane = o.plane, u = o.u + distance * kotlin.math.cos(f.around), v = o.v + distance * kotlin.math.sin(f.around),
+        turn = f.around + kotlin.math.PI - mine * stepF, module = o.module, pressureAngle = o.pressureAngle, helix = -o.helix,
+        herringbone = o.herringbone, meshWith = null,
+    )
 }

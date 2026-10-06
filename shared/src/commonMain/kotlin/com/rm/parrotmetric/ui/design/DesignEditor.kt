@@ -160,6 +160,7 @@ class DesignEditor(
                 is SketchFeature -> HistoryEntry.Kind.Sketch
                 is ExtrudeFeature, is RevolveFeature, is com.rm.parrotmetric.design.PrimitiveFeature, is com.rm.parrotmetric.design.SweepFeature,
                 is com.rm.parrotmetric.design.PipeFeature, is com.rm.parrotmetric.design.CoilFeature, is com.rm.parrotmetric.design.LoftFeature,
+                is com.rm.parrotmetric.design.GearFeature,
                 is com.rm.parrotmetric.design.SculptFeature -> HistoryEntry.Kind.Create
                 is ImportFeature -> HistoryEntry.Kind.Import
                 is PlaneFeature, is AxisFeature, is PointFeature, is com.rm.parrotmetric.design.CanvasFeature -> HistoryEntry.Kind.Construct
@@ -180,6 +181,7 @@ class DesignEditor(
         is com.rm.parrotmetric.design.LoftFeature -> "loft"
         is com.rm.parrotmetric.design.PipeFeature -> "pipe"
         is com.rm.parrotmetric.design.CoilFeature -> "coil"
+        is com.rm.parrotmetric.design.GearFeature -> "gear"
         is com.rm.parrotmetric.design.PatchFeature -> "patch"
         is com.rm.parrotmetric.design.StitchFeature -> "stitch"
         is com.rm.parrotmetric.design.ThickenFeature -> "thicken"
@@ -909,6 +911,14 @@ class DesignEditor(
         rebuild()
     }
 
+    fun startGear() {
+        val d = GearDraft(null)
+        d.planes = planeChoices()
+        d.planes.firstOrNull { it.first == "The face" }?.let { d.plane = it.second }
+        panel = d
+        rebuild()
+    }
+
     fun startThread() {
         val d = ThreadDraft(null)
         threadPick(d)
@@ -1201,7 +1211,7 @@ class DesignEditor(
         val i = all.indexOfFirst { it.id == id }.let { if (it < 0) all.size else it }
         return all.subList(0, i).filter {
             it is ExtrudeFeature || it is RevolveFeature || it is HoleFeature || it is com.rm.parrotmetric.design.SweepFeature ||
-                it is com.rm.parrotmetric.design.PipeFeature || it is com.rm.parrotmetric.design.CoilFeature ||
+                it is com.rm.parrotmetric.design.PipeFeature || it is com.rm.parrotmetric.design.CoilFeature || it is com.rm.parrotmetric.design.GearFeature ||
                 it is com.rm.parrotmetric.design.LoftFeature || it is com.rm.parrotmetric.design.PrimitiveFeature ||
                 (it is com.rm.parrotmetric.design.MirrorFeature && it.features.isNotEmpty()) ||
                 (it is com.rm.parrotmetric.design.PatternFeature && it.features.isNotEmpty())
@@ -1371,6 +1381,7 @@ class DesignEditor(
             is com.rm.parrotmetric.design.SweepFeature -> SweepDraft(f)
             is com.rm.parrotmetric.design.PipeFeature -> PipeDraft(f)
             is com.rm.parrotmetric.design.CoilFeature -> CoilDraft(f).also { it.planes = planeChoices() }
+            is com.rm.parrotmetric.design.GearFeature -> GearDraft(f).also { it.planes = planeChoices() }
             is com.rm.parrotmetric.design.ThreadFeature -> ThreadDraft(f).also { threadShape(it) }
             is com.rm.parrotmetric.design.LipFeature -> LipDraft(f).also { it.base = baseOf(f.face) }
             is com.rm.parrotmetric.design.LoftFeature -> LoftDraft(f)
@@ -1761,6 +1772,42 @@ class DesignEditor(
         var square by mutableStateOf(editing?.square ?: false)
         var operation by mutableStateOf(editing?.operation ?: Operation.NewBody)
         override fun feature() = com.rm.parrotmetric.design.CoilFeature(id, name, plane, u, v, diameter, pitch, turns, section, square, operation)
+        override fun missing() = ""
+    }
+
+    inner class GearDraft(editing: com.rm.parrotmetric.design.GearFeature?) : FeatureDraft() {
+        val id = editing?.id ?: newId()
+        private val name = editing?.name ?: nextName("Gear", design.features.count { it is com.rm.parrotmetric.design.GearFeature })
+        var planes: List<Pair<String, PlaneRef>> = emptyList()
+        var plane by mutableStateOf<PlaneRef>(editing?.plane ?: PlaneRef.Fixed(SketchPlane.Top))
+        var u by mutableStateOf(editing?.u ?: 0.0)
+        var v by mutableStateOf(editing?.v ?: 0.0)
+        var turnDegrees by mutableStateOf((editing?.turn ?: 0.0) * 180 / PI)
+        var module by mutableStateOf(editing?.module ?: 2.0)
+        var teeth by mutableStateOf((editing?.teeth ?: 20).toDouble())
+        var thickness by mutableStateOf(editing?.thickness ?: 8.0)
+        var pressureDegrees by mutableStateOf((editing?.pressureAngle ?: (20 * PI / 180)) * 180 / PI)
+        /** 0 straight, 1 helical, 2 herringbone. */
+        var kind by mutableStateOf(if (editing == null || editing.helix == 0.0) 0 else if (editing.herringbone) 2 else 1)
+        var helixDegrees by mutableStateOf(if (editing == null || editing.helix == 0.0) 20.0 else editing.helix * 180 / PI)
+        var bore by mutableStateOf(editing?.bore ?: 5.0)
+        var clearance by mutableStateOf(editing?.clearance ?: 0.1)
+        var meshWith by mutableStateOf(editing?.meshWith)
+        var aroundDegrees by mutableStateOf((editing?.around ?: 0.0) * 180 / PI)
+        var operation by mutableStateOf(editing?.operation ?: Operation.NewBody)
+        /** Gears before this one it can go beside. */
+        val others: List<com.rm.parrotmetric.design.GearFeature>
+            get() {
+                val all = design.features
+                val i = all.indexOfFirst { it.id == id }.let { if (it < 0) all.size else it }
+                return all.subList(0, i).filterIsInstance<com.rm.parrotmetric.design.GearFeature>()
+            }
+        override fun feature() = com.rm.parrotmetric.design.GearFeature(
+            id, name, plane, u, v, module, teeth.toInt(), thickness, pressureDegrees * PI / 180, if (kind == 0) 0.0 else helixDegrees * PI / 180,
+            kind == 2, bore, clearance, operation, turnDegrees * PI / 180, meshWith, aroundDegrees * PI / 180,
+        )
+        /** As it will be made, beside the gear it meshes with if any. */
+        fun placed() = runCatching { com.rm.parrotmetric.design.meshed(feature(), design.features) }.getOrNull()
         override fun missing() = ""
     }
 

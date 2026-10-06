@@ -50,6 +50,12 @@ object Icons {
     val sweep = stroke("sweep", "M4 18c4 0 5-12 12-12h4", "M3 15h4v6H3z")
     val loft = stroke("loft", "M4 19h10l-2 3H2z", "M9 3h10l-2 3H7z", "M4 19L9 3M14 19l5-16")
     val pipe = stroke("pipe", "M4 20V12a6 6 0 0 1 6-6h10", "M8 20v-8a2 2 0 0 1 2-2h10")
+    val gear = stroke(
+        "gear",
+        "M19.6 10.1L22.4 10.5L22.4 13.5L19.6 13.9L18.7 16.0L20.4 18.3L18.3 20.4L16.0 18.7L13.9 19.6L13.5 22.4L10.5 22.4L10.1 19.6L8.0 18.7L5.7 20.4L3.6 18.3L5.3 16.0L4.4 13.9L1.6 13.5L1.6 10.5L4.4 10.1L5.3 8.0L3.6 5.7L5.7 3.6L8.0 5.3L10.1 4.4L10.5 1.6L13.5 1.6L13.9 4.4L16.0 5.3L18.3 3.6L20.4 5.7L18.7 8.0z",
+        "M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6z",
+        width = 1.5f,
+    )
     val coil = stroke("coil", "M6 5c0-2 12-2 12 0s-12 2-12 4 12 2 12 4-12 2-12 4 12 2 12 4")
     val thread = stroke("thread", "M8 3v18M16 3v18", "M8 5l8 2M8 9l8 2M8 13l8 2M8 17l8 2")
     val text = stroke("text", "M5 6V4h14v2", "M12 4v16", "M9 20h6")

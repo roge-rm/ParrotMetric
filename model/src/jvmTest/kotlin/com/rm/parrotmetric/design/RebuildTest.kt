@@ -4,7 +4,9 @@ import com.rm.parrotmetric.sketch.ProfileCurve
 import com.rm.parrotmetric.sketch.Sketch
 import com.rm.parrotmetric.sketch.SketchPlane
 import com.rm.parrotmetric.sketch.Vec3
+import kotlin.math.PI
 import kotlin.test.Test
+import kotlin.test.assertFailsWith
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -133,6 +135,11 @@ private class FakeKernel : Kernel {
     override fun pipe(id: Int, path: KernelPath, diameter: Double, inner: Double): Long {
         calls += "pipe $id"
         return make(Box(100.0, 101.0, listOf("F$id.p0")))
+    }
+    override fun gear(id: Int, plane: SketchPlane, u: Double, v: Double, turn: Double, module: Double, teeth: Int, pressureAngle: Double, thickness: Double,
+                      helix: Double, herringbone: Boolean, bore: Double, clearance: Double): Long {
+        calls += "gear $id"
+        return make(Box(u - module * (teeth + 2) / 2, u + module * (teeth + 2) / 2, listOf("F$id.g0")))
     }
     override fun coil(id: Int, plane: SketchPlane, u: Double, v: Double, diameter: Double, pitch: Double, turns: Double, section: Double, square: Boolean): Long {
         calls += "coil $id"
@@ -609,6 +616,24 @@ class RebuildTest {
         val flat = PlaneFeature(d.newId(), "Flat", PlaneFeature.Kind.ThreePoints, PlaneRef.Fixed(SketchPlane.Top), 0.0, 0.0, false, null, refs).also { d.add(it) }
         val built = Rebuilder(k).rebuild(d.active)
         assertEquals("The points are in a line", built.errors[flat.id])
+    }
+
+    @Test
+    fun aGearBesideAnotherMeshesWithIt() {
+        val top = PlaneRef.Fixed(SketchPlane.Top)
+        val a = GearFeature(1, "Gear 1", top, 10.0, 5.0, 2.0, 20, 8.0, helix = 0.3, turn = 0.1)
+        val b = meshed(GearFeature(2, "Gear 2", PlaneRef.Fixed(SketchPlane.Front), 0.0, 0.0, 1.0, 30, 8.0, meshWith = 1, around = PI / 2), listOf(a))
+        // 20 and 30 teeth of module 2: centres 50 mm apart, straight up from the first.
+        assertEquals(10.0, b.u, 1e-9)
+        assertEquals(55.0, b.v, 1e-9)
+        assertEquals(top, b.plane)
+        assertEquals(2.0, b.module)
+        assertEquals(-0.3, b.helix)
+        // Where they meet, the first is (pi/2 - 0.1) / (2pi/20) teeth round; the second half a tooth the other way.
+        val phase = (PI / 2 - 0.1) / (2 * PI / 20)
+        val mine = 0.5 - (phase - kotlin.math.floor(phase))
+        assertEquals(PI / 2 + PI - mine * 2 * PI / 30, b.turn, 1e-9)
+        assertFailsWith<KernelException> { meshed(GearFeature(3, "Gear 3", top, 0.0, 0.0, 1.0, 30, 8.0, meshWith = 9), listOf(a)) }
     }
 
     @Test

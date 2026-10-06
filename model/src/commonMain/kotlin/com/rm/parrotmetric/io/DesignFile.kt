@@ -217,6 +217,12 @@ object DesignFile {
                 "type" to "sweep", "sketch" to f.sketchId, "regions" to writeRegions(f.regions), "path" to path(f.path), "operation" to f.operation.name,
             )
             is PipeFeature -> mapOf("type" to "pipe", "path" to path(f.path), "diameter" to f.diameter, "inner" to f.inner, "operation" to f.operation.name)
+            is com.rm.parrotmetric.design.GearFeature -> mapOf(
+                "type" to "gear", "plane" to plane(f.plane), "u" to f.u, "v" to f.v, "module" to f.module, "teeth" to f.teeth,
+                "thickness" to f.thickness, "pressureAngle" to f.pressureAngle, "helix" to f.helix, "herringbone" to f.herringbone,
+                "bore" to f.bore, "clearance" to f.clearance, "operation" to f.operation.name, "turn" to f.turn,
+                "meshWith" to f.meshWith, "around" to f.around,
+            )
             is CoilFeature -> mapOf(
                 "type" to "coil", "plane" to plane(f.plane), "u" to f.u, "v" to f.v, "diameter" to f.diameter, "pitch" to f.pitch,
                 "turns" to f.turns, "section" to f.section, "square" to f.square, "operation" to f.operation.name,
@@ -327,6 +333,11 @@ object DesignFile {
             "split" -> SplitFeature(id, name, o.str("body"), plane(o.obj("plane")), (o["keep"] as? Json.Num)?.value?.toInt() ?: 0, (o["tool"] as? Json.Str)?.value)
             "sweep" -> SweepFeature(id, name, o.int("sketch"), readRegions(o.arr("regions")), path(o.obj("path")), Operation.valueOf(o.str("operation")))
             "pipe" -> PipeFeature(id, name, path(o.obj("path")), o.num("diameter"), o.num("inner"), Operation.valueOf(o.str("operation")))
+            "gear" -> com.rm.parrotmetric.design.GearFeature(
+                id, name, plane(o.obj("plane")), o.num("u"), o.num("v"), o.num("module"), o.int("teeth"), o.num("thickness"),
+                o.num("pressureAngle"), o.num("helix"), o.bool("herringbone"), o.num("bore"), o.num("clearance"), Operation.valueOf(o.str("operation")),
+                o.numOr("turn", 0.0), (o["meshWith"] as? Json.Num)?.value?.toInt(), o.numOr("around", 0.0),
+            )
             "coil" -> CoilFeature(
                 id, name, plane(o.obj("plane")), o.num("u"), o.num("v"), o.num("diameter"), o.num("pitch"), o.num("turns"), o.num("section"),
                 o.bool("square"), Operation.valueOf(o.str("operation")),

@@ -2296,4 +2296,16 @@ JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_sculptedBody(JNIEnv* env, 
     }
 }
 
+JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_gear(JNIEnv* env, jobject, jint id, jdoubleArray plane, jdouble u, jdouble v, jdouble turn, jdouble module,
+                                                          jint teeth, jdouble pressureAngle, jdouble thickness, jdouble helix, jboolean herringbone,
+                                                          jdouble bore, jdouble clearance) {
+    try {
+        auto p = doubles(env, plane);
+        return keep(pm::gear(id, planeOf(p.data()), u, v, turn, module, teeth, pressureAngle, thickness, helix, herringbone, bore, clearance));
+    } catch (const std::exception& e) {
+        fail(env, e.what());
+        return 0;
+    }
+}
+
 }  // extern "C"

@@ -164,6 +164,8 @@ interface NativeCore {
     fun sculptPack(): ByteArray
     /** 0 clay, 1 stone, 2 porcelain, 3 terracotta; [wire] draws its triangles. */
     fun sculptLook(look: Int, wire: Boolean)
+    /** An involute gear standing on a plane; angles in radians, see pm::gear. */
+    fun gear(id: Int, plane: DoubleArray, u: Double, v: Double, turn: Double, module: Double, teeth: Int, pressureAngle: Double, thickness: Double, helix: Double, herringbone: Boolean, bore: Double, clearance: Double): Long
 }
 
 /** File formats, by the numbers the core uses. */

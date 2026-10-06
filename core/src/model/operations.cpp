@@ -21,6 +21,7 @@
 #include <BRepOffsetAPI_ThruSections.hxx>
 #include <BRepOffsetAPI_MakePipeShell.hxx>
 #include <GeomAPI_Interpolate.hxx>
+#include <GC_MakeArcOfCircle.hxx>
 #include <BRepBuilderAPI_MakeVertex.hxx>
 #include <BRepTools_WireExplorer.hxx>
 #include <BRepBuilderAPI_Copy.hxx>
@@ -1999,6 +2000,122 @@ NamedShape loft(int id, const std::vector<LoftProfile>& profiles, bool ruled, do
         return out;
     } catch (const Standard_Failure&) {
         throw std::runtime_error("The loft couldn't be made");
+    }
+}
+
+NamedShape gear(int id, const gp_Ax3& plane, double u, double v, double turn, double module, int teeth, double pressureAngle, double thickness,
+                double helix, bool herringbone, double bore, double clearance) {
+    if (module <= 0 || thickness <= 0) throw std::runtime_error("Sizes have to be more than 0");
+    if (teeth < 6 || teeth > 400) throw std::runtime_error("A gear needs 6 to 400 teeth");
+    if (pressureAngle < 10 * M_PI / 180 || pressureAngle > 35 * M_PI / 180) throw std::runtime_error("The pressure angle has to be 10° to 35°");
+    if (std::abs(helix) > 60 * M_PI / 180) throw std::runtime_error("The helix angle can be at most 60°");
+    const double rp = module * teeth / 2, rb = rp * std::cos(pressureAngle);
+    const double ra = rp + module, rf = rp - 1.25 * module;
+    if (bore < 0 || bore / 2 >= rf - module / 2) throw std::runtime_error("The bore is too big for the gear");
+    if (clearance < 0 || clearance >= module) throw std::runtime_error("The clearance has to be less than the module");
+    // Half a tooth's angle at radius r: at the pitch circle half of 360° / teeth, less half the clearance,
+    // then along the involute.
+    auto inv = [](double a) { return std::tan(a) - a; };
+    const double halfAtPitch = M_PI / (2 * teeth) - clearance / (2 * rp) + inv(pressureAngle);
+    auto half = [&](double r) { return halfAtPitch - inv(std::acos(std::min(1.0, rb / r))); };
+    if (half(ra) <= 0) throw std::runtime_error("The teeth come to a point; use less clearance");
+    if (2 * half(std::max(rb, rf)) >= 2 * M_PI / teeth) throw std::runtime_error("The teeth are too close; use more of them");
+    try {
+        auto at = [](double r, double a) { return gp_Pnt(r * std::cos(a), r * std::sin(a), 0); };
+        auto line = [](const gp_Pnt& a, const gp_Pnt& b) { return BRepBuilderAPI_MakeEdge(a, b).Edge(); };
+        auto arc = [&](double r, double a, double b) {
+            return BRepBuilderAPI_MakeEdge(GC_MakeArcOfCircle(at(r, a), at(r, (a + b) / 2), at(r, b)).Value()).Edge();
+        };
+        // One involute flank, from the base circle (or the root, if that's further out) to the tip, at angle
+        // sign * half(r) about the tooth's middle at angle c.
+        const double r0 = std::max(rb, rf);
+        auto flank = [&](double c, double sign, bool outward) {
+            const int n = 9;
+            Handle(TColgp_HArray1OfPnt) pts = new TColgp_HArray1OfPnt(1, n);
+            for (int i = 0; i < n; ++i) {
+                double r = r0 + (ra - r0) * i / (n - 1);
+                pts->SetValue(outward ? i + 1 : n - i, at(r, c + sign * half(r)));
+            }
+            GeomAPI_Interpolate curve(pts, false, 1e-7);
+            curve.Perform();
+            return BRepBuilderAPI_MakeEdge(curve.Curve()).Edge();
+        };
+        BRepBuilderAPI_MakeWire outline;
+        const double step = 2 * M_PI / teeth, h0 = half(r0), ha = half(ra);
+        for (int k = 0; k < teeth; ++k) {
+            double c = k * step;
+            if (rf < rb) outline.Add(line(at(rf, c - h0), at(rb, c - h0)));
+            outline.Add(flank(c, -1, true));
+            outline.Add(arc(ra, c - ha, c + ha));
+            outline.Add(flank(c, 1, false));
+            if (rf < rb) outline.Add(line(at(rb, c + h0), at(rf, c + h0)));
+            outline.Add(arc(rf, c + h0, c + step - h0));
+        }
+        if (!outline.IsDone()) throw std::runtime_error("The gear couldn't be made");
+        TopoDS_Wire wire = outline.Wire();
+        // Helical teeth turn by the helix's lead over the height: tan(helix) * height / pitch radius.
+        auto turned = [&](double z, double a) {
+            gp_Trsf r, up;
+            r.SetRotation(gp::OZ(), a);
+            up.SetTranslation(gp_Vec(0, 0, z));
+            return TopoDS::Wire(BRepBuilderAPI_Transform(wire, up * r, true).Shape());
+        };
+        auto twisted = [&](double z0, double z1, double a0, double a1) {
+            BRepOffsetAPI_ThruSections thru(true, false);
+            const int n = 6;
+            for (int i = 0; i <= n; ++i) thru.AddWire(turned(z0 + (z1 - z0) * i / n, a0 + (a1 - a0) * i / n));
+            thru.CheckCompatibility(false);
+            thru.Build();
+            if (!thru.IsDone()) throw std::runtime_error("The gear couldn't be made");
+            return thru.Shape();
+        };
+        TopoDS_Shape body;
+        const double lead = std::tan(helix) / rp;
+        if (std::abs(helix) < 1e-9) {
+            body = BRepPrimAPI_MakePrism(BRepBuilderAPI_MakeFace(wire).Face(), gp_Vec(0, 0, thickness)).Shape();
+        } else if (herringbone) {
+            // The lower half, and the upper as its mirror image, sewn together where they meet in the middle.
+            double mid = thickness / 2;
+            BRepOffsetAPI_ThruSections thru(true, false);
+            const int n = 3;
+            for (int i = 0; i <= n; ++i) thru.AddWire(turned(mid * i / n, lead * mid * i / n));
+            thru.CheckCompatibility(false);
+            thru.Build();
+            if (!thru.IsDone()) throw std::runtime_error("The gear couldn't be made");
+            gp_Trsf flip;
+            flip.SetMirror(gp_Ax2(gp_Pnt(0, 0, mid), gp::DZ()));
+            BRepBuilderAPI_Transform upper(thru.Shape(), flip, true);
+            TopoDS_Shape cap = thru.LastShape(), upperCap = upper.ModifiedShape(cap);
+            BRepBuilderAPI_Sewing sew(1e-6);
+            for (TopExp_Explorer f(thru.Shape(), TopAbs_FACE); f.More(); f.Next())
+                if (!f.Current().IsSame(cap)) sew.Add(f.Current());
+            for (TopExp_Explorer f(upper.Shape(), TopAbs_FACE); f.More(); f.Next())
+                if (!f.Current().IsSame(upperCap)) sew.Add(f.Current());
+            sew.Perform();
+            TopExp_Explorer shell(sew.SewedShape(), TopAbs_SHELL);
+            if (!shell.More()) throw std::runtime_error("The gear couldn't be made");
+            BRepBuilderAPI_MakeSolid solid(TopoDS::Shell(shell.Current()));
+            if (!solid.IsDone()) throw std::runtime_error("The gear couldn't be made");
+            TopoDS_Solid made = solid.Solid();
+            BRepLib::OrientClosedSolid(made);
+            body = made;
+        } else {
+            body = twisted(0, thickness, 0, lead * thickness);
+        }
+        if (bore > 0) {
+            BRepAlgoAPI_Cut hole(body, BRepPrimAPI_MakeCylinder(gp_Ax2(gp_Pnt(0, 0, -1), gp::DZ()), bore / 2, thickness + 2).Shape());
+            if (!hole.IsDone()) throw std::runtime_error("The gear couldn't be made");
+            body = hole.Shape();
+        }
+        gp_Trsf move, spin;
+        move.SetTranslation(gp_Vec(u, v, 0));
+        spin.SetRotation(gp::OZ(), turn);
+        body = BRepBuilderAPI_Transform(body, placeOn(plane) * move * spin, true).Shape();
+        NamedShape out = nameAll(id, body, TopoDS_Shape(), TopoDS_Shape(), "g");
+        check(out.shape, "The gear couldn't be made");
+        return out;
+    } catch (const Standard_Failure&) {
+        throw std::runtime_error("The gear couldn't be made");
     }
 }
 

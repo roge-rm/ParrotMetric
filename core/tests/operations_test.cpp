@@ -12,6 +12,7 @@
 #include <TopExp_Explorer.hxx>
 #include <TopoDS.hxx>
 #include <GProp_GProps.hxx>
+#include <BRepAlgoAPI_Common.hxx>
 
 #include <algorithm>
 #include <BRepBndLib.hxx>
@@ -628,6 +629,39 @@ TEST_CASE("a loft can twist and follow a guide") {
     TopoDS_Wire guide = BRepBuilderAPI_MakeWire(BRepBuilderAPI_MakeEdge(through.Curve()).Edge()).Wire();
     NamedShape guided = loft(2, {low, high}, false, 0, &guide);
     CHECK(volume(guided) > 3000);
+}
+
+TEST_CASE("gears mesh at their pitch circles") {
+    // Module 2, 20 teeth: 40 mm across the pitch circle, 44 across the tips.
+    NamedShape a = gear(1, top, 0, 0, 0, 2, 20, 20 * M_PI / 180, 10, 0, false, 0, 0.1);
+    auto b = bounds(a);
+    CHECK(b[3] == Catch::Approx(22).margin(0.05));
+    CHECK(volume(a) == Catch::Approx(M_PI * 20 * 20 * 10).epsilon(0.08));
+    // 30 teeth 50 mm away, turned so a gap faces the first's tooth: they don't touch.
+    auto meshed = [&](double turn) {
+        gp_Ax3 at(gp_Pnt(50, 0, 0), gp::DZ(), gp_Dir(std::cos(turn), std::sin(turn), 0));
+        NamedShape other = gear(2, at, 0, 0, 0, 2, 30, 20 * M_PI / 180, 10, 0, false, 0, 0.1);
+        GProp_GProps props;
+        BRepGProp::VolumeProperties(BRepAlgoAPI_Common(a.shape, other.shape).Shape(), props);
+        return props.Mass();
+    };
+    CHECK(meshed(M_PI / 30) < 0.01);
+    CHECK(meshed(0) > 5);
+    // Helical and herringbone teeth have the same volume; a bore takes its cylinder out.
+    double spur = volume(a);
+    CHECK(volume(gear(3, top, 0, 0, 0, 2, 20, 20 * M_PI / 180, 10, 20 * M_PI / 180, false, 0, 0.1)) == Catch::Approx(spur).epsilon(0.01));
+    CHECK(volume(gear(4, top, 0, 0, 0, 2, 20, 20 * M_PI / 180, 10, 20 * M_PI / 180, true, 0, 0.1)) == Catch::Approx(spur).epsilon(0.01));
+    CHECK(volume(gear(5, top, 0, 0, 0, 2, 20, 20 * M_PI / 180, 10, 0, false, 8, 0.1)) == Catch::Approx(spur - M_PI * 16 * 10).epsilon(0.001));
+    CHECK_THROWS(gear(6, top, 0, 0, 0, 2, 20, 20 * M_PI / 180, 10, 0, false, 40, 0));
+    // Helical gears mesh with the other hand of helix, all the way up.
+    const double h = 20 * M_PI / 180;
+    for (bool herringbone : {false, true}) {
+        NamedShape c = gear(7, top, 0, 0, 0, 2, 20, 20 * M_PI / 180, 10, h, herringbone, 0, 0.1);
+        NamedShape d = gear(8, top, 50, 0, M_PI - M_PI / 30, 2, 30, 20 * M_PI / 180, 10, -h, herringbone, 0, 0.1);
+        GProp_GProps props;
+        BRepGProp::VolumeProperties(BRepAlgoAPI_Common(c.shape, d.shape).Shape(), props);
+        CHECK(props.Mass() < 0.05);
+    }
 }
 
 TEST_CASE("pressing and pulling a flat face keeps its name") {

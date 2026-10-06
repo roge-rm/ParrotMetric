@@ -138,6 +138,20 @@ object Parametrics {
                 "inner" -> f.copy(inner = v)
                 else -> f
             }
+            is GearFeature -> when (field) {
+                "module" -> f.copy(module = v)
+                "teeth" -> f.copy(teeth = v.toInt())
+                "thickness" -> f.copy(thickness = v)
+                "helix" -> f.copy(helix = rad)
+                "pressure" -> f.copy(pressureAngle = rad)
+                "bore" -> f.copy(bore = v)
+                "clearance" -> f.copy(clearance = v)
+                "turn" -> f.copy(turn = rad)
+                "around" -> f.copy(around = rad)
+                "u" -> f.copy(u = v)
+                "v" -> f.copy(v = v)
+                else -> f
+            }
             is CoilFeature -> when (field) {
                 "diameter" -> f.copy(diameter = v)
                 "pitch" -> f.copy(pitch = v)

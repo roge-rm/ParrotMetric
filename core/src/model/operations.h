@@ -161,6 +161,17 @@ NamedShape pipe(int id, const TopoDS_Wire& path, double diameter, double inner);
 NamedShape coil(int id, const gp_Ax3& plane, double u, double v, double diameter, double pitch, double turns, double section, bool square);
 
 /**
+ * A gear standing on a plane at (u, v), a tooth pointing [turn] radians round from the plane's x, its teeth involute: [module] mm of
+ * pitch diameter a tooth, [teeth] of them, [pressureAngle] and [helix] in
+ * radians (0 for straight teeth), [thickness] mm high. [herringbone] turns the
+ * teeth back the other way halfway up. [bore] is a hole through the middle
+ * (0 for none) and [clearance] mm comes off each tooth's thickness at the
+ * pitch circle, so printed gears don't bind.
+ */
+NamedShape gear(int id, const gp_Ax3& plane, double u, double v, double turn, double module, int teeth, double pressureAngle, double thickness,
+                double helix, bool herringbone, double bore, double clearance);
+
+/**
  * A body with a thread cut into one of its round faces: on the outside of
  * a shaft or the inside of a hole, as the face looks. ISO metric: a 60°
  * groove [pitch] mm a turn, as long as the face. The groove is named F<id>.t.

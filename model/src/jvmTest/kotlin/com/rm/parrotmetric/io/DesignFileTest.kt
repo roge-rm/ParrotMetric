@@ -84,6 +84,8 @@ class DesignFileTest {
             com.rm.parrotmetric.design.PipeFeature(d.newId(), "Pipe", com.rm.parrotmetric.design.PathRef.Edges(listOf("F1.s1|F1.end")), 4.0, 2.0, Operation.NewBody),
             com.rm.parrotmetric.design.CoilFeature(d.newId(), "Coil", top, 1.0, 2.0, 20.0, 5.0, 3.5, 2.0, true, Operation.Cut),
             com.rm.parrotmetric.design.ThreadFeature(d.newId(), "Thread", "F2.side", 1.25),
+            com.rm.parrotmetric.design.GearFeature(d.newId(), "Gear", top, 1.0, 2.0, 1.5, 24, 6.0, 0.35, 0.3, true, 4.0, 0.15, Operation.NewBody, 0.1),
+            com.rm.parrotmetric.design.GearFeature(d.newId(), "Gear 2", top, 0.0, 0.0, 1.5, 12, 6.0, meshWith = 1, around = 0.5),
             com.rm.parrotmetric.design.LoftFeature(d.newId(), "Loft", listOf(com.rm.parrotmetric.design.LoftSection(1, com.rm.parrotmetric.design.RegionRef(listOf(1), 0.0, 0.0)), com.rm.parrotmetric.design.LoftSection(3, com.rm.parrotmetric.design.RegionRef(listOf(2), 1.0, 1.0))), true, Operation.NewBody),
             com.rm.parrotmetric.design.PlaneFeature(
                 d.newId(), "Three", com.rm.parrotmetric.design.PlaneFeature.Kind.ThreePoints, top, 0.0, 0.0, false, null,

@@ -114,6 +114,7 @@ fun FeaturePanel(editor: DesignEditor, maxHeight: androidx.compose.ui.unit.Dp = 
                 is DesignEditor.SweepDraft -> SweepSettings(editor, d)
                 is DesignEditor.PipeDraft -> PipeSettings(editor, d)
                 is DesignEditor.CoilDraft -> CoilSettings(editor, d)
+                is DesignEditor.GearDraft -> GearSettings(editor, d)
                 is DesignEditor.ThreadDraft -> ThreadSettings(editor, d)
                 is DesignEditor.LipDraft -> LipSettings(editor, d)
                 is DesignEditor.LoftDraft -> LoftSettings(editor, d)
@@ -310,6 +311,53 @@ private fun CoilSettings(editor: DesignEditor, d: DesignEditor.CoilDraft) {
         editor.draftChanged()
     }
 }
+
+@Composable
+private fun GearSettings(editor: DesignEditor, d: DesignEditor.GearDraft) {
+    Header("Gear", Icons.gear, Palette.create, null)
+    val others = d.others
+    if (others.isNotEmpty()) {
+        Text("Beside", fontSize = 13.sp, color = Palette.muted)
+        Segmented(listOf("Nothing") + others.map { it.name }, others.indexOfFirst { it.id == d.meshWith } + 1) {
+            d.meshWith = if (it == 0) null else others[it - 1].id
+            editor.draftChanged()
+        }
+    }
+    val beside = d.meshWith != null
+    if (!beside) {
+        Text("On", fontSize = 13.sp, color = Palette.muted)
+        Segmented(d.planes.map { it.first }, d.planes.indexOfFirst { it.second == d.plane }.coerceAtLeast(0)) { d.plane = d.planes[it].second; editor.draftChanged() }
+        Field(editor, d, "module", "Module", d.module, "mm", allowNegative = false) { d.module = it; editor.draftChanged() }
+    }
+    Field(editor, d, "teeth", "Teeth", d.teeth, "", allowNegative = false) { d.teeth = kotlin.math.round(it); editor.draftChanged() }
+    Field(editor, d, "thickness", "Thickness", d.thickness, "mm", allowNegative = false) { d.thickness = it; editor.draftChanged() }
+    if (!beside) {
+        Segmented(listOf("Straight", "Helical", "Herringbone"), d.kind) { d.kind = it; editor.draftChanged() }
+        if (d.kind != 0) Field(editor, d, "helix", "Helix angle", d.helixDegrees, "°", allowNegative = true) { d.helixDegrees = it; editor.draftChanged() }
+        Field(editor, d, "pressure", "Pressure angle", d.pressureDegrees, "°", allowNegative = false) { d.pressureDegrees = it; editor.draftChanged() }
+    }
+    Field(editor, d, "bore", "Bore", d.bore, "mm", allowNegative = false) { d.bore = it; editor.draftChanged() }
+    Field(editor, d, "clearance", "Clearance", d.clearance, "mm", allowNegative = false) { d.clearance = it; editor.draftChanged() }
+    if (beside) {
+        Field(editor, d, "around", "Round from it", d.aroundDegrees, "°", allowNegative = true) { d.aroundDegrees = it; editor.draftChanged() }
+    } else {
+        Field(editor, d, "u", "Centre x", d.u, "mm", allowNegative = true) { d.u = it; editor.draftChanged() }
+        Field(editor, d, "v", "Centre y", d.v, "mm", allowNegative = true) { d.v = it; editor.draftChanged() }
+        Field(editor, d, "turn", "Turn", d.turnDegrees, "°", allowNegative = true) { d.turnDegrees = it; editor.draftChanged() }
+    }
+    d.placed()?.let { g ->
+        val pitch = g.module * g.teeth
+        var text = "Pitch circle ${short(pitch)} mm, ${short(pitch + 2 * g.module)} mm across the tips"
+        others.firstOrNull { it.id == d.meshWith }?.let { o -> text += ", centres ${short((pitch + g.module * o.teeth) / 2)} mm apart" }
+        Text(text, fontSize = 13.sp, color = Palette.muted)
+    }
+    OperationRow(d.operation) {
+        d.operation = it
+        editor.draftChanged()
+    }
+}
+
+private fun short(v: Double): String = tenths(v).removeSuffix(".0")
 
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable

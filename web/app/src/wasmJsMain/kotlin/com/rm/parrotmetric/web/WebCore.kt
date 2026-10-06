@@ -861,4 +861,22 @@ object WebCore : NativeCore {
         args.boolean(wire)
         call(99, args)
     }
+
+    override fun gear(id: Int, plane: DoubleArray, u: Double, v: Double, turn: Double, module: Double, teeth: Int, pressureAngle: Double, thickness: Double, helix: Double, herringbone: Boolean, bore: Double, clearance: Double): Long {
+        val args = Args()
+        args.int(id)
+        args.doubles(plane)
+        args.double(u)
+        args.double(v)
+        args.double(turn)
+        args.double(module)
+        args.int(teeth)
+        args.double(pressureAngle)
+        args.double(thickness)
+        args.double(helix)
+        args.boolean(herringbone)
+        args.double(bore)
+        args.double(clearance)
+        return call(100, args).long()
+    }
 }
