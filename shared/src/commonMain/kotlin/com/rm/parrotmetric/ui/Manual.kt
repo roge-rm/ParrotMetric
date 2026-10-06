@@ -235,7 +235,7 @@ object Manual {
             ManualBlock(ManualKind.Bullet, "**Size** is the brush's size on the screen, so zooming in works finer. **[** and **]** change it."),
             ManualBlock(ManualKind.Bullet, "**Strength** is how much each stroke does. Each brush keeps its own."),
             ManualBlock(ManualKind.Bullet, "**Invert** does the opposite: Draw pushes in, Clay digs, Mask rubs off."),
-            ManualBlock(ManualKind.Bullet, "**Mirror** **X**, **Y** and **Z** repeat each stroke across the planes through the origin. A ball or block starts centred there, so X makes it the same on both sides."),
+            ManualBlock(ManualKind.Bullet, "**Mirror** **X**, **Y** and **Z** repeat each stroke across the planes through the middle of what you're sculpting, as it was when you started. A ball or block starts at the origin. Seen from the front, X makes the left and right sides the same."),
             ManualBlock(ManualKind.Heading, "The brushes"),
             ManualBlock(ManualKind.Bullet, "**Draw** pushes the surface out, or in with Invert."),
             ManualBlock(ManualKind.Bullet, "**Clay** builds up flat layers, like adding clay."),

@@ -30,7 +30,7 @@ struct BrushSettings {
     float radius = 40;       // Screen pixels.
     float strength = 0.5f;   // 0 to 1.
     bool invert = false;     // Push in rather than out, rub the mask off, and so on.
-    int mirror = 0;          // Bits: 1 across x, 2 across y, 4 across z, through the origin.
+    int mirror = 0;          // Bits: 1 across x, 2 across y, 4 across z, through the mirror centre.
     bool dynamic = true;     // Split and join triangles under the brush to keep detail even.
     float detail = 0.5f;     // 0 coarse to 1 fine: triangles from 30% of the brush's radius across down to 4%.
     bool pressureSize = false;
@@ -66,6 +66,9 @@ public:
     void setCamera(const float viewProjection[16], int width, int height);
     /** Whether the point (x, y) on screen is over the surface. */
     bool hit(float x, float y) const;
+
+    /** Where the mirror planes cross; the origin unless set. */
+    void setMirrorCentre(float x, float y, float z) { mirrorAt_[0] = x; mirrorAt_[1] = y; mirrorAt_[2] = z; }
 
     /** Starts a stroke at (x, y). False, doing nothing, if it's off the surface (Grab and Pull need to start on it). */
     bool begin(float x, float y, float pressure, const BrushSettings& settings);
@@ -140,7 +143,11 @@ private:
     BrushSettings s_;
     bool stroking_ = false;
     float lastX_ = 0, lastY_ = 0, lastPressure_ = 1, travelled_ = 0;
+    float dabX_ = 0, dabY_ = 0;  // Where the last step along the stroke was.
     float grabFrom_[3] = {}, pullAt_[3] = {};
+    float mirrorAt_[3] = {};
+    /** A point across the mirror planes in the bits of m. */
+    void mirroredPoint(const float* p, int m, float* o) const;
     struct Held {
         uint32_t v;
         float w;

@@ -149,7 +149,11 @@ fun SculptOverlay(editor: SculptEditor, actions: ModelActions) {
                         PointerEventType.Release -> {
                             for (c in event.changes) if (!c.pressed) down.remove(c.id)
                             if (down.isEmpty()) {
-                                if (gesture == Gesture.Stroke) editor.end()
+                                // Out to where it was let go, in case moves on the way were run together.
+                                if (gesture == Gesture.Stroke) {
+                                    editor.move(change.position.x, change.position.y, pressure)
+                                    editor.end()
+                                }
                                 gesture = Gesture.None
                                 if (change.type != PointerType.Mouse && !pen) editor.cursor = null
                             } else {

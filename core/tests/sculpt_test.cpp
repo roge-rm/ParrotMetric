@@ -210,3 +210,89 @@ TEST_CASE("Evening out a block keeps its edges sharp") {
     for (int k = 0; k < 3; ++k) CHECK_THAT(b[size_t(k) + 3] - b[size_t(k)], WithinAbs(20, 0.05));
     CHECK_THAT(pm::volume(s.mesh()), WithinAbs(8000, 40));
 }
+
+TEST_CASE("Mirror goes through the centre it's given") {
+    pm::Mesh m = pm::Sculpt::sphere(20, 4);
+    for (auto& v : m.vertices) v[0] += 30;
+    pm::Sculpt s(m);
+    float vp[16];
+    camera(vp);
+    s.setCamera(vp, 400, 400);
+    s.setMirrorCentre(30, 0, 0);
+    pm::BrushSettings b;
+    b.mirror = 1;
+    b.dynamic = false;
+    b.radius = 30;
+    // The ball's middle is at x 30, right of the view's middle; stroke to its right.
+    REQUIRE(s.begin(330, 200, 1, b));
+    s.move(330, 206, 1);
+    s.end();
+    auto right = nearest(s, 42, 0, 15), left = nearest(s, 18, 0, 15);
+    CHECK_THAT(right[0] - 30, WithinAbs(30 - left[0], 1e-3));
+    CHECK_THAT(right[2], WithinAbs(left[2], 1e-3));
+}
+
+TEST_CASE("Pull stretches the surface as far as the pointer goes") {
+    auto ps = ball();
+    auto& s = *ps;
+    pm::BrushSettings b;
+    b.brush = pm::Brush::Pull;
+    b.radius = 30;
+    // A hundred pixels up the screen is about 17 mm at the ball's front.
+    REQUIRE(s.begin(200, 200, 1, b));
+    for (int i = 1; i <= 50; ++i) s.move(200, 200 - 2.0f * float(i), 1);
+    s.end();
+    float most = -1e9f;
+    for (const auto& v : s.mesh().vertices) most = std::max(most, v[1]);
+    CHECK(most > 16);
+    CHECK(pm::openEdgeCount(s.mesh()) == 0);
+}
+
+TEST_CASE("Pull reaches as far with the mirror on") {
+    auto ps = ball();
+    auto& s = *ps;
+    pm::BrushSettings b;
+    b.brush = pm::Brush::Pull;
+    b.radius = 30;
+    b.mirror = 1;
+    REQUIRE(s.begin(250, 200, 1, b));
+    for (int i = 1; i <= 50; ++i) s.move(250, 200 - 2.0f * float(i), 1);
+    s.end();
+    float most = -1e9f;
+    for (const auto& v : s.mesh().vertices) most = std::max(most, v[1]);
+    CHECK(most > 14);
+}
+
+TEST_CASE("Pull on a ball as the app shows it") {
+    // The app's ball: 25 mm across, split five times, on a 1280 x 858 view about 158 mm away.
+    pm::Sculpt s(pm::Sculpt::sphere(25, 5));
+    float t = std::tan(0.4f), n = 1, f = 400, aspect = 1280.0f / 858.0f;
+    float proj[16] = {1 / (t * aspect), 0, 0, 0, 0, 1 / t, 0, 0, 0, 0, -(f + n) / (f - n), -1, 0, 0, -2 * f * n / (f - n), 0};
+    float view[16] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, -158, 1};
+    float vp[16];
+    for (int c = 0; c < 4; ++c)
+        for (int r = 0; r < 4; ++r) {
+            float sum = 0;
+            for (int k = 0; k < 4; ++k) sum += proj[k * 4 + r] * view[c * 4 + k];
+            vp[c * 4 + r] = sum;
+        }
+    s.setCamera(vp, 1280, 858);
+    pm::BrushSettings b;
+    b.brush = pm::Brush::Pull;
+    b.radius = 50;
+    b.strength = 1;
+    b.mirror = 1;
+    b.dynamic = false;
+    auto before = s.mesh();
+    REQUIRE(s.begin(640, 470, 1, b));
+    for (int i = 1; i <= 20; ++i) s.move(640, 470 + 5.0f * float(i), 1);
+    s.end();
+    // Without new detail the points are the same ones: the furthest moved about as far as the pointer, 100 pixels or 15 mm.
+    auto after = s.mesh();
+    float most = 0;
+    if (after.vertices.size() == before.vertices.size())
+        for (size_t i = 0; i < after.vertices.size(); ++i)
+            most = std::max(most, std::abs(after.vertices[i][1] - before.vertices[i][1]));
+    INFO("moved " << most << ", " << before.vertices.size() << " points before, " << after.vertices.size() << " after");
+    CHECK(most > 13);
+}

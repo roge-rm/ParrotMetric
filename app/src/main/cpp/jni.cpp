@@ -2139,11 +2139,14 @@ JNIEXPORT jboolean JNICALL Java_com_rm_parrotmetric_Core_sculptStart(JNIEnv* env
             const pm::Body b = store.get(body);
             g.unlock();
             made = std::make_unique<pm::Sculpt>(b.asMesh().toMesh(), size_t(maxTriangles));
-            // Even triangles about a 120th of the way across, so every part takes detail alike.
-            auto box = made->bounds();
-            float across = std::sqrt((box[3] - box[0]) * (box[3] - box[0]) + (box[4] - box[1]) * (box[4] - box[1]) + (box[5] - box[2]) * (box[5] - box[2]));
-            made->evenOut(across / 120);
-            made->forget();
+            // A solid's triangles are long and thin where it's flat: made even, about a 120th of the way
+            // across, so every part takes detail alike. A mesh is kept as it is, with its detail.
+            if (!b.isMesh()) {
+                auto box = made->bounds();
+                float across = std::sqrt((box[3] - box[0]) * (box[3] - box[0]) + (box[4] - box[1]) * (box[4] - box[1]) + (box[5] - box[2]) * (box[5] - box[2]));
+                made->evenOut(across / 120);
+                made->forget();
+            }
             g.lock();
         } else if (shape == 0) {
             made = std::make_unique<pm::Sculpt>(pm::Sculpt::sphere(float(size / 2), 5), size_t(maxTriangles));
@@ -2155,6 +2158,11 @@ JNIEXPORT jboolean JNICALL Java_com_rm_parrotmetric_Core_sculptStart(JNIEnv* env
             made->evenOut(side / 40);
             made->forget();
             g.lock();
+        }
+        // A body is mirrored through its own middle; a ball or block is made at the origin, which is its middle.
+        if (!bytes.empty() || body != 0) {
+            auto box = made->bounds();
+            made->setMirrorCentre((box[0] + box[3]) / 2, (box[1] + box[4]) / 2, (box[2] + box[5]) / 2);
         }
         sculpt = std::move(made);
         renderer.setSculpt(sculpt.get(), true);

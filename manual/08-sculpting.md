@@ -20,7 +20,7 @@ On the model, a finger, a pen or the left mouse button makes a stroke. Off the m
 - **Size** is the brush's size on the screen, so zooming in works finer. **[** and **]** change it.
 - **Strength** is how much each stroke does. Each brush keeps its own.
 - **Invert** does the opposite: Draw pushes in, Clay digs, Mask rubs off.
-- **Mirror** **X**, **Y** and **Z** repeat each stroke across the planes through the origin. A ball or block starts centred there, so X makes it the same on both sides.
+- **Mirror** **X**, **Y** and **Z** repeat each stroke across the planes through the middle of what you're sculpting, as it was when you started. A ball or block starts at the origin. Seen from the front, X makes the left and right sides the same.
 
 ## The brushes
 

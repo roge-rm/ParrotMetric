@@ -41,6 +41,9 @@ inline float falloff(float t) {
     return u * u;
 }
 
+// For dragging: the inner part held firmly, so it keeps up with the pointer, easing off outside it.
+inline float held(float t) { return t <= 0.4f ? 1.0f : falloff((t - 0.4f) / 0.6f); }
+
 // Across the planes through the origin picked by the bits of m: 1 x, 2 y, 4 z.
 inline void mirrored(const float* p, int m, float* o) {
     o[0] = (m & 1) ? -p[0] : p[0];
@@ -430,6 +433,10 @@ bool Sculpt::onViewPlane(float x, float y, const float through[3], float out[3])
     return true;
 }
 
+void Sculpt::mirroredPoint(const float* p, int m, float* o) const {
+    for (int k = 0; k < 3; ++k) o[k] = (m & (1 << k)) ? 2 * mirrorAt_[k] - p[k] : p[k];
+}
+
 bool Sculpt::hit(float x, float y) const {
     float from[3], dir[3], at[3];
     ray(x, y, from, dir);
@@ -450,6 +457,8 @@ bool Sculpt::begin(float x, float y, float pressure, const BrushSettings& settin
     startChange(s_.dynamic && s_.brush != Brush::Mask);
     lastX_ = x;
     lastY_ = y;
+    dabX_ = x;
+    dabY_ = y;
     lastPressure_ = pressure;
     travelled_ = 0;
     layerStart_.clear();
@@ -461,10 +470,10 @@ bool Sculpt::begin(float x, float y, float pressure, const BrushSettings& settin
         for (int m = 0; m < 8; ++m) {
             if (m & ~s_.mirror) continue;
             float c[3];
-            mirrored(at, m, c);
+            mirroredPoint(at, m, c);
             within(c, radius, near);
             for (uint32_t v : near) {
-                float w = falloff(std::sqrt(distance2(verts_[v].p, c)) / radius) * (1 - verts_[v].mask);
+                float w = held(std::sqrt(distance2(verts_[v].p, c)) / radius) * (1 - verts_[v].mask);
                 if (w <= 0) continue;
                 held_.push_back({v, w, {verts_[v].p[0], verts_[v].p[1], verts_[v].p[2]}, m});
             }
@@ -493,7 +502,8 @@ void Sculpt::move(float x, float y, float pressure) {
     float len = std::sqrt(dx * dx + dy * dy);
     if (len <= 0) return;
     float done = 0;
-    float px = lastX_, py = lastY_;
+    // Pull moves the surface by how far the brush went since its last step, which may have been in an earlier move.
+    float px = dabX_, py = dabY_;
     while (travelled_ + (len - done) >= spacing) {
         float step = spacing - travelled_;
         done += step;
@@ -510,7 +520,7 @@ void Sculpt::move(float x, float y, float pressure) {
                 for (int m = 0; m < 8; ++m) {
                     if (m & ~s_.mirror) continue;
                     float c[3], d[3];
-                    mirrored(pullAt_, m, c);
+                    mirroredPoint(pullAt_, m, c);
                     mirrored(delta, m, d);
                     apply(c, nullptr, radius, s_.strength * (s_.pressureStrength ? np : 1.0f), m, d);
                 }
@@ -521,6 +531,8 @@ void Sculpt::move(float x, float y, float pressure) {
         }
         px = nx;
         py = ny;
+        dabX_ = nx;
+        dabY_ = ny;
     }
     travelled_ += len - done;
     lastX_ = x;
@@ -572,7 +584,7 @@ void Sculpt::dab(float x, float y, float pressure) {
     for (int m = 0; m < 8; ++m) {
         if (m & ~s_.mirror) continue;
         float c[3];
-        mirrored(at, m, c);
+        mirroredPoint(at, m, c);
         apply(c, nullptr, radius, strength, m, nullptr);
     }
 }
@@ -586,7 +598,8 @@ void Sculpt::apply(const float centre[3], const float*, float radius, float stre
     std::vector<float> w(near.size());
     for (size_t i = 0; i < near.size(); ++i) {
         const Vertex& v = verts_[near[i]];
-        w[i] = falloff(std::sqrt(distance2(v.p, centre)) / radius);
+        float t = std::sqrt(distance2(v.p, centre)) / radius;
+        w[i] = s_.brush == Brush::Pull ? held(t) : falloff(t);
         for (int k = 0; k < 3; ++k) { n[k] += v.n[k] * w[i]; mid[k] += v.p[k] * w[i]; }
         total += w[i];
     }
