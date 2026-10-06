@@ -14,9 +14,10 @@ The same words are in the app, under **Help** on the start screen and in the men
 8. [Surfaces](08-surfaces.md) - thin sheets with no thickness, and making solids from them.
 9. [Components and joints](09-components-and-joints.md) - grouping bodies into parts, and parts that move.
 10. [Checking a part](10-checking-a-part.md) - measuring, sections, and checks for printing.
-11. [Parameters and configurations](11-parameters-and-configurations.md) - named sizes, and versions of a part.
-12. [Files](12-files.md) - saving, opening, exporting, and keeping designs in sync.
-13. [Mouse and keyboard](13-mouse-and-keyboard.md) - using ParrotMetric at a desk.
-14. [Settings](14-settings.md) - the layout, how much detail the view shows, and the projects folder.
+11. [Drawings](11-drawings.md) - a sheet of views with sizes and notes, to print or send as PDF, DXF or SVG.
+12. [Parameters and configurations](12-parameters-and-configurations.md) - named sizes, and versions of a part.
+13. [Files](13-files.md) - saving, opening, exporting, and keeping designs in sync.
+14. [Mouse and keyboard](14-mouse-and-keyboard.md) - using ParrotMetric at a desk.
+15. [Settings](15-settings.md) - the layout, how much detail the view shows, and the projects folder.
 
 <!-- /contents -->

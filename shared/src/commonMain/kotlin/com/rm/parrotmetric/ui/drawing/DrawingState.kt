@@ -51,6 +51,9 @@ class DrawingState(val editor: DesignEditor) {
     var firstPoint by mutableStateOf<Triple<Int, Double, Double>?>(null)
     var message by mutableStateOf<String?>(null)
 
+    /** Views are being worked out. */
+    var working by mutableStateOf(false)
+
     /** A note being written: where, and the note it replaces if it's being changed. */
     var noteAt by mutableStateOf<Triple<Double, Double, DrawingNote?>?>(null)
 
@@ -63,8 +66,13 @@ class DrawingState(val editor: DesignEditor) {
 
     /** Works out the views the drawing uses, and those [also] asks for, from the model as built now. */
     suspend fun project(also: List<ViewSide> = emptyList()) {
-        for (side in (drawing.views.map { it.side } + also).distinct()) {
-            editor.projectView(side)?.let { geometry[side] = it }
+        working = true
+        try {
+            for (side in (drawing.views.map { it.side } + also).distinct()) {
+                editor.projectView(side)?.let { geometry[side] = it }
+            }
+        } finally {
+            working = false
         }
     }
 

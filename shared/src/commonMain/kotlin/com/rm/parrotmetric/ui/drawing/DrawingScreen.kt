@@ -141,6 +141,7 @@ fun DrawingScreen(editor: DesignEditor, title: String, actions: ModelActions) {
             SheetView(state, drawing, marks)
             Column(Modifier.align(Alignment.TopCenter).padding(top = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 val hint = state.message ?: when {
+                    state.working -> "Working out the views…"
                     state.tool == DrawingTool.Dimension && state.firstPoint != null -> "Tap the second point"
                     state.tool == DrawingTool.Dimension -> "Tap two corners or ends, or a circle"
                     state.tool == DrawingTool.Note -> "Tap where the note goes"
