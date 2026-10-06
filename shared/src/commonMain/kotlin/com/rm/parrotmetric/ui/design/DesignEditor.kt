@@ -368,6 +368,27 @@ class DesignEditor(
         for (l in labels) design.bodies[l] = design.info(l).copy(hidden = true)
         changed()
     }
+
+    /** Shows only these bodies until [showAll]. */
+    fun isolate(labels: Collection<String>) {
+        if (labels.isEmpty()) return
+        checkpoint()
+        design.isolated.clear()
+        design.isolated += labels
+        changed()
+    }
+
+    /** Shows only the bodies under the selected faces. */
+    fun isolateSelectedBodies() = isolate(pickedBodies())
+
+    /** Turns isolating off. */
+    fun showAll() {
+        if (design.isolated.isEmpty()) return
+        checkpoint()
+        design.isolated.clear()
+        changed()
+    }
+
     fun rename(label: String, name: String) = setInfo(label) { it.copy(name = name.trim().ifEmpty { null }) }
     fun setComponent(label: String, component: String?) = setInfo(label) { it.copy(component = component) }
 
@@ -856,7 +877,8 @@ class DesignEditor(
                         val refit = refitNow || (!hadBodies && b.bodies.isNotEmpty())
                         val planeFeatures = features.filterIsInstance<PlaneFeature>().filter { b.sketchPlanes.containsKey(it.id) && it.id !in design.hiddenPlanes }
                         val hide = sculpting?.second
-                        val visible = b.bodies.filter { !design.info(it.label).hidden && it.label != hide }
+                        val drawn = design.shown(b.bodies.map { it.label }).toSet()
+                        val visible = b.bodies.filter { it.label in drawn && it.label != hide }
                         shownBodies = visible
                         // Until the panel's picks are put back, a tap adds to them rather than starting afresh.
                         redrawing = draft != null

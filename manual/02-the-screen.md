@@ -23,7 +23,7 @@ With a mouse, the middle button moves the view, and right drag or Shift and midd
 
 Tap a face, an edge or a corner to pick it, and tap it again to drop it. Tap empty space to clear what's picked. Hold on an edge to pick it and the edges running on smoothly from it, such as all of a rounded outline. Inside a finished sketch, tap an area to pick it, which is what Extrude and other tools use.
 
-With a mouse, a click picks just that thing and Shift or Ctrl and a click adds to what's picked. A double-click on an edge picks it and the edges running on smoothly from it, such as all of a rounded outline. Drag on empty space to pick everything in a box: dragging to the right picks what's fully inside it, and dragging to the left also picks what it touches. A right-click opens a menu with **Repeat** for the last tool, the tools that suit what's picked, **Hide**, **Fit the view** and **Clear selection**.
+With a mouse, a click picks just that thing and Shift or Ctrl and a click adds to what's picked. A double-click on an edge picks it and the edges running on smoothly from it, such as all of a rounded outline. Drag on empty space to pick everything in a box: dragging to the right picks what's fully inside it, and dragging to the left also picks what it touches. A right-click opens a menu with **Repeat** for the last tool, the tools that suit what's picked, **Hide**, **Isolate**, **Fit the view** and **Clear selection**.
 
 ## The parts list
 
@@ -33,7 +33,9 @@ The layers button in the top bar opens the parts list on a phone. On a large scr
 - The eye shows or hides a body.
 - With a tool open that works on whole bodies, such as Mirror, tap a body's name to pick it.
 - The dot sets its colour, which also goes into 3MF files.
-- The menu beside it has **Rename…** and puts the body into a component or takes it out (see Components and joints).
+- The menu beside it has **Rename…**, **Isolate**, and puts the body into a component or takes it out (see Components and joints). A component's menu has **Isolate** too.
+
+**Isolate** shows only those bodies, or the bodies of the faces picked when chosen from the right-click menu, and leaves the rest out of view until you tap **Show all** on the note at the top of the view. It only changes what's shown: exports, drawings and the bill of materials still have every body that isn't hidden.
 
 Under **Planes** are the construction planes, each with an eye to hide it once you've drawn on it.
 

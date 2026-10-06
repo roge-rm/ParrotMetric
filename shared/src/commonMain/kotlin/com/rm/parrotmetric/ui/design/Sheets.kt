@@ -165,6 +165,7 @@ fun PartsSheet(editor: DesignEditor, close: () -> Unit) {
                                     { Text(if (taking) "Stop putting new bodies here" else "Put new bodies here") },
                                     onClick = { menu = false; editor.activeComponent = if (taking) null else component },
                                 )
+                                if (list.isNotEmpty()) DropdownMenuItem({ Text("Isolate") }, onClick = { menu = false; editor.isolate(list.map { it.label }) })
                             }
                         }
                     }
@@ -195,6 +196,7 @@ fun PartsSheet(editor: DesignEditor, close: () -> Unit) {
                             IconButton(onClick = { menu = true }) { Icon(Icons.more, "Options", tint = Palette.muted) }
                             DropdownMenu(menu, onDismissRequest = { menu = false }, containerColor = Palette.raised) {
                                 DropdownMenuItem({ Text("Rename…") }, onClick = { menu = false; renaming = b.label })
+                                DropdownMenuItem({ Text("Isolate") }, onClick = { menu = false; editor.isolate(listOf(b.label)) })
                                 for (c in editor.components().filter { it != info.component }) {
                                     DropdownMenuItem({ Text("Into $c") }, onClick = { menu = false; editor.setComponent(b.label, c) })
                                 }

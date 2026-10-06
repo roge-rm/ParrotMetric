@@ -33,6 +33,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -462,6 +463,7 @@ fun ModelScreen(
                     }
                     Column(Modifier.align(Alignment.TopCenter).padding(top = 8.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         SelectionChip(state, actions)
+                        IsolatedChip(design)
                         Message(design)
                     }
                 }
@@ -598,6 +600,21 @@ private fun Message(design: DesignEditor) {
         if (message != null) {
             delay(3000)
             design.message = null
+        }
+    }
+}
+
+/** While bodies are isolated: how many, and a button to show them all again. */
+@Composable
+private fun IsolatedChip(design: DesignEditor) {
+    design.version
+    val count = design.design.isolated.size
+    AnimatedVisibility(count > 0, enter = fadeIn(tween(150)), exit = fadeOut(tween(150))) {
+        Surface(color = Palette.raised, contentColor = Palette.text, shape = RoundedCornerShape(18.dp)) {
+            Row(Modifier.height(36.dp).padding(start = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(if (count == 1) "1 body isolated" else "$count bodies isolated", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                TextButton(onClick = design::showAll) { Text("Show all", color = Palette.mint, fontSize = 13.sp) }
+            }
         }
     }
 }
@@ -847,6 +864,7 @@ private fun SelectionMenu(at: Offset, context: ToolContext, close: () -> Unit) {
             repeat?.let { add("Repeat ${it.label}" to { Tools.run(it, context) }) }
             for (t in suggested) add(t.label to { Tools.run(t, context) })
             if (state.selectedFaces > 0) add("Hide" to { design.hideSelectedBodies() })
+            if (state.selectedFaces > 0) add("Isolate" to { design.isolateSelectedBodies() })
             add("Fit the view" to { context.actions.fit() })
             if (state.selectedFaces + state.selectedEdges + state.selectedAreas + state.selectedPlanes + state.selectedCorners > 0) add("Clear selection" to { context.actions.clearSelection() })
         }
@@ -888,6 +906,7 @@ private fun ExpandedModel(
                 }
                 Column(Modifier.align(Alignment.TopCenter), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     SelectionChip(state, actions)
+                    IsolatedChip(design)
                     Message(design)
                 }
             }
