@@ -595,6 +595,23 @@ void Renderer::viewFrom(float yaw, float pitch) {
     moving_ = true;
 }
 
+std::array<float, 6> Renderer::view() const {
+    const View& v = moving_ ? to_ : View{{target_[0], target_[1], target_[2]}, yaw_, pitch_, zoom_};
+    // distance() is for zoom_; the same framing at v's zoom.
+    float at = distance() * zoom_ / v.zoom;
+    return {v.target[0], v.target[1], v.target[2], v.yaw, v.pitch, at};
+}
+
+void Renderer::setView(const std::array<float, 6>& v) {
+    if (!(v[5] > 0)) return;
+    from_ = {{target_[0], target_[1], target_[2]}, yaw_, pitch_, zoom_};
+    // The zoom that puts the camera v[5] mm back with the view as it's covered now.
+    float zoom = std::clamp(distance() * zoom_ / v[5], 0.01f, 1000.0f);
+    to_ = {{v[0], v[1], v[2]}, angleTowards(yaw_, v[3]), v[4], zoom};
+    moveStart_ = std::chrono::steady_clock::now();
+    moving_ = true;
+}
+
 void Renderer::animate() {
     if (!moving_) return;
     float t = std::chrono::duration<float>(std::chrono::steady_clock::now() - moveStart_).count() / kMoveSeconds;

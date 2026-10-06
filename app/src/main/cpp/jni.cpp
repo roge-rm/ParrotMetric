@@ -2004,6 +2004,25 @@ JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_viewFrom(JNIEnv*, jobject, 
     renderer.viewFrom(yaw, pitch);
 }
 
+/** The camera to come back to: target x, y, z, yaw, pitch and distance in mm. See Renderer::view. */
+JNIEXPORT jfloatArray JNICALL Java_com_rm_parrotmetric_Core_currentView(JNIEnv* env, jobject) {
+    std::lock_guard<std::mutex> g(lock);
+    auto v = renderer.view();
+    jfloatArray out = env->NewFloatArray(6);
+    env->SetFloatArrayRegion(out, 0, 6, v.data());
+    return out;
+}
+
+/** Moves the camera smoothly to a view as currentView gives it. */
+JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_setView(JNIEnv* env, jobject, jfloatArray view) {
+    jsize n = env->GetArrayLength(view);
+    if (n < 6) return;
+    std::array<float, 6> v;
+    env->GetFloatArrayRegion(view, 0, 6, v.data());
+    std::lock_guard<std::mutex> g(lock);
+    renderer.setView(v);
+}
+
 /** Yaw, pitch, viewport width and height, then the last frame's view-projection matrix (16, column-major). */
 JNIEXPORT jfloatArray JNICALL Java_com_rm_parrotmetric_Core_cameraState(JNIEnv* env, jobject) {
     std::lock_guard<std::mutex> g(lock);

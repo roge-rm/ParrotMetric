@@ -105,6 +105,7 @@ object DesignFile {
         "fonts" to design.fonts.filterKeys { name ->
             design.features.any { f -> f is SketchFeature && f.sketch.texts.any { it.font == name } }
         }.mapValues { Base64.encode(it.value) },
+        "views" to design.views.map { mapOf("name" to it.name, "camera" to it.camera) },
         "versions" to if (withVersions) design.versions.map { mapOf("name" to it.name, "date" to it.date, "text" to it.text) } else null,
         // Only those of features still there.
         "hints" to design.hints.filterKeys { k -> design.feature(k.substringBefore(':').toIntOrNull() ?: -1) != null }
@@ -157,6 +158,11 @@ object DesignFile {
                 v as Json.Obj
                 into.versions += Design.Version(v.str("name"), v.str("date"), v.str("text"))
             }
+        }
+        into.views.clear()
+        for (v in root.arr("views")) {
+            v as Json.Obj
+            into.views += Design.NamedView(v.str("name"), v.arr("camera").map { (it as Json.Num).value })
         }
         into.fonts.clear()
         (root["fonts"] as? Json.Obj)?.fields?.forEach { (name, v) -> (v as? Json.Str)?.let { into.fonts[name] = Base64.decode(it.value) } }

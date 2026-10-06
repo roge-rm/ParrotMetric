@@ -31,6 +31,12 @@ class Design {
     /** A copy of the design kept under a name: the design file's text as it was, and the day, year-month-day. */
     data class Version(val name: String, val date: String, val text: String)
 
+    /** A camera kept under a name: the point it looks at (x, y, z), yaw, pitch (radians) and distance (mm). */
+    data class NamedView(val name: String, val camera: List<Double>)
+
+    /** Named views, in the order kept. Not part of undo. */
+    val views = mutableListOf<NamedView>()
+
     /** Named versions, oldest first. They aren't part of undo: they belong to the file. */
     val versions = mutableListOf<Version>()
 

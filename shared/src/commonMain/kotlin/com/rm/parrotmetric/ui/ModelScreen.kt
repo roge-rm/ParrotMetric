@@ -189,6 +189,10 @@ interface ModelActions {
     fun updateLinks() {}
     /** Gives the design a new name, and its file in the projects folder with it. */
     fun rename(title: String) {}
+    /** The camera as it is, to keep as a named view (see Design.NamedView); null where there's no view. */
+    fun currentView(): List<Double>? = null
+    /** Moves the camera smoothly to a kept view. */
+    fun goToView(camera: List<Double>) {}
     fun quit()
     /** Opens a design from the projects folder. */
     fun openProject(name: String) {}
@@ -460,6 +464,7 @@ fun ModelScreen(
                         Surface(color = Palette.surface.copy(alpha = 0.72f), shape = RoundedCornerShape(14.dp)) {
                             IconButton(onClick = actions::fit, Modifier.focusProperties { canFocus = false }) { Icon(Icons.fit, "Fit the model in view", tint = Palette.text) }
                         }
+                        ViewsButton(design, actions)
                     }
                     Column(Modifier.align(Alignment.TopCenter).padding(top = 8.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         SelectionChip(state, actions)
@@ -903,6 +908,7 @@ private fun ExpandedModel(
                     Surface(color = Palette.surface.copy(alpha = 0.72f), shape = RoundedCornerShape(14.dp)) {
                         IconButton(onClick = actions::fit, Modifier.focusProperties { canFocus = false }) { Icon(Icons.fit, "Fit the model in view", tint = Palette.text) }
                     }
+                    ViewsButton(design, actions)
                 }
                 Column(Modifier.align(Alignment.TopCenter), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     SelectionChip(state, actions)
@@ -1013,5 +1019,30 @@ private fun ToolbarButton(t: ToolDef, context: ToolContext) {
                 Icon(t.icon, t.label, Modifier.size(22.dp), tint = if (enabled) t.group.colour else Palette.faint)
             }
         }
+    }
+}
+
+/** Named views: keep the view as it is, or go back to one. */
+@Composable
+private fun ViewsButton(design: DesignEditor, actions: ModelActions) {
+    var menu by remember { mutableStateOf(false) }
+    var naming by remember { mutableStateOf(false) }
+    design.viewsChanged
+    Surface(color = Palette.surface.copy(alpha = 0.72f), shape = RoundedCornerShape(14.dp)) {
+        Box {
+            IconButton(onClick = { menu = true }, Modifier.focusProperties { canFocus = false }) { Icon(Icons.camera, "Named views", tint = Palette.text) }
+            DropdownMenu(menu, onDismissRequest = { menu = false }, containerColor = Palette.raised) {
+                for (v in design.design.views) DropdownMenuItem(
+                    { Text(v.name) },
+                    onClick = { menu = false; actions.goToView(v.camera) },
+                    trailingIcon = { IconButton(onClick = { design.deleteView(v) }) { Icon(Icons.delete, "Delete ${v.name}", tint = Palette.muted) } },
+                )
+                DropdownMenuItem({ Text("Keep this view…") }, onClick = { menu = false; naming = true })
+            }
+        }
+    }
+    if (naming) com.rm.parrotmetric.ui.design.NameDialog("Keep this view", "View ${design.design.views.size + 1}", { naming = false }) { name ->
+        naming = false
+        actions.currentView()?.let { design.keepView(name, it) }
     }
 }

@@ -111,6 +111,8 @@ JNIEXPORT jdoubleArray JNICALL Java_com_rm_parrotmetric_Core_tappedMeshPoint(JNI
 JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_meshErase(JNIEnv*, jobject, jint, jlong, jdoubleArray);
 JNIEXPORT jlongArray JNICALL Java_com_rm_parrotmetric_Core_separate(JNIEnv*, jobject, jint, jlong);
 JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_fastener(JNIEnv*, jobject, jint, jdoubleArray, jint, jdouble, jdouble, jdouble, jdouble, jdouble, jdouble);
+JNIEXPORT jfloatArray JNICALL Java_com_rm_parrotmetric_Core_currentView(JNIEnv*, jobject);
+JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_setView(JNIEnv*, jobject, jfloatArray);
 }
 
 namespace pmweb {
@@ -1015,6 +1017,16 @@ void dispatch(int call, Reader& in, Writer& out, JNIEnv* env) {
             auto a8 = in.f64();
             auto r = Java_com_rm_parrotmetric_Core_fastener(env, nullptr, a0, a1, a2, a3, a4, a5, a6, a7, a8);
             if (!failed()) out.put(r);
+            break;
+        }
+        case 107: {  // currentView
+            auto r = Java_com_rm_parrotmetric_Core_currentView(env, nullptr);
+            if (!failed()) out.put(r);
+            break;
+        }
+        case 108: {  // setView
+            auto a0 = in.floats();
+            Java_com_rm_parrotmetric_Core_setView(env, nullptr, a0);
             break;
         }
         default:

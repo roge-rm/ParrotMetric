@@ -694,6 +694,22 @@ class DesignEditor(
         onHistoryChanged()
     }
 
+    fun keepView(name: String, camera: List<Double>) {
+        design.views += com.rm.parrotmetric.design.Design.NamedView(name.trim().ifEmpty { "View ${design.views.size + 1}" }, camera)
+        viewsChanged++
+        onHistoryChanged()
+    }
+
+    fun deleteView(v: com.rm.parrotmetric.design.Design.NamedView) {
+        design.views.remove(v)
+        viewsChanged++
+        onHistoryChanged()
+    }
+
+    /** Goes up when the named views change. */
+    var viewsChanged by mutableIntStateOf(0)
+        private set
+
     /** Goes up when the versions change, to show them again. */
     var versionsChanged by mutableIntStateOf(0)
         private set

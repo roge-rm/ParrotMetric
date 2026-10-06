@@ -930,4 +930,15 @@ object WebCore : NativeCore {
         args.double(angle)
         return call(106, args).long()
     }
+
+    override fun currentView(): FloatArray {
+        val args = Args()
+        return call(107, args).floats()!!
+    }
+
+    override fun setView(view: FloatArray) {
+        val args = Args()
+        args.floats(view)
+        call(108, args)
+    }
 }

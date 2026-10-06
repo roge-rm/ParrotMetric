@@ -753,6 +753,8 @@ class AppController(
             gl { core.setCovered(left, top, right, bottom) }
         }
         override fun viewFrom(yaw: Float, pitch: Float) = gl { core.viewFrom(yaw, pitch) }
+        override fun currentView() = core.currentView().map { it.toDouble() }
+        override fun goToView(camera: List<Double>) = gl { core.setView(camera.map { it.toFloat() }.toFloatArray()) }
         override fun pan(dx: Float, dy: Float) = gl { core.pan(dx, dy) }
         override fun zoom(factor: Float) = gl { core.zoom(factor) }
         override fun zoomAt(factor: Float, x: Float, y: Float) = gl { core.zoomAt(factor, x, y) }

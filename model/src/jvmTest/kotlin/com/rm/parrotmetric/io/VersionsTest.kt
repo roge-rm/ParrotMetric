@@ -47,4 +47,13 @@ class VersionsTest {
         assertEquals(1, Regex("\nPOLYLINE\n").findAll(dxf).count())
         assertTrue(dxf.trimEnd().endsWith("EOF"))
     }
+
+    @Test
+    fun namedViewsGoWithTheFile() {
+        val d = Design()
+        d.views += Design.NamedView("Front close", listOf(1.0, 2.0, 3.0, 0.5, 0.25, 120.0))
+        val back = Design()
+        DesignFile.read(DesignFile.write(d, "x"), back)
+        assertEquals(d.views, back.views)
+    }
 }

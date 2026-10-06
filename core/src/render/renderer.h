@@ -1,5 +1,7 @@
 #pragma once
 
+#include <array>
+
 #include <chrono>
 #include <cstdint>
 #include <memory>
@@ -123,6 +125,13 @@ public:
     void fit();
     /** Turns smoothly to look from a direction, in radians: yaw round Z from +X, pitch up from the XY plane. */
     void viewFrom(float yaw, float pitch);
+    /**
+     * Where the camera is, to come back to: the point it looks at (x, y, z),
+     * yaw, pitch, and how far back it is in mm. Where it's going, if it's moving.
+     */
+    std::array<float, 6> view() const;
+    /** Moves smoothly to a view as view() gives it. */
+    void setView(const std::array<float, 6>& v);
 
     /** The view-projection matrix of the last frame drawn, column-major, for mapping touches. */
     const float* viewProjection() const { return lastViewProjection_; }

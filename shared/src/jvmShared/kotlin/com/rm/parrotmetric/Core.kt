@@ -102,6 +102,8 @@ object Core : NativeCore {
     override external fun tappedMeshPoint(): DoubleArray?
     override external fun meshErase(id: Int, body: Long, spots: DoubleArray): Long
     override external fun separate(id: Int, body: Long): LongArray
+    override external fun currentView(): FloatArray
+    override external fun setView(view: FloatArray)
     override external fun fastener(id: Int, seat: DoubleArray, kind: Int, d: Double, length: Double, head: Double, headHeight: Double, socket: Double, angle: Double): Long
     /** A face's edges as sketch curves on a plane; see jni.cpp. */
     override external fun faceOutline(body: Long, face: String, plane: DoubleArray): DoubleArray

@@ -178,6 +178,10 @@ interface NativeCore {
     fun separate(id: Int, body: Long): LongArray
     /** A screw, nut or washer; see pm::fastener. */
     fun fastener(id: Int, seat: DoubleArray, kind: Int, d: Double, length: Double, head: Double, headHeight: Double, socket: Double, angle: Double): Long
+    /** The camera to come back to: target x, y, z, yaw, pitch and distance in mm. */
+    fun currentView(): FloatArray
+    /** Moves the camera smoothly to a view as currentView gives it. */
+    fun setView(view: FloatArray)
 }
 
 /** File formats, by the numbers the core uses. */

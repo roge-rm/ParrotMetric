@@ -50,6 +50,7 @@ object Manual {
             ManualBlock(ManualKind.Bullet, "Two fingers move it, and pinching zooms."),
             ManualBlock(ManualKind.Bullet, "Double tap fits everything in view, and so does the button under the cube."),
             ManualBlock(ManualKind.Bullet, "The cube in the corner shows which way you're looking. Tap one of its faces to look straight at that side."),
+            ManualBlock(ManualKind.Bullet, "The camera button below them keeps the view as it is under a name, **Keep this view…**, and lists the views kept, to go back to. They're saved with the design."),
             ManualBlock(ManualKind.Para, "With a mouse, the middle button moves the view, and right drag or Shift and middle drag turns it. The wheel zooms towards the pointer, and a double middle click fits everything."),
             ManualBlock(ManualKind.Heading, "Picking things"),
             ManualBlock(ManualKind.Para, "Tap a face, an edge or a corner to pick it, and tap it again to drop it. Tap empty space to clear what's picked. Hold on an edge to pick it and the edges running on smoothly from it, such as all of a rounded outline. Inside a finished sketch, tap an area to pick it, which is what Extrude and other tools use."),

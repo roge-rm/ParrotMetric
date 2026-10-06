@@ -27,6 +27,8 @@ What's left from the feature review after 0.6.0, for an agent to work through. D
 
 ## The features, in order
 
+Done so far: joint limits, Planar and Ball joints and geared joints; parameters to and from CSV; Isolate; named views.
+
 ### 1. Joint limits and more joint kinds
 
 `JointFeature` (`design/ModifyFeatures.kt`) has Rigid, Turn, Slide and TurnSlide.
