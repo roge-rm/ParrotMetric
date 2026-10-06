@@ -630,12 +630,14 @@ object SketchOps {
      * moves them all. Circles keep the originals' size, or with [grow] each
      * copy's is that much more across than the one before it, along the rows
      * and then on to the next row, tied to the original's parameter if it has one.
+     * With [stagger], every other row sits half a step along, as in a honeycomb.
      */
-    fun pattern(s: Sketch, curves: List<Curve>, count: Int, dx: Double, dy: Double, rows: Int = 1, rowGap: Double = 0.0, grow: Double = 0.0): String? {
+    fun pattern(s: Sketch, curves: List<Curve>, count: Int, dx: Double, dy: Double, rows: Int = 1, rowGap: Double = 0.0, grow: Double = 0.0, stagger: Boolean = false): String? {
         if (curves.isEmpty()) return "Select the curves first"
         if (count < 1 || rows < 1 || count * rows < 2) return "Make at least two"
         if (count > 1 && hypot(dx, dy) < 1e-9) return "The copies would sit on top of each other"
         if (rows > 1 && abs(rowGap) < 1e-9) return "The rows would sit on top of each other"
+        if (stagger && count < 2) return "Staggered rows need at least two in a row"
         val len = hypot(dx, dy)
         // Rows go square to the row, to its left; a row of one goes up.
         val (rx, ry) = if (len < 1e-9) 0.0 to rowGap else -dy / len * rowGap to dx / len * rowGap
@@ -646,7 +648,8 @@ object SketchOps {
         for (j in 0 until rows) for (i in 0 until count) {
             if (i == 0 && j == 0) continue
             val before = s.curves.toSet()
-            val made = copy(s, curves, 1.0, false) { x, y -> x + i * dx + j * rx to y + i * dy + j * ry }
+            val half = if (stagger && j % 2 == 1) 0.5 else 0.0
+            val made = copy(s, curves, 1.0, false) { x, y -> x + (i + half) * dx + j * rx to y + (i + half) * dy + j * ry }
             copies[i to j] = made
             val fresh = s.curves.filter { it !in before }
             val step = (j * count + i) * grow
@@ -675,15 +678,26 @@ object SketchOps {
         val across = copies[1 to 0]?.get(ref)
         val up = copies[0 to 1]?.get(ref)
         across?.let { dimension(ref, it, dx, dy) }
-        up?.let { dimension(ref, it, rx, ry) }
+        if (up != null && stagger && across != null) {
+            // Halfway along: as far from the first two of the row below as each other, and the rows' gap from the line through them.
+            val below = s.addLine(ref, across, construction = true)
+            s.add(Constraint.Equal(s.addLine(ref, up, construction = true), s.addLine(across, up, construction = true)))
+            s.add(Constraint.PointLineDistance(up, below, abs(rowGap)))
+        } else up?.let { dimension(ref, it, rx, ry) }
         for ((at, map) in copies) {
             val (i, j) = at
             if (i == 0 && j == 0) continue
-            val (prev, stepTo) = if (i > 0) copies.getValue(i - 1 to j) to across!! else copies.getValue(0 to j - 1) to up!!
+            // Each step is one already held: across a row, or up to the row above. Staggered, a row
+            // half a step back goes up by the first row's step less a step across.
+            val (prev, stepFrom, stepTo) = when {
+                i > 0 -> Triple(copies.getValue(i - 1 to j), ref, across!!)
+                stagger && j % 2 == 0 -> Triple(copies.getValue(0 to j - 1), across!!, up!!)
+                else -> Triple(copies.getValue(0 to j - 1), ref, up!!)
+            }
             for (p in originals) {
                 val from = prev.getValue(p); val to = map.getValue(p)
-                if (from === ref && to === stepTo) continue
-                s.add(Constraint.SameStep(from, to, ref, stepTo))
+                if (from === stepFrom && to === stepTo) continue
+                s.add(Constraint.SameStep(from, to, stepFrom, stepTo))
             }
         }
         s.solve()

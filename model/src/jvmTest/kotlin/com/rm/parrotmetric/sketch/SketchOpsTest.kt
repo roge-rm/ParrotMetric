@@ -256,6 +256,27 @@ class SketchOpsTest {
     }
 
     @Test
+    fun staggeredRowsMakeAHoneycombThatStaysTied() {
+        val s = Sketch()
+        val hole = s.addCircle(s.addPoint(0.0, 0.0), 2.0)
+        s.add(Constraint.Radius(hole, true, 4.0))
+        s.add(Constraint.Coincident(s.origin, hole.centre))
+        assertNull(SketchOps.pattern(s, listOf(hole), 3, 10.0, 0.0, rows = 3, rowGap = 8.0, stagger = true))
+        val centres = s.curves.filterIsInstance<Circle>().map { Math.round(s.x(it.centre) * 10) / 10.0 to Math.round(s.y(it.centre) * 10) / 10.0 }.toSet()
+        // The middle row half a step along; the top one back in line with the first.
+        assertEquals(setOf(0.0, 10.0, 20.0), centres.filter { it.second == 0.0 }.map { it.first }.toSet())
+        assertEquals(setOf(5.0, 15.0, 25.0), centres.filter { it.second == 8.0 }.map { it.first }.toSet())
+        assertEquals(setOf(0.0, 10.0, 20.0), centres.filter { it.second == 16.0 }.map { it.first }.toSet())
+        assertEquals(0, s.freedom().count)
+        // A longer step across moves every row with it, still staggered.
+        s.constraints.filterIsInstance<Constraint.AxisDistance>().first { abs(it.value - 10.0) < 1e-9 }.value = 12.0
+        s.solve()
+        val after = s.curves.filterIsInstance<Circle>().map { Math.round(s.x(it.centre) * 10) / 10.0 to Math.round(s.y(it.centre) * 10) / 10.0 }.toSet()
+        assertEquals(setOf(6.0, 18.0, 30.0), after.filter { it.second == 8.0 }.map { it.first }.toSet())
+        assertEquals(setOf(0.0, 12.0, 24.0), after.filter { it.second == 16.0 }.map { it.first }.toSet())
+    }
+
+    @Test
     fun anOffsetOutlineKeepsItsDistance() {
         // A 65 x 30 rounded rectangle, fully set, offset outwards by 2.5.
         val s = Sketch()

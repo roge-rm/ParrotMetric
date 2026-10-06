@@ -452,6 +452,18 @@ class RebuildTest {
     }
 
     @Test
+    fun aStaggeredGridShiftsEveryOtherRow() {
+        val k = FakeKernel()
+        val d = Design()
+        extrude(d, sketchAt(d, 0.0, 10.0), Operation.NewBody)
+        d.add(PatternFeature(d.newId(), "Pattern", listOf("Body 1"), false, Axis3.X, 2, 20.0, 0.0, Axis3.Y, 3, 15.0, join = false, stagger = true))
+        val built = Rebuilder(k).rebuild(d.active)
+        // Rows of two: along x at 0 and 20, the second row half a step on, the third back in line.
+        val starts = built.bodies.map { k.bodies.getValue(it.handle).from }
+        assertEquals(listOf(0.0, 0.0, 10.0, 20.0, 20.0, 30.0), starts.sorted())
+    }
+
+    @Test
     fun combineSplitAndMove() {
         val k = FakeKernel()
         val d = Design()

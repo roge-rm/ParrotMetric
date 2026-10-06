@@ -46,6 +46,8 @@ class SketchTransform(val kind: Kind) {
     var rows by mutableStateOf(1.0)
     var rowGap by mutableStateOf(10.0)
     var grow by mutableStateOf(0.0)
+    /** Every other row half a step along, as in a honeycomb. */
+    var stagger by mutableStateOf(false)
     var copy by mutableStateOf(false)
 }
 
@@ -1597,7 +1599,7 @@ class SketchEditor(
                 val f: (Double, Double) -> Pair<Double, Double> = { x, y -> (px + (x - px) * k) to (py + (y - py) * k) }
                 if (t.copy) { SketchOps.copy(sketch, curves, k, false, f); null } else SketchOps.move(sketch, curves, k, f)
             }
-            SketchTransform.Kind.Row -> SketchOps.pattern(sketch, curves, n, t.dx, t.dy, kotlin.math.round(t.rows).toInt().coerceAtLeast(1), t.rowGap, t.grow)
+            SketchTransform.Kind.Row -> SketchOps.pattern(sketch, curves, n, t.dx, t.dy, kotlin.math.round(t.rows).toInt().coerceAtLeast(1), t.rowGap, t.grow, t.stagger && t.rows >= 1.5)
             SketchTransform.Kind.Round -> {
                 // A full turn spaces them evenly; less spreads them from the first to the last.
                 val total = t.degrees * PI / 180

@@ -207,7 +207,7 @@ object DesignFile {
             is PatternFeature -> mapOf(
                 "type" to "pattern", "bodies" to f.bodies, "circular" to f.circular, "axis" to f.axis.name, "count" to f.count,
                 "spacing" to f.spacing, "angle" to f.angle, "axis2" to f.axis2?.name, "count2" to f.count2, "spacing2" to f.spacing2, "join" to f.join,
-                "axisFeature" to f.axisFeature, "path" to f.path?.let { path(it) }, "turn" to f.turn, "features" to f.features, "reverse" to f.reverse,
+                "axisFeature" to f.axisFeature, "path" to f.path?.let { path(it) }, "turn" to f.turn, "features" to f.features, "reverse" to f.reverse, "stagger" to f.stagger,
             )
             is CombineFeature -> mapOf(
                 "type" to "combine", "target" to f.target, "tools" to f.tools, "operation" to f.operation.name, "keepTools" to f.keepTools,
@@ -321,7 +321,7 @@ object DesignFile {
                 id, name, strings(o.arr("bodies")), o.bool("circular"), Axis3.valueOf(o.str("axis")), o.int("count"), o.num("spacing"), o.num("angle"),
                 (o["axis2"] as? Json.Str)?.let { Axis3.valueOf(it.value) }, o.int("count2"), o.num("spacing2"), o.bool("join"),
                 (o["axisFeature"] as? Json.Num)?.value?.toInt(), (o["path"] as? Json.Obj)?.let { path(it) }, (o["turn"] as? Json.Bool)?.value ?: false,
-                ints(o["features"]), (o["reverse"] as? Json.Bool)?.value ?: false,
+                ints(o["features"]), (o["reverse"] as? Json.Bool)?.value ?: false, (o["stagger"] as? Json.Bool)?.value ?: false,
             )
             "combine" -> CombineFeature(id, name, o.str("target"), strings(o.arr("tools")), Operation.valueOf(o.str("operation")), o.bool("keepTools"))
             "split" -> SplitFeature(id, name, o.str("body"), plane(o.obj("plane")), (o["keep"] as? Json.Num)?.value?.toInt() ?: 0, (o["tool"] as? Json.Str)?.value)

@@ -242,6 +242,8 @@ data class PatternFeature(
     val turn: Boolean = false,
     val features: List<Int> = emptyList(),
     val reverse: Boolean = false,
+    /** In a grid, every other row half a step along the first direction, as in a honeycomb. */
+    val stagger: Boolean = false,
 ) : Feature() {
     override fun key() = this
 }

@@ -880,6 +880,7 @@ internal fun PatternSettings(editor: DesignEditor, d: DesignEditor.PatternDraft)
         if (d.axis2 != null) {
             Field(editor, d, "count2", "Count", d.count2, "", allowNegative = false) { d.count2 = it; editor.draftChanged() }
             Field(editor, d, "spacing2", "Spacing", d.spacing2, "mm", allowNegative = true) { d.spacing2 = it; editor.draftChanged() }
+            Toggle("Stagger the rows", d.stagger) { d.stagger = it; editor.draftChanged() }
         }
     }
     if (!d.byFeatures) Toggle("Join to the original", d.join) { d.join = it; editor.draftChanged() }

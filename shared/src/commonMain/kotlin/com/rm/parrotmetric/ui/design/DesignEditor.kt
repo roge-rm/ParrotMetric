@@ -1974,6 +1974,7 @@ class DesignEditor(
         var spread by mutableStateOf(editing?.path == null || editing.spacing <= 0)
         var turn by mutableStateOf(editing?.turn ?: true)
         var reverse by mutableStateOf(editing?.reverse ?: false)
+        var stagger by mutableStateOf(editing?.stagger ?: false)
         var byFeatures by mutableStateOf(editing?.features?.isNotEmpty() ?: false)
         var features by mutableStateOf(editing?.features ?: emptyList())
         init { if (editing != null) bodies = editing.bodies }
@@ -1985,7 +1986,7 @@ class DesignEditor(
             return PatternFeature(
                 id, name, bodies, circular && !alongPath, axis, count.toInt(), if (alongPath && spread) 0.0 else spacing, degrees * PI / 180,
                 if (alongPath) null else axis2, count2.toInt(), spacing2, join, if (circular && !alongPath) axisFeature else null,
-                path, turn, if (byFeatures) features else emptyList(), reverse,
+                path, turn, if (byFeatures) features else emptyList(), reverse, !alongPath && axis2 != null && stagger,
             )
         }
         override fun missing() = when {

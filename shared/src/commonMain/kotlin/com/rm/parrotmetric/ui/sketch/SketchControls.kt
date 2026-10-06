@@ -632,7 +632,10 @@ private fun TransformEntry(editor: SketchEditor, t: SketchTransform) {
                     com.rm.parrotmetric.ui.design.NumberRow("X apart", t.dx, "mm", true) { t.dx = it }
                     com.rm.parrotmetric.ui.design.NumberRow("Y apart", t.dy, "mm", true) { t.dy = it }
                     com.rm.parrotmetric.ui.design.NumberRow("Rows", t.rows, "", false) { t.rows = it }
-                    if (t.rows >= 1.5) com.rm.parrotmetric.ui.design.NumberRow("Rows apart", t.rowGap, "mm", true) { t.rowGap = it }
+                    if (t.rows >= 1.5) {
+                        com.rm.parrotmetric.ui.design.NumberRow("Rows apart", t.rowGap, "mm", true) { t.rowGap = it }
+                        com.rm.parrotmetric.ui.design.Toggle("Stagger the rows", t.stagger) { t.stagger = it }
+                    }
                     if (editor.selectedCurves.any { it is com.rm.parrotmetric.sketch.Circle }) {
                         com.rm.parrotmetric.ui.design.NumberRow("Grow by", t.grow, "mm", true) { t.grow = it }
                     }

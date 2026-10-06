@@ -813,7 +813,7 @@ class Rebuilder(private val kernel: Kernel) {
             val d2 = f.axis2?.let { Transforms.unit(it) }
             for (i in 0 until f.count) for (j in 0 until (if (d2 != null) f.count2 else 1)) {
                 if (i == 0 && j == 0) continue
-                var v = d1 * (f.spacing * i)
+                var v = d1 * (f.spacing * (i + if (f.stagger && j % 2 == 1) 0.5 else 0.0))
                 if (d2 != null) v += d2 * (f.spacing2 * j)
                 out += Transforms.translate(v)
             }
