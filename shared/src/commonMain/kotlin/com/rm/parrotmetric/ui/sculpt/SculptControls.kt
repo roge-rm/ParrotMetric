@@ -287,7 +287,8 @@ private fun BrushButton(b: SculptBrush, on: Boolean, wide: Boolean, onClick: () 
     }
 }
 
-/** The settings used less: how fine the detail is, the pen, and the mask and triangles as a whole. */
+/** The settings used less: how fine the detail is, the look, the pen, and the mask and triangles as a whole. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun MoreOptions(editor: SculptEditor) {
     var open by remember { mutableStateOf(false) }
@@ -305,6 +306,11 @@ private fun MoreOptions(editor: SculptEditor) {
                     )
                     Text("Fine", fontSize = 12.sp, color = Palette.muted)
                 }
+                Text("Look", fontSize = 12.sp, color = Palette.muted)
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("Clay", "Stone", "Porcelain", "Terracotta").forEachIndexed { i, name -> Chip(name, editor.look == i) { editor.setLook(look = i) } }
+                }
+                Toggle("Show the triangles", editor.wire) { editor.setLook(wire = it) }
                 Text("Steady lines", fontSize = 12.sp, color = Palette.muted)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Off", fontSize = 12.sp, color = Palette.muted)

@@ -59,6 +59,12 @@ class SculptEditor(
     var detail by mutableFloatStateOf(remembered.detail)
     /** How far the brush trails the pointer, 0 to 1, for smooth lines. */
     var steady by mutableFloatStateOf(remembered.steady)
+    /** 0 clay, 1 stone, 2 porcelain, 3 terracotta. */
+    var look by mutableIntStateOf(remembered.look)
+        private set
+    /** Its triangles drawn over it. */
+    var wire by mutableStateOf(remembered.wire)
+        private set
     var pressureSize by mutableStateOf(remembered.pressureSize)
     var pressureStrength by mutableStateOf(remembered.pressureStrength)
 
@@ -159,6 +165,19 @@ class SculptEditor(
         keep()
     }
 
+    /** Changes how it looks, and shows it. */
+    fun setLook(look: Int = this.look, wire: Boolean = this.wire) {
+        this.look = look
+        this.wire = wire
+        keep()
+        showLook()
+    }
+
+    fun showLook() {
+        core.sculptLook(look, wire)
+        redraw {}
+    }
+
     /** Bigger or smaller by a step, as [ and ] do. */
     fun resize(bigger: Boolean) {
         size = (if (bigger) size * 1.2f else size / 1.2f).coerceIn(4f, 400f)
@@ -172,7 +191,7 @@ class SculptEditor(
 
     /** The settings carry on to the next session. */
     fun keep() {
-        remembered = Settings(brush, size, strengths.toMap(), mirror, dynamic, detail, pressureSize, pressureStrength, steady)
+        remembered = Settings(brush, size, strengths.toMap(), mirror, dynamic, detail, pressureSize, pressureStrength, steady, look, wire)
     }
 
     private class Settings(
@@ -185,6 +204,8 @@ class SculptEditor(
         val pressureSize: Boolean = false,
         val pressureStrength: Boolean = true,
         val steady: Float = 0f,
+        val look: Int = 0,
+        val wire: Boolean = false,
     )
 
     companion object {

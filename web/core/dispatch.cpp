@@ -101,8 +101,9 @@ JNIEXPORT jboolean JNICALL Java_com_rm_parrotmetric_Core_sculptUndo(JNIEnv*, job
 JNIEXPORT jdoubleArray JNICALL Java_com_rm_parrotmetric_Core_sculptInfo(JNIEnv*, jobject);
 JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_sculptChange(JNIEnv*, jobject, jint, jdouble);
 JNIEXPORT jbyteArray JNICALL Java_com_rm_parrotmetric_Core_sculptFinish(JNIEnv*, jobject, jboolean);
-JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_sculptedBody(JNIEnv*, jobject, jint, jbyteArray);
+JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_sculptedBody(JNIEnv*, jobject, jint, jbyteArray, jlong);
 JNIEXPORT jbyteArray JNICALL Java_com_rm_parrotmetric_Core_sculptPack(JNIEnv*, jobject);
+JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_sculptLook(JNIEnv*, jobject, jint, jboolean);
 }
 
 namespace pmweb {
@@ -918,13 +919,20 @@ void dispatch(int call, Reader& in, Writer& out, JNIEnv* env) {
         case 97: {  // sculptedBody
             auto a0 = in.i32();
             auto a1 = in.bytes();
-            auto r = Java_com_rm_parrotmetric_Core_sculptedBody(env, nullptr, a0, a1);
+            auto a2 = in.i64();
+            auto r = Java_com_rm_parrotmetric_Core_sculptedBody(env, nullptr, a0, a1, a2);
             if (!failed()) out.put(r);
             break;
         }
         case 98: {  // sculptPack
             auto r = Java_com_rm_parrotmetric_Core_sculptPack(env, nullptr);
             if (!failed()) out.put(r);
+            break;
+        }
+        case 99: {  // sculptLook
+            auto a0 = in.i32();
+            auto a1 = in.boolean();
+            Java_com_rm_parrotmetric_Core_sculptLook(env, nullptr, a0, a1);
             break;
         }
         default:

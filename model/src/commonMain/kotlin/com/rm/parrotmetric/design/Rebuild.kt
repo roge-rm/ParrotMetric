@@ -588,8 +588,9 @@ class Rebuilder(private val kernel: Kernel) {
             replace(f, bodies, planes, made, body) { kernel.meshEdit(f.id, body.handle, f.kind.ordinal, f.size, f.steps) }
         }
         is SculptFeature -> {
-            val h = kernel.sculptedBody(f.id, f.mesh)
             val old = f.body?.let { l -> bodies.firstOrNull { it.label == l } }
+            // If the body it was sculpted from has changed, its strokes are made again on it.
+            val h = kernel.sculptedBody(f.id, f.mesh, old?.handle ?: 0L)
             if (old != null) replace(f, bodies, planes, made, old) { h }
             else {
                 keep(bodies)

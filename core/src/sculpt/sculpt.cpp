@@ -90,6 +90,28 @@ inline uint32_t spread10(uint32_t x) {
 }
 
 constexpr int kLeafSize = 8;
+
+// What a saved record holds, one after another.
+enum Op : uint8_t { OpStroke = 1, OpEvenOut = 2, OpClearMask = 3, OpInvertMask = 4 };
+
+template <typename T> void put(std::vector<uint8_t>& out, T v) {
+    const auto* b = reinterpret_cast<const uint8_t*>(&v);
+    out.insert(out.end(), b, b + sizeof(T));
+}
+
+// Reads from saved bytes, throwing if they run out.
+struct Reader {
+    const uint8_t* at;
+    const uint8_t* end;
+    template <typename T> T get() {
+        if (size_t(end - at) < sizeof(T)) throw std::runtime_error("The sculpted mesh is damaged");
+        T v;
+        std::memcpy(&v, at, sizeof(T));
+        at += sizeof(T);
+        return v;
+    }
+    bool done() const { return at >= end; }
+};
 constexpr uint32_t kDead = 0;
 
 inline bool dead(const std::array<uint32_t, 3>& t) { return t[0] == t[1]; }
@@ -127,16 +149,18 @@ struct Sculpt::Change {
     std::vector<Vertex> before, after;
     std::vector<Vertex> vertsBefore, vertsAfter;
     std::vector<std::array<uint32_t, 3>> trisBefore, trisAfter;
+    // What was done, to do it again on a changed body.
+    std::vector<uint8_t> op;
 
     size_t bytes() const {
         return idx.size() * 4 + (before.size() + after.size() + vertsBefore.size() + vertsAfter.size()) * sizeof(Vertex) +
-               (trisBefore.size() + trisAfter.size()) * 12;
+               (trisBefore.size() + trisAfter.size()) * 12 + op.size();
     }
 };
 
-Sculpt::Sculpt(const Mesh& mesh, size_t maxTriangles) : bvh_(new Bvh), maxTriangles_(maxTriangles) {
+Sculpt::Sculpt(const Mesh& mesh, size_t maxTriangles, const std::vector<float>* mask) : bvh_(new Bvh), maxTriangles_(maxTriangles) {
     if (mesh.triangles.empty()) throw std::runtime_error("There's nothing to sculpt");
-    reset(mesh);
+    reset(mesh, mask);
 }
 
 Sculpt::~Sculpt() = default;
@@ -173,11 +197,11 @@ void spaceOrder(std::vector<Sculpt::Vertex>& verts, std::vector<std::array<uint3
 
 }  // namespace
 
-void Sculpt::reset(const Mesh& mesh) {
+void Sculpt::reset(const Mesh& mesh, const std::vector<float>* mask) {
     verts_.assign(mesh.vertices.size(), Vertex{});
     for (size_t i = 0; i < mesh.vertices.size(); ++i) {
         const auto& p = mesh.vertices[i];
-        verts_[i] = Vertex{{p[0], p[1], p[2]}, {0, 0, 1}, 0};
+        verts_[i] = Vertex{{p[0], p[1], p[2]}, {0, 0, 1}, mask && i < mask->size() ? (*mask)[i] : 0.0f};
     }
     tris_.clear();
     tris_.reserve(mesh.triangles.size());
@@ -463,6 +487,10 @@ bool Sculpt::begin(float x, float y, float pressure, const BrushSettings& settin
     travelled_ = 0;
     layerStart_.clear();
     held_.clear();
+    strokePoints_.assign({x, y, pressure});
+    std::copy(vp_, vp_ + 16, strokeCamera_);
+    strokeWidth_ = width_;
+    strokeHeight_ = height_;
     float radius = worldRadius(at, s_.radius * (s_.pressureSize ? std::max(pressure, 0.1f) : 1.0f));
     if (s_.brush == Brush::Grab) {
         std::copy(at, at + 3, grabFrom_);
@@ -490,6 +518,7 @@ bool Sculpt::begin(float x, float y, float pressure, const BrushSettings& settin
 
 void Sculpt::move(float x, float y, float pressure) {
     if (!stroking_) return;
+    strokePoints_.insert(strokePoints_.end(), {x, y, pressure});
     if (s_.brush == Brush::Grab) {
         grabTo(x, y);
         lastX_ = x;
@@ -553,6 +582,24 @@ void Sculpt::end() {
         if (freeTris_.size() * 4 > tris_.size() || tris_.size() * 10 > orderedTriangles_ * 13) compact();
         else splitGrownLeaves();
     }
+    // The stroke as it came in: the brush, the camera, then each point.
+    std::vector<uint8_t> op;
+    put(op, uint8_t(OpStroke));
+    put(op, int32_t(s_.brush));
+    put(op, s_.radius);
+    put(op, s_.strength);
+    put(op, uint8_t(s_.invert));
+    put(op, uint8_t(s_.mirror));
+    put(op, uint8_t(s_.dynamic));
+    put(op, s_.detail);
+    put(op, uint8_t(s_.pressureSize));
+    put(op, uint8_t(s_.pressureStrength));
+    for (float f : strokeCamera_) put(op, f);
+    put(op, int32_t(strokeWidth_));
+    put(op, int32_t(strokeHeight_));
+    put(op, uint32_t(strokePoints_.size() / 3));
+    for (float f : strokePoints_) put(op, f);
+    note(std::move(op));
     finishChange();
     stroking_ = false;
     held_.clear();
@@ -1107,15 +1154,16 @@ Sculpt::Dirty Sculpt::takeDirty() {
 
 void Sculpt::startChange(bool wholeMesh) {
     open_.reset(new Change);
-    open_->whole = wholeMesh;
-    if (wholeMesh) {
+    // Made again from a record: nothing kept to undo.
+    open_->whole = wholeMesh && !replaying_;
+    if (open_->whole) {
         open_->vertsBefore = verts_;
         open_->trisBefore = tris_;
     }
 }
 
 void Sculpt::record(uint32_t v) {
-    if (!open_ || open_->whole) return;
+    if (!open_ || open_->whole || replaying_) return;
     if (v >= touched_.size()) touched_.resize(v + 1, 0);
     if (touched_[v] == strokeNo_) return;
     touched_[v] = strokeNo_;
@@ -1127,6 +1175,10 @@ void Sculpt::finishChange() {
     if (!open_) return;
     std::unique_ptr<Change> c = std::move(open_);
     if (!c->changed && !topologyChanged_) return;
+    if (replaying_) {
+        settled_.insert(settled_.end(), c->op.begin(), c->op.end());
+        return;
+    }
     if (c->whole) {
         c->vertsAfter = verts_;
         c->trisAfter = tris_;
@@ -1146,6 +1198,8 @@ void Sculpt::trimUndo() {
     const size_t most = std::clamp<size_t>(maxTriangles_ * 100, size_t(48) << 20, size_t(320) << 20);
     while (undo_.size() > 1 && total > most) {
         total -= undo_.front()->bytes();
+        // Too old to undo, but still part of how it was made.
+        settled_.insert(settled_.end(), undo_.front()->op.begin(), undo_.front()->op.end());
         undo_.erase(undo_.begin());
     }
 }
@@ -1246,6 +1300,7 @@ void Sculpt::clearMask() {
             markVertex(v);
             open_->changed = true;
         }
+    note({uint8_t(OpClearMask)});
     finishChange();
 }
 
@@ -1259,6 +1314,7 @@ void Sculpt::invertMask() {
         markVertex(v);
     }
     open_->changed = true;
+    note({uint8_t(OpInvertMask)});
     finishChange();
 }
 
@@ -1280,13 +1336,20 @@ void Sculpt::evenOut(float edge) {
     }
     compact();
     open_->changed = true;
+    std::vector<uint8_t> op;
+    put(op, uint8_t(OpEvenOut));
+    put(op, edge);
+    note(std::move(op));
     finishChange();
 }
 
 // Out.
 
-Mesh Sculpt::mesh() const {
+Mesh Sculpt::mesh() const { return mesh(nullptr); }
+
+Mesh Sculpt::mesh(std::vector<float>* mask) const {
     Mesh m;
+    if (mask) mask->clear();
     std::vector<uint32_t> where(verts_.size(), UINT32_MAX);
     for (uint32_t t = 0; t < tris_.size(); ++t) {
         if (!triAlive_[t]) continue;
@@ -1296,6 +1359,7 @@ Mesh Sculpt::mesh() const {
             if (where[v] == UINT32_MAX) {
                 where[v] = uint32_t(m.vertices.size());
                 m.vertices.push_back({verts_[v].p[0], verts_[v].p[1], verts_[v].p[2]});
+                if (mask) mask->push_back(verts_[v].mask);
             }
             r[size_t(i)] = where[v];
         }
@@ -1365,6 +1429,211 @@ Mesh Sculpt::sphere(float radius, int levels) {
     }
     m.triangles = f;
     return m;
+}
+
+// Keeping a session.
+
+void Sculpt::note(std::vector<uint8_t> op) {
+    if (open_) open_->op = std::move(op);
+}
+
+std::vector<uint8_t> Sculpt::log() const {
+    std::vector<uint8_t> out = settled_;
+    for (const auto& c : undo_) out.insert(out.end(), c->op.begin(), c->op.end());
+    return out;
+}
+
+uint64_t Sculpt::fingerprint(const Mesh& mesh) {
+    // FNV-1a over the points and corners.
+    uint64_t h = 1469598103934665603ull;
+    auto mix = [&](const void* data, size_t n) {
+        const auto* b = static_cast<const uint8_t*>(data);
+        for (size_t i = 0; i < n; ++i) h = (h ^ b[i]) * 1099511628211ull;
+    };
+    mix(mesh.vertices.data(), mesh.vertices.size() * 12);
+    mix(mesh.triangles.data(), mesh.triangles.size() * 12);
+    return h ? h : 1;
+}
+
+std::unique_ptr<Sculpt> Sculpt::fromBody(const Mesh& mesh, bool solid, size_t maxTriangles) {
+    auto s = std::make_unique<Sculpt>(mesh, maxTriangles);
+    s->base_ = fingerprint(mesh);
+    auto box = s->bounds();
+    if (solid) {
+        // Long thin triangles where it's flat, made even about a 120th of the way across, so every part takes detail alike.
+        float across = std::sqrt((box[3] - box[0]) * (box[3] - box[0]) + (box[4] - box[1]) * (box[4] - box[1]) + (box[5] - box[2]) * (box[5] - box[2]));
+        s->evenOut(across / 120);
+        s->forget();
+    }
+    s->setMirrorCentre((box[0] + box[3]) / 2, (box[1] + box[4]) / 2, (box[2] + box[5]) / 2);
+    return s;
+}
+
+namespace {
+
+const char kSaved[4] = {'P', 'M', 'S', '3'};
+
+// A saved session, read back: older files have only the mesh.
+struct Saved {
+    Mesh mesh;
+    std::vector<float> mask;
+    std::vector<uint8_t> log;
+    uint64_t base = 0;
+    uint32_t most = 2000000;
+    float centre[3] = {0, 0, 0};
+};
+
+Saved readSaved(const std::vector<uint8_t>& bytes) {
+    Saved out;
+    if (bytes.size() >= 4 && std::memcmp(bytes.data(), kSaved, 4) != 0) {
+        out.mesh = unpackMesh(bytes);
+        return out;
+    }
+    if (bytes.size() < 8) throw std::runtime_error("The sculpted mesh is damaged");
+    uint32_t rawSize;
+    std::memcpy(&rawSize, bytes.data() + 4, 4);
+    std::vector<uint8_t> raw(rawSize);
+    uLongf size = rawSize;
+    if (uncompress(raw.data(), &size, bytes.data() + 8, uLong(bytes.size() - 8)) != Z_OK || size != rawSize)
+        throw std::runtime_error("The sculpted mesh is damaged");
+    Reader r{raw.data(), raw.data() + raw.size()};
+    out.base = r.get<uint64_t>();
+    out.most = r.get<uint32_t>();
+    for (float& c : out.centre) c = r.get<float>();
+    uint32_t nv = r.get<uint32_t>(), nt = r.get<uint32_t>();
+    if (size_t(r.end - r.at) < size_t(nv) * 13 + size_t(nt) * 12) throw std::runtime_error("The sculpted mesh is damaged");
+    out.mesh.vertices.resize(nv);
+    out.mesh.triangles.resize(nt);
+    std::memcpy(out.mesh.vertices.data(), r.at, size_t(nv) * 12);
+    r.at += size_t(nv) * 12;
+    std::memcpy(out.mesh.triangles.data(), r.at, size_t(nt) * 12);
+    r.at += size_t(nt) * 12;
+    for (const auto& t : out.mesh.triangles)
+        for (uint32_t v : t)
+            if (v >= nv) throw std::runtime_error("The sculpted mesh is damaged");
+    out.mask.resize(nv);
+    for (uint32_t i = 0; i < nv; ++i) out.mask[i] = float(r.at[i]) / 255.0f;
+    r.at += nv;
+    uint32_t logSize = r.get<uint32_t>();
+    if (size_t(r.end - r.at) < logSize) throw std::runtime_error("The sculpted mesh is damaged");
+    out.log.assign(r.at, r.at + logSize);
+    return out;
+}
+
+}  // namespace
+
+std::vector<uint8_t> Sculpt::save() const {
+    std::vector<float> mask;
+    Mesh m = mesh(&mask);
+    std::vector<uint8_t> record = log();
+    std::vector<uint8_t> raw;
+    raw.reserve(32 + m.vertices.size() * 13 + m.triangles.size() * 12 + record.size());
+    put(raw, base_);
+    put(raw, uint32_t(maxTriangles_));
+    for (float c : mirrorAt_) put(raw, c);
+    put(raw, uint32_t(m.vertices.size()));
+    put(raw, uint32_t(m.triangles.size()));
+    const auto* v = reinterpret_cast<const uint8_t*>(m.vertices.data());
+    raw.insert(raw.end(), v, v + m.vertices.size() * 12);
+    const auto* t = reinterpret_cast<const uint8_t*>(m.triangles.data());
+    raw.insert(raw.end(), t, t + m.triangles.size() * 12);
+    for (float k : mask) raw.push_back(uint8_t(std::lround(std::clamp(k, 0.0f, 1.0f) * 255)));
+    put(raw, uint32_t(record.size()));
+    raw.insert(raw.end(), record.begin(), record.end());
+    uLongf size = compressBound(uLong(raw.size()));
+    std::vector<uint8_t> out(8 + size);
+    std::memcpy(out.data(), kSaved, 4);
+    uint32_t rawSize = uint32_t(raw.size());
+    std::memcpy(out.data() + 4, &rawSize, 4);
+    if (compress2(out.data() + 8, &size, raw.data(), uLong(raw.size()), 6) != Z_OK) throw std::runtime_error("Couldn't pack the mesh");
+    out.resize(8 + size);
+    return out;
+}
+
+std::unique_ptr<Sculpt> Sculpt::load(const std::vector<uint8_t>& bytes, size_t maxTriangles) {
+    Saved saved = readSaved(bytes);
+    auto s = std::make_unique<Sculpt>(saved.mesh, maxTriangles, &saved.mask);
+    s->base_ = saved.base;
+    std::copy(saved.centre, saved.centre + 3, s->mirrorAt_);
+    s->settled_ = std::move(saved.log);
+    return s;
+}
+
+std::unique_ptr<Sculpt> Sculpt::resume(const std::vector<uint8_t>& bytes, const Mesh* input, bool solid, size_t maxTriangles) {
+    Saved saved = readSaved(bytes);
+    if (!input || saved.base == 0 || saved.base == fingerprint(*input)) {
+        auto s = std::make_unique<Sculpt>(saved.mesh, maxTriangles, &saved.mask);
+        s->base_ = saved.base;
+        std::copy(saved.centre, saved.centre + 3, s->mirrorAt_);
+        s->settled_ = std::move(saved.log);
+        return s;
+    }
+    auto s = fromBody(*input, solid, maxTriangles);
+    s->replay(saved.log);
+    return s;
+}
+
+bool Sculpt::changedSince(const std::vector<uint8_t>& bytes, const Mesh& input) {
+    Saved saved = readSaved(bytes);
+    return saved.base != 0 && saved.base != fingerprint(input);
+}
+
+Mesh Sculpt::result(const std::vector<uint8_t>& bytes, const Mesh* input, bool solid) {
+    Saved saved = readSaved(bytes);
+    if (!input || saved.base == 0 || saved.base == fingerprint(*input)) return std::move(saved.mesh);
+    auto s = fromBody(*input, solid, saved.most);
+    s->replay(saved.log);
+    return s->mesh();
+}
+
+void Sculpt::replay(const std::vector<uint8_t>& record) {
+    if (stroking_) end();
+    replaying_ = true;
+    float camera[16];
+    int width = width_, height = height_;
+    std::copy(vp_, vp_ + 16, camera);
+    Reader r{record.data(), record.data() + record.size()};
+    try {
+        while (!r.done()) {
+            switch (r.get<uint8_t>()) {
+                case OpStroke: {
+                    BrushSettings b;
+                    b.brush = Brush(std::clamp(r.get<int32_t>(), 0, int32_t(Brush::Mask)));
+                    b.radius = r.get<float>();
+                    b.strength = r.get<float>();
+                    b.invert = r.get<uint8_t>() != 0;
+                    b.mirror = r.get<uint8_t>();
+                    b.dynamic = r.get<uint8_t>() != 0;
+                    b.detail = r.get<float>();
+                    b.pressureSize = r.get<uint8_t>() != 0;
+                    b.pressureStrength = r.get<uint8_t>() != 0;
+                    float vp[16];
+                    for (float& f : vp) f = r.get<float>();
+                    int w = r.get<int32_t>(), h = r.get<int32_t>();
+                    uint32_t n = r.get<uint32_t>();
+                    std::vector<float> points(size_t(n) * 3);
+                    for (float& f : points) f = r.get<float>();
+                    if (n == 0) break;
+                    setCamera(vp, w, h);
+                    // Off the changed surface, the stroke is left out.
+                    if (!begin(points[0], points[1], points[2], b)) break;
+                    for (uint32_t i = 1; i < n; ++i) move(points[i * 3], points[i * 3 + 1], points[i * 3 + 2]);
+                    end();
+                    break;
+                }
+                case OpEvenOut: evenOut(r.get<float>()); break;
+                case OpClearMask: clearMask(); break;
+                case OpInvertMask: invertMask(); break;
+                default: throw std::runtime_error("The sculpted mesh is damaged");
+            }
+        }
+    } catch (...) {
+        replaying_ = false;
+        setCamera(camera, width, height);
+        throw;
+    }
+    replaying_ = false;
+    setCamera(camera, width, height);
 }
 
 namespace {

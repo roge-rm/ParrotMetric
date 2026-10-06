@@ -85,7 +85,8 @@ The box has rounded corners, a hollow, vents and a lid on a hinge joint, with it
 - Sculpt any body, or start from a ball or a block, like clay
 - Draw, Clay, Crease, Smooth, Flatten, Inflate, Pinch, Grab, Pull, Layer and Mask brushes
 - Mirror across X, Y and Z, detail added under the brush as you work, steady lines and pen pressure
-- Kept as a step in the history, and exported like any mesh
+- Kept as a step in the history with its mask; change an earlier step and the strokes are made again on the changed body
+- Shown as clay, stone, porcelain or terracotta, with its triangles if you like, and exported like any mesh
 
 ### Surfaces
 

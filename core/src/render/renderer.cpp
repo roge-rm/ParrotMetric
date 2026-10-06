@@ -165,6 +165,22 @@ void main() {
     gl_Position = viewProjection * vec4(position, 1.0);
 })";
 
+// Plain lines in one colour: the wireframe over a mesh being sculpted.
+const char* kLineVertex = R"(#version 300 es
+layout(location = 0) in vec3 position;
+uniform mat4 viewProjection;
+void main() {
+    gl_Position = viewProjection * vec4(position, 1.0);
+})";
+
+const char* kLineFragment = R"(#version 300 es
+precision mediump float;
+uniform vec4 colour;
+out vec4 result;
+void main() {
+    result = colour;
+})";
+
 const char* kIdFragment = R"(#version 300 es
 precision highp float;
 // Ids use bits up to 23; a fragment shader's ints are mediump unless asked,
@@ -302,11 +318,12 @@ void Renderer::surfaceCreated() {
     cornerProgram_ = link(kCornerVertex, kCornerFragment);
     cornerIdProgram_ = link(kCornerVertex, kIdFragment);
     canvasProgram_ = link(kCanvasVertex, kCanvasFragment);
+    lineProgram_ = link(kLineVertex, kLineFragment);
     // The old context's textures went with it.
     canvasTextures_.clear();
     canvasVao_ = canvasVbo_ = 0;
     canvasesDirty_ = true;
-    sculptVao_ = sculptVbo_ = sculptIbo_ = blankTexture_ = 0;
+    sculptVao_ = sculptVbo_ = sculptIbo_ = blankTexture_ = sculptLineVao_ = sculptLineIbo_ = 0;
     sculptVertexRoom_ = sculptTriangleRoom_ = 0;
     // Desktop GL sizes points from the shader only when asked.
     if (desktopGl) glEnable(0x8642);  // GL_PROGRAM_POINT_SIZE
@@ -796,6 +813,18 @@ void Renderer::uploadSculpt() {
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sculptIbo_);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, GLsizeiptr(sculptTriangleRoom_ * 12), nullptr, GL_DYNAMIC_DRAW);
         glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, GLsizeiptr(t.size() * 12), t.data());
+        // The wireframe: each triangle's three sides as lines, on the same points.
+        if (!sculptLineVao_) {
+            glGenVertexArrays(1, &sculptLineVao_);
+            glGenBuffers(1, &sculptLineIbo_);
+        }
+        glBindVertexArray(sculptLineVao_);
+        glBindBuffer(GL_ARRAY_BUFFER, sculptVbo_);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, GLsizei(vertexBytes), reinterpret_cast<void*>(offsetof(Sculpt::Vertex, p)));
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sculptLineIbo_);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, GLsizeiptr(sculptTriangleRoom_ * 24), nullptr, GL_DYNAMIC_DRAW);
+        uploadLines(0, t.size());
         glBindVertexArray(0);
         return;
     }
@@ -805,6 +834,8 @@ void Renderer::uploadSculpt() {
     if (dirty.all) {
         glBufferSubData(GL_ARRAY_BUFFER, 0, GLsizeiptr(v.size() * vertexBytes), v.data());
         glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, GLsizeiptr(t.size() * 12), t.data());
+        glBindVertexArray(sculptLineVao_);
+        uploadLines(0, t.size());
     } else {
         for (uint32_t b : dirty.vertexBlocks) {
             size_t from = size_t(b) * Sculpt::kBlock;
@@ -818,8 +849,26 @@ void Renderer::uploadSculpt() {
             size_t count = std::min<size_t>(Sculpt::kBlock, t.size() - from);
             glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, GLintptr(from * 12), GLsizeiptr(count * 12), &t[from]);
         }
+        glBindVertexArray(sculptLineVao_);
+        for (uint32_t b : dirty.triangleBlocks) {
+            size_t from = size_t(b) * Sculpt::kBlock;
+            if (from >= t.size()) continue;
+            uploadLines(from, std::min<size_t>(Sculpt::kBlock, t.size() - from));
+        }
     }
     glBindVertexArray(0);
+}
+
+void Renderer::uploadLines(size_t from, size_t count) {
+    // With the line VAO bound, so its element buffer is the one written.
+    const auto& t = sculpt_->triangles();
+    std::vector<uint32_t> lines(count * 6);
+    for (size_t i = 0; i < count; ++i) {
+        const auto& tr = t[from + i];
+        uint32_t* l = &lines[i * 6];
+        l[0] = tr[0]; l[1] = tr[1]; l[2] = tr[1]; l[3] = tr[2]; l[4] = tr[2]; l[5] = tr[0];
+    }
+    glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, GLintptr(from * 24), GLsizeiptr(lines.size() * 4), lines.data());
 }
 
 void Renderer::drawSculpt(const float* vp, const float* normal) {
@@ -831,16 +880,35 @@ void Renderer::drawSculpt(const float* vp, const float* normal) {
     glUniform1i(glGetUniformLocation(faceProgram_, "selected"), 0);
     glUniform1i(glGetUniformLocation(faceProgram_, "analysed"), 0);
     glUniform1i(glGetUniformLocation(faceProgram_, "masking"), 1);
-    // Warm, like modelling clay.
-    const float clay[4] = {0.82f, 0.74f, 0.66f, 1.0f};
-    glUniform4fv(glGetUniformLocation(faceProgram_, "faceColour"), 1, clay);
+    // Clay, grey stone, white porcelain or terracotta.
+    static const float looks[4][4] = {{0.82f, 0.74f, 0.66f, 1}, {0.66f, 0.68f, 0.70f, 1}, {0.93f, 0.92f, 0.90f, 1}, {0.80f, 0.48f, 0.36f, 1}};
+    glUniform4fv(glGetUniformLocation(faceProgram_, "faceColour"), 1, looks[std::clamp(sculptLook_, 0, 3)]);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, blankTexture_);
     glBindVertexArray(sculptVao_);
     glVertexAttribI4ui(2, 0, 0, 0, 0);
+    // Pushed back a touch under a wireframe, so its lines show.
+    if (sculptWire_) {
+        glEnable(GL_POLYGON_OFFSET_FILL);
+        glPolygonOffset(1.0f, 1.0f);
+    }
     glDrawElements(GL_TRIANGLES, GLsizei(sculpt_->triangles().size() * 3), GL_UNSIGNED_INT, nullptr);
-    glBindVertexArray(0);
     glUniform1i(glGetUniformLocation(faceProgram_, "masking"), 0);
+    if (sculptWire_ && sculptLineVao_) {
+        glDisable(GL_POLYGON_OFFSET_FILL);
+        glUseProgram(lineProgram_);
+        glUniformMatrix4fv(glGetUniformLocation(lineProgram_, "viewProjection"), 1, GL_FALSE, vp);
+        const float ink[4] = {0.15f, 0.17f, 0.17f, 0.55f};
+        glUniform4fv(glGetUniformLocation(lineProgram_, "colour"), 1, ink);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glDepthFunc(GL_LEQUAL);
+        glBindVertexArray(sculptLineVao_);
+        glDrawElements(GL_LINES, GLsizei(sculpt_->triangles().size() * 6), GL_UNSIGNED_INT, nullptr);
+        glDepthFunc(GL_LESS);
+        glDisable(GL_BLEND);
+    }
+    glBindVertexArray(0);
 }
 
 bool Renderer::draw() {

@@ -834,15 +834,23 @@ object WebCore : NativeCore {
         return call(96, args).bytes()!!
     }
 
-    override fun sculptedBody(id: Int, packed: ByteArray): Long {
+    override fun sculptedBody(id: Int, packed: ByteArray, input: Long): Long {
         val args = Args()
         args.int(id)
         args.bytes(packed)
+        args.long(input)
         return call(97, args).long()
     }
 
     override fun sculptPack(): ByteArray {
         val args = Args()
         return call(98, args).bytes()!!
+    }
+
+    override fun sculptLook(look: Int, wire: Boolean) {
+        val args = Args()
+        args.int(look)
+        args.boolean(wire)
+        call(99, args)
     }
 }

@@ -755,6 +755,16 @@ class DesignEditor(
         rebuild()
     }
 
+    /**
+     * The body labelled [label] as the steps before the one being sculpted make
+     * it now, once they're built: what a Sculpt step being changed was made from.
+     */
+    suspend fun sculptedFrom(label: String): com.rm.parrotmetric.design.BodyState? {
+        rebuild()
+        while (busy) kotlinx.coroutines.delay(15)
+        return built?.bodies?.firstOrNull { it.label == label }
+    }
+
     /** The body under the first picked face, for sculpting: its label and handle. */
     fun pickedBody(): com.rm.parrotmetric.design.BodyState? = viewport.selectedFaces().firstOrNull()?.let { shownBodies.getOrNull(it.first) }
 

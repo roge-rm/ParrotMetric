@@ -296,3 +296,90 @@ TEST_CASE("Pull on a ball as the app shows it") {
     INFO("moved " << most << ", " << before.vertices.size() << " points before, " << after.vertices.size() << " after");
     CHECK(most > 13);
 }
+
+namespace {
+
+// A session from a ball body, with the test camera.
+std::unique_ptr<pm::Sculpt> bodySession(float radius) {
+    auto s = pm::Sculpt::fromBody(pm::Sculpt::sphere(radius, 4), false, 2000000);
+    float vp[16];
+    camera(vp);
+    s->setCamera(vp, 400, 400);
+    return s;
+}
+
+bool same(const pm::Mesh& a, const pm::Mesh& b) {
+    if (a.vertices.size() != b.vertices.size() || a.triangles != b.triangles) return false;
+    for (size_t i = 0; i < a.vertices.size(); ++i)
+        for (int k = 0; k < 3; ++k)
+            if (std::abs(a.vertices[i][size_t(k)] - b.vertices[i][size_t(k)]) > 1e-4f) return false;
+    return true;
+}
+
+}  // namespace
+
+TEST_CASE("A saved session keeps its mask") {
+    auto s = bodySession(20);
+    pm::BrushSettings mask;
+    mask.brush = pm::Brush::Mask;
+    mask.strength = 1;
+    mask.radius = 60;
+    stroke(*s, mask, 200, 195, 200, 205);
+    auto bytes = s->save();
+    auto back = pm::Sculpt::load(bytes, 2000000);
+    float most = 0;
+    for (const auto& v : back->vertices()) most = std::max(most, v.mask);
+    CHECK(most > 0.3f);
+    // Loading puts the points in space order, so it's the same shape, not the same list.
+    CHECK(back->triangleCount() == s->triangleCount());
+    CHECK_THAT(pm::volume(back->mesh()), WithinAbs(pm::volume(s->mesh()), 1e-3));
+}
+
+TEST_CASE("A sculpt is made again on a changed body") {
+    auto s = bodySession(20);
+    pm::BrushSettings draw;
+    draw.radius = 60;
+    stroke(*s, draw, 200, 190, 200, 210);
+    stroke(*s, draw, 190, 200, 210, 200);
+    auto bytes = s->save();
+    auto ball20 = pm::Sculpt::sphere(20, 4), ball25 = pm::Sculpt::sphere(25, 4);
+    // Unchanged: the saved mesh as it is.
+    CHECK_FALSE(pm::Sculpt::changedSince(bytes, ball20));
+    CHECK(same(pm::Sculpt::result(bytes, &ball20, false), s->mesh()));
+    pm::Mesh m = pm::Sculpt::result(bytes, &ball20, false);
+    float top20 = -1e9f;
+    for (const auto& v : m.vertices) top20 = std::max(top20, v[2]);
+    // On a bigger ball the same strokes raise its top too.
+    CHECK(pm::Sculpt::changedSince(bytes, ball25));
+    pm::Mesh big = pm::Sculpt::result(bytes, &ball25, false);
+    float top25 = -1e9f;
+    for (const auto& v : big.vertices) top25 = std::max(top25, v[2]);
+    CHECK(top20 > 20.5f);
+    CHECK(top25 > 25.5f);
+    CHECK(pm::openEdgeCount(big) == 0);
+}
+
+TEST_CASE("Replaying the record on the same body gives the same mesh") {
+    auto s = bodySession(20);
+    pm::BrushSettings b;
+    b.radius = 50;
+    b.detail = 1;
+    stroke(*s, b, 170, 200, 230, 200);
+    b.brush = pm::Brush::Pull;
+    stroke(*s, b, 200, 210, 200, 150);
+    s->evenOut(s->averageEdge());
+    pm::BrushSettings undone;
+    undone.radius = 80;
+    undone.strength = 1;
+    stroke(*s, undone, 150, 250, 250, 250);
+    REQUIRE(s->undo());
+    auto bytes = s->save();
+    // Replayed from scratch, as for a changed body, on the same one: the undone stroke isn't in it.
+    // Through result() with a body that only just differs, so the record is played again.
+    pm::Mesh moved = pm::Sculpt::sphere(20, 4);
+    moved.vertices[0][0] += 1e-6f;
+    pm::Mesh replayed = pm::Sculpt::result(bytes, &moved, false);
+    // A body changed by a hair can split a few triangles differently, but it's the same sculpt.
+    CHECK(std::abs(double(replayed.triangles.size()) - double(s->mesh().triangles.size())) < 0.01 * double(replayed.triangles.size()));
+    CHECK(std::abs(pm::volume(replayed) - pm::volume(s->mesh())) < 1.0);
+}

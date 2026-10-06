@@ -140,7 +140,7 @@ class CoreKernel(private val core: NativeCore) : Kernel {
     override fun primitive(id: Int, plane: SketchPlane, kind: Int, u: Double, v: Double, a: Double, b: Double, c: Double) =
         call { core.primitive(id, plane.numbers(), kind, u, v, a, b, c) }
     override fun bounds(body: Long) = call { core.bounds(body) }
-    override fun sculptedBody(id: Int, packed: ByteArray) = call { core.sculptedBody(id, packed) }
+    override fun sculptedBody(id: Int, packed: ByteArray, input: Long) = call { core.sculptedBody(id, packed, input) }
     override fun properties(body: Long) = call { core.properties(body) }
     override fun splitBy(id: Int, body: Long, tool: Long) = call { core.splitBy(id, body, tool).toList() }
     override fun overlapVolume(a: Long, b: Long) = call { core.overlapVolume(a, b) }

@@ -10,7 +10,9 @@ Sculpting works on a mesh the way you'd work clay: push it in, pull it out, smoo
 - With a face of a body picked, it sculpts that body. A solid is turned into even triangles first.
 - With nothing picked, it starts from a ball 50 mm across. **Sculpt a ball** and **Sculpt a block** start from those whatever is picked.
 
-**Done** puts what you've sculpted into the history as a Sculpt step, as a mesh body. Tap the step later to sculpt it more. The cross at the top left leaves without keeping it. Steps before a Sculpt step don't change it, since it keeps the finished mesh.
+**Done** puts what you've sculpted into the history as a Sculpt step, as a mesh body, with its mask. Tap the step later to sculpt it more. The cross at the top left leaves without keeping it.
+
+A Sculpt step remembers its strokes. If you change a step before it, say the size of the box it was sculpted from, the strokes are made again on the changed body, where they fall on the screen as you made them. That takes a moment for a lot of strokes. While the body it came from is unchanged, the step just keeps its finished mesh.
 
 ## Strokes
 
@@ -46,6 +48,8 @@ How many triangles it can take depends on the device: about half a million on a 
 
 ## More
 
+- **Look**, under **More**, shows it as clay, stone, porcelain or terracotta, whichever shows the shape best to you.
+- **Show the triangles** draws them over it (Shift+W), to see how fine it is where.
 - **Steady lines** makes the brush trail behind the pointer on a string, so strokes come out smooth. Good for long lines with a finger or a mouse.
 - **Pen pressure** can change the strength, the size or both.
 - Undo and redo go back a stroke at a time.

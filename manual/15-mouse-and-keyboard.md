@@ -37,5 +37,5 @@ Press **?** for the list of every key, **S** to find a tool by typing its name a
 - **D** draw, **C** clay, **Shift+C** crease, **S** smooth, **F** flatten, **I** inflate, **P** pinch, **G** grab, **Shift+G** pull, **L** layer and **M** mask.
 - **[** and **]** make the brush smaller and bigger, and **X** inverts it.
 - Shift while stroking smooths, and Ctrl does the opposite of the brush.
-- **Shift+D** makes it finer all over.
+- **Shift+D** makes it finer all over, and **Shift+W** shows its triangles.
 - **Ctrl+Z** undoes a stroke, and **Ctrl+Enter** is **Done**.

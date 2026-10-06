@@ -71,6 +71,11 @@ public:
      * holds the same lock round changes to it. refit frames it.
      */
     void setSculpt(Sculpt* sculpt, bool refit);
+    /** How the mesh being sculpted looks: 0 clay, 1 stone, 2 porcelain, 3 terracotta; with or without its triangles drawn. */
+    void setSculptLook(int look, bool wire) {
+        sculptLook_ = look;
+        sculptWire_ = wire;
+    }
 
     /** Sketch areas are picked over any body in front of them, for picking sections inside a preview. */
     void setAreasFirst(bool on) { areasFirst_ = on; }
@@ -147,6 +152,8 @@ private:
     void uploadSelection();
     void uploadSculpt();
     void drawSculpt(const float* vp, const float* normal);
+    /** Writes [count] triangles' sides as lines from [from], into the bound line element buffer. */
+    void uploadLines(size_t from, size_t count);
     void releaseGpu();
     void camera(float* viewProjection, float* normal) const;
     void drawScene(bool ids, const float* vp, const float* normal);
@@ -183,6 +190,9 @@ private:
     // The mesh being sculpted, and its GPU copies with room to grow.
     Sculpt* sculpt_ = nullptr;
     uint32_t sculptVao_ = 0, sculptVbo_ = 0, sculptIbo_ = 0, blankTexture_ = 0;
+    uint32_t sculptLineVao_ = 0, sculptLineIbo_ = 0, lineProgram_ = 0;
+    int sculptLook_ = 0;
+    bool sculptWire_ = false;
     size_t sculptVertexRoom_ = 0, sculptTriangleRoom_ = 0;
     void frame(const float lo[3], const float hi[3], bool refit);
     float covered_[4] = {0, 0, 0, 0};      // Left, top, right, bottom, pixels, as drawn now.

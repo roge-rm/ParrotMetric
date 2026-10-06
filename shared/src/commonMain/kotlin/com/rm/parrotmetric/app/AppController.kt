@@ -788,8 +788,10 @@ class AppController(
         }
         design.message = "Getting it ready to sculpt"
         scope.launch {
+            // A step being changed starts from the body as the steps before it make it now.
+            val from = if (editing != null && label != null) design.sculptedFrom(label)?.handle ?: 0L else handle
             val ok = try {
-                withContext(Dispatchers.Default) { core.sculptStart(handle, packed, shape, 50.0, most) }
+                withContext(Dispatchers.Default) { core.sculptStart(from, packed, shape, 50.0, most) }
             } catch (e: RuntimeException) {
                 design.message = e.message
                 false
@@ -800,6 +802,7 @@ class AppController(
             }
             val editor = com.rm.parrotmetric.ui.sculpt.SculptEditor(core, gl, scope, editing, label)
             editor.refresh()
+            editor.showLook()
             state = state.copy(sculpt = editor)
             design.rebuild()
             gl {}

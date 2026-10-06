@@ -56,8 +56,39 @@ public:
         float mask;
     };
 
-    /** The mesh to sculpt, closed and welded. Throws if it has no triangles. */
-    explicit Sculpt(const Mesh& mesh, size_t maxTriangles = 2000000);
+    /** The mesh to sculpt, closed and welded, with each point's mask if given. Throws if it has no triangles. */
+    explicit Sculpt(const Mesh& mesh, size_t maxTriangles = 2000000, const std::vector<float>* mask = nullptr);
+
+    /**
+     * A body's mesh got ready to sculpt: a solid's triangles made even (a
+     * mesh's are kept), mirrored through its middle, and remembering what it
+     * was made from so its strokes can be made again on a changed body.
+     */
+    static std::unique_ptr<Sculpt> fromBody(const Mesh& mesh, bool solid, size_t maxTriangles);
+    /** A session as save() kept it; older files hold only a mesh. Throws if the bytes are damaged. */
+    static std::unique_ptr<Sculpt> load(const std::vector<uint8_t>& bytes, size_t maxTriangles);
+    /**
+     * Everything to carry on later: the mesh with its mask, the strokes and
+     * other changes that made it, and what it was made from. Deflated.
+     */
+    std::vector<uint8_t> save() const;
+    /**
+     * The mesh a saved session gives for the body it was made from, now
+     * [input] (a solid if [solid]): the saved mesh while that's unchanged, else
+     * the strokes made again on it. With no input, the saved mesh.
+     */
+    static Mesh result(const std::vector<uint8_t>& bytes, const Mesh* input, bool solid);
+    /**
+     * Carries on a saved session: as it was, or if the body it was made from
+     * has since changed into [input], made again from that with the same strokes.
+     */
+    static std::unique_ptr<Sculpt> resume(const std::vector<uint8_t>& bytes, const Mesh* input, bool solid, size_t maxTriangles);
+    /** Whether a saved session was made from a body that's changed, so loading it means making its strokes again. */
+    static bool changedSince(const std::vector<uint8_t>& bytes, const Mesh& input);
+    /** Makes the changes in a saved record again, as part of what this was made from. */
+    void replay(const std::vector<uint8_t>& log);
+    /** A number that changes when the mesh does, to tell a body has changed since. */
+    static uint64_t fingerprint(const Mesh& mesh);
     ~Sculpt();
     Sculpt(const Sculpt&) = delete;
     Sculpt& operator=(const Sculpt&) = delete;
@@ -184,6 +215,19 @@ private:
     std::vector<uint8_t> dirtyVerts_, dirtyTris_;
     bool dirtyAll_ = true;
 
+    // What made it, for making it again: from the body with fingerprint base_ (0, a shape of its own),
+    // the changes no longer in undo_ in settled_, and the stroke being made.
+    uint64_t base_ = 0;
+    std::vector<uint8_t> settled_;
+    std::vector<float> strokePoints_;
+    float strokeCamera_[16] = {};
+    int strokeWidth_ = 1, strokeHeight_ = 1;
+    bool replaying_ = false;
+    /** The record of every change kept: settled_, then each undoable one's in order. */
+    std::vector<uint8_t> log() const;
+    /** A change's record, kept with its undo step. */
+    void note(std::vector<uint8_t> op);
+
     // Undo, a stroke at a time.
     std::vector<std::unique_ptr<Change>> undo_, redo_;
     std::unique_ptr<Change> open_;
@@ -195,7 +239,9 @@ private:
     void restore(const Change& c, bool after);
     void trimUndo();
 
-    void reset(const Mesh& mesh);
+    void reset(const Mesh& mesh, const std::vector<float>* mask = nullptr);
+    /** A compact copy and each of its points' mask. */
+    Mesh mesh(std::vector<float>* mask) const;
     /** Packs the slots up, so taken away triangles aren't drawn as empty ones. */
     void compact();
     /** Everything worked out from verts_ and tris_ again: links, free slots, boxes; all sent again. */

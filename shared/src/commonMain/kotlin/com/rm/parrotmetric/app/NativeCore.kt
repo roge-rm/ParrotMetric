@@ -157,9 +157,12 @@ interface NativeCore {
     fun sculptChange(what: Int, edge: Double)
     /** Stops sculpting, giving the packed mesh with [keep]. */
     fun sculptFinish(keep: Boolean): ByteArray
-    fun sculptedBody(id: Int, packed: ByteArray): Long
+    /** A Sculpt step's body: as saved, or made again on [input], the body it was made from, if that changed. */
+    fun sculptedBody(id: Int, packed: ByteArray, input: Long): Long
     /** The mesh being sculpted as it is now, packed, without stopping; empty if none. */
     fun sculptPack(): ByteArray
+    /** 0 clay, 1 stone, 2 porcelain, 3 terracotta; [wire] draws its triangles. */
+    fun sculptLook(look: Int, wire: Boolean)
 }
 
 /** File formats, by the numbers the core uses. */

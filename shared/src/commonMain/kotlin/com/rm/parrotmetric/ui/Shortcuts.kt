@@ -94,6 +94,7 @@ fun sculptShortcuts(e: com.rm.parrotmetric.ui.sculpt.SculptEditor, actions: Mode
         Shortcut("Invert", keys("X"), "Brush") { e.invert = !e.invert },
         Shortcut("Mirror across x", keys(), "Brush") { e.toggleMirror(1) },
         Shortcut("Detail as it goes", keys(), "Brush") { e.dynamic = !e.dynamic; e.keep() },
+        Shortcut("Show the triangles", keys("Shift+W"), "Sculpt") { e.setLook(wire = !e.wire) },
         Shortcut("Undo", keys("Ctrl+Z"), "Edit", e.canUndo) { e.undo() },
         Shortcut("Redo", keys("Ctrl+Shift+Z", "Ctrl+Y"), "Edit", e.canRedo) { e.redo() },
         Shortcut("Clear the mask", keys(), "Edit") { e.clearMask() },

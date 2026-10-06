@@ -2131,39 +2131,33 @@ JNIEXPORT jboolean JNICALL Java_com_rm_parrotmetric_Core_sculptStart(JNIEnv* env
     try {
         std::unique_lock<std::mutex> g(lock);
         auto bytes = bytesOf(env, packed);
-        std::unique_ptr<pm::Sculpt> made;
-        if (!bytes.empty()) {
-            made = std::make_unique<pm::Sculpt>(pm::unpackMesh(bytes), size_t(maxTriangles));
-        } else if (body != 0) {
+        // The body it's made from, as a mesh, if there's one.
+        std::optional<pm::Mesh> input;
+        bool solid = false;
+        if (body != 0) {
             if (!store.has(body)) throw std::runtime_error("The body isn't there any more");
             const pm::Body b = store.get(body);
             g.unlock();
-            made = std::make_unique<pm::Sculpt>(b.asMesh().toMesh(), size_t(maxTriangles));
-            // A solid's triangles are long and thin where it's flat: made even, about a 120th of the way
-            // across, so every part takes detail alike. A mesh is kept as it is, with its detail.
-            if (!b.isMesh()) {
-                auto box = made->bounds();
-                float across = std::sqrt((box[3] - box[0]) * (box[3] - box[0]) + (box[4] - box[1]) * (box[4] - box[1]) + (box[5] - box[2]) * (box[5] - box[2]));
-                made->evenOut(across / 120);
-                made->forget();
-            }
+            input = b.asMesh().toMesh();
+            solid = !b.isMesh();
             g.lock();
+        }
+        g.unlock();
+        std::unique_ptr<pm::Sculpt> made;
+        if (!bytes.empty()) {
+            // A Sculpt step carried on: as it was, or its strokes made again if what it was made from has changed.
+            made = pm::Sculpt::resume(bytes, input ? &*input : nullptr, solid, size_t(maxTriangles));
+        } else if (input) {
+            made = pm::Sculpt::fromBody(*input, solid, size_t(maxTriangles));
         } else if (shape == 0) {
             made = std::make_unique<pm::Sculpt>(pm::Sculpt::sphere(float(size / 2), 5), size_t(maxTriangles));
         } else {
             float side = float(size);
-            pm::Mesh box = pm::MeshBody::box(side, side, side).translated(-side / 2, -side / 2, -side / 2).toMesh();
-            g.unlock();
-            made = std::make_unique<pm::Sculpt>(box, size_t(maxTriangles));
+            made = std::make_unique<pm::Sculpt>(pm::MeshBody::box(side, side, side).translated(-side / 2, -side / 2, -side / 2).toMesh(), size_t(maxTriangles));
             made->evenOut(side / 40);
             made->forget();
-            g.lock();
         }
-        // A body is mirrored through its own middle; a ball or block is made at the origin, which is its middle.
-        if (!bytes.empty() || body != 0) {
-            auto box = made->bounds();
-            made->setMirrorCentre((box[0] + box[3]) / 2, (box[1] + box[4]) / 2, (box[2] + box[5]) / 2);
-        }
+        g.lock();
         sculpt = std::move(made);
         renderer.setSculpt(sculpt.get(), true);
         return JNI_TRUE;
@@ -2171,6 +2165,12 @@ JNIEXPORT jboolean JNICALL Java_com_rm_parrotmetric_Core_sculptStart(JNIEnv* env
         fail(env, e.what());
         return JNI_FALSE;
     }
+}
+
+/** How the mesh being sculpted looks; see Renderer::setSculptLook. */
+JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_sculptLook(JNIEnv*, jobject, jint look, jboolean wire) {
+    std::lock_guard<std::mutex> g(lock);
+    renderer.setSculptLook(look, wire);
 }
 
 /** Whether (x, y) on the view, in pixels, is over the mesh being sculpted. */
@@ -2251,7 +2251,7 @@ JNIEXPORT jbyteArray JNICALL Java_com_rm_parrotmetric_Core_sculptFinish(JNIEnv* 
         std::unique_ptr<pm::Sculpt> done = std::move(sculpt);
         if (!done || !keep) return array(env, {});
         if (done->stroking()) done->end();
-        return array(env, pm::packMesh(done->mesh()));
+        return array(env, done->save());
     } catch (const std::exception& e) {
         fail(env, e.what());
         return array(env, {});
@@ -2263,17 +2263,27 @@ JNIEXPORT jbyteArray JNICALL Java_com_rm_parrotmetric_Core_sculptPack(JNIEnv* en
     try {
         std::lock_guard<std::mutex> g(lock);
         if (!sculpt || sculpt->stroking()) return array(env, {});
-        return array(env, pm::packMesh(sculpt->mesh()));
+        return array(env, sculpt->save());
     } catch (const std::exception& e) {
         return array(env, {});
     }
 }
 
-/** A mesh body from a sculpt step's packed mesh. */
-JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_sculptedBody(JNIEnv* env, jobject, jint, jbyteArray packed) {
+/**
+ * A Sculpt step's mesh body: as it was saved, or if [input], the body it was
+ * made from, has changed since, its strokes made again on that.
+ */
+JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_sculptedBody(JNIEnv* env, jobject, jint, jbyteArray packed, jlong input) {
     try {
+        std::optional<pm::Body> from;
+        {
+            std::lock_guard<std::mutex> g(lock);
+            if (input != 0 && store.has(input)) from = store.get(input);
+        }
+        std::optional<pm::Mesh> mesh;
+        if (from) mesh = from->asMesh().toMesh();
         pm::Body b;
-        b.mesh = pm::MeshBody::fromMesh(pm::unpackMesh(bytesOf(env, packed)));
+        b.mesh = pm::MeshBody::fromMesh(pm::Sculpt::result(bytesOf(env, packed), mesh ? &*mesh : nullptr, from && !from->isMesh()));
         std::lock_guard<std::mutex> g(lock);
         return store.add(std::move(b));
     } catch (const std::exception& e) {
