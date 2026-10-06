@@ -2394,13 +2394,42 @@ class DesignEditor(
         var axis by mutableStateOf(editing?.axis ?: Axis3.Z)
         /** Degrees for a turn, mm for a slide. */
         var value by mutableStateOf(editing?.let { if (it.kind == com.rm.parrotmetric.design.JointKind.Slide) it.value else it.value * 180 / PI } ?: 0.0)
-        var value2 by mutableStateOf(editing?.value2 ?: 0.0)
-        val turns get() = kind == com.rm.parrotmetric.design.JointKind.Turn || kind == com.rm.parrotmetric.design.JointKind.TurnSlide
+        var value2 by mutableStateOf(editing?.let { if (it.kind == com.rm.parrotmetric.design.JointKind.Ball) it.value2 * 180 / PI else it.value2 } ?: 0.0)
+        var value3 by mutableStateOf(editing?.let { if (it.kind == com.rm.parrotmetric.design.JointKind.Ball) it.value3 * 180 / PI else it.value3 } ?: 0.0)
+        var turnLimits by mutableStateOf(editing?.turnMin != null || editing?.turnMax != null)
+        var turnMin by mutableStateOf(editing?.turnMin?.let { it * 180 / PI } ?: -90.0)
+        var turnMax by mutableStateOf(editing?.turnMax?.let { it * 180 / PI } ?: 90.0)
+        var slideLimits by mutableStateOf(editing?.slideMin != null || editing?.slideMax != null)
+        var slideMin by mutableStateOf(editing?.slideMin ?: 0.0)
+        var slideMax by mutableStateOf(editing?.slideMax ?: 50.0)
+        /** The earlier Turn joint this one is geared to, and the ratio, or null to take it from the gears' teeth. */
+        var linkedTo by mutableStateOf(editing?.linkedTo)
+        var ratio by mutableStateOf(editing?.ratio)
+        val turns get() = kind != com.rm.parrotmetric.design.JointKind.Rigid && kind != com.rm.parrotmetric.design.JointKind.Slide
+        val slides get() = kind == com.rm.parrotmetric.design.JointKind.Slide || kind == com.rm.parrotmetric.design.JointKind.TurnSlide ||
+            kind == com.rm.parrotmetric.design.JointKind.Planar
 
-        override fun feature(): Feature = com.rm.parrotmetric.design.JointFeature(
-            id, name, kind, moving, fixed, edge, face, null, axis,
-            if (kind == com.rm.parrotmetric.design.JointKind.Slide) value else value * PI / 180, value2,
-        )
+        /** Earlier Turn joints this one can be geared to: name and id. */
+        fun leaders(): List<Pair<String, Int>> {
+            val all = design.features
+            val before = all.indexOfFirst { it.id == id }.let { if (it < 0) all else all.subList(0, it) }
+            return before.filterIsInstance<com.rm.parrotmetric.design.JointFeature>()
+                .filter { it.kind == com.rm.parrotmetric.design.JointKind.Turn && it.id !in design.suppressed }.map { it.name to it.id }
+        }
+
+        override fun feature(): Feature {
+            val ball = kind == com.rm.parrotmetric.design.JointKind.Ball
+            fun second(v: Double) = if (ball) v * PI / 180 else v
+            return com.rm.parrotmetric.design.JointFeature(
+                id, name, kind, moving, fixed, edge, face, null, axis,
+                if (kind == com.rm.parrotmetric.design.JointKind.Slide) value else value * PI / 180, second(value2), second(value3),
+                if (turns && turnLimits) minOf(turnMin, turnMax) * PI / 180 else null,
+                if (turns && turnLimits) maxOf(turnMin, turnMax) * PI / 180 else null,
+                if (slides && slideLimits) minOf(slideMin, slideMax) else null,
+                if (slides && slideLimits) maxOf(slideMin, slideMax) else null,
+                linkedTo.takeIf { kind == com.rm.parrotmetric.design.JointKind.Turn }, ratio,
+            )
+        }
         override fun missing() = "Pick the components"
     }
 
