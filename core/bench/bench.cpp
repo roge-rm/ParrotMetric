@@ -36,6 +36,7 @@
 #include "parallel.h"
 #include "solid/solid.h"
 #include "solid/speed.h"
+#include "sculpt/sculpt.h"
 
 using Clock = std::chrono::steady_clock;
 
@@ -84,6 +85,76 @@ int main(int argc, char** argv) {
         return 0;
     }
     std::printf("cores: %u\n", std::thread::hardware_concurrency());
+
+    // Sculpting: setting up a big mesh, then strokes with each brush; "sculpt" alone runs only this.
+    if (argc > 1 && std::strcmp(argv[1], "sculpt") == 0) {
+        float vp[16];
+        {
+            float t = std::tan(0.4f), n = 1, f = 300;
+            float proj[16] = {1 / t, 0, 0, 0, 0, 1 / t, 0, 0, 0, 0, -(f + n) / (f - n), -1, 0, 0, -2 * f * n / (f - n), 0};
+            float view[16] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, -100, 1};
+            for (int c = 0; c < 4; ++c)
+                for (int r = 0; r < 4; ++r) {
+                    float sum = 0;
+                    for (int k = 0; k < 4; ++k) sum += proj[k * 4 + r] * view[c * 4 + k];
+                    vp[c * 4 + r] = sum;
+                }
+        }
+        for (int levels : {6, 7}) {
+            auto t0 = Clock::now();
+            pm::Sculpt s(pm::Sculpt::sphere(30, levels), 4000000);
+            double setup = std::chrono::duration<double, std::milli>(Clock::now() - t0).count();
+            s.setCamera(vp, 1000, 1000);
+            std::printf("sculpt: %zu triangles, set up %9.1f ms\n", s.triangleCount(), setup);
+            const pm::Brush brushes[] = {pm::Brush::Draw, pm::Brush::Clay, pm::Brush::Smooth, pm::Brush::Crease, pm::Brush::Grab};
+            const char* names[] = {"draw", "clay", "smooth", "crease", "grab"};
+            for (bool dynamic : {false, true})
+                for (int i = 0; i < 5; ++i) {
+                    pm::BrushSettings b;
+                    b.brush = brushes[i];
+                    b.radius = 60;
+                    b.dynamic = dynamic;
+                    s.takeDirty();
+                    auto a = Clock::now();
+                    s.begin(380, 500, 1, b);
+                    // Moves a few pixels apart, as a pointer reports them.
+                    int moves = 120;
+                    for (int m = 1; m <= moves; ++m) s.move(380 + float(m) * 2, 500 + 40 * std::sin(float(m) / 10), 1);
+                    s.end();
+                    double ms = std::chrono::duration<double, std::milli>(Clock::now() - a).count();
+                    auto d = s.takeDirty();
+                    std::printf("  %-7s %-8s %6.2f ms a move, %zu vertex blocks, %zu triangles\n", names[i], dynamic ? "dynamic" : "", ms / moves,
+                                d.vertexBlocks.size(), s.triangleCount());
+                }
+            {
+                // A short stroke that adds detail: what lifting the pen costs.
+                pm::BrushSettings b;
+                b.radius = 30;
+                b.detail = 1;
+                for (float detail : {0.5f, 1.0f}) {
+                    b.detail = detail;
+                    size_t before = s.triangleCount();
+                    auto a = Clock::now();
+                    s.begin(500, 500, 1, b);
+                    auto a1 = Clock::now();
+                    for (int m = 1; m <= 5; ++m) s.move(500 + float(m) * 3, 500, 1);
+                    auto a2 = Clock::now();
+                    s.end();
+                    auto a3 = Clock::now();
+                    auto ms = [](auto x, auto y) { return std::chrono::duration<double, std::milli>(y - x).count(); };
+                    std::printf("  short stroke, detail %.1f: begin %6.1f, moves %6.1f, end %6.1f ms, %zu more triangles\n", detail, ms(a, a1), ms(a1, a2), ms(a2, a3),
+                                s.triangleCount() - before);
+                }
+                auto e = Clock::now();
+                s.evenOut(s.averageEdge());
+                std::printf("  even out %9.1f ms, %zu triangles\n", std::chrono::duration<double, std::milli>(Clock::now() - e).count(), s.triangleCount());
+            }
+            auto u = Clock::now();
+            while (s.undo()) {}
+            std::printf("  undo all %9.1f ms\n", std::chrono::duration<double, std::milli>(Clock::now() - u).count());
+        }
+        return 0;
+    }
 
     // The steps of a project box and a threaded rod, as the app builds them; "parts" alone runs only this.
     if (argc > 1 && std::strcmp(argv[1], "parts") == 0) {

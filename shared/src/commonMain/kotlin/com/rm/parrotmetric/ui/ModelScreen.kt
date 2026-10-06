@@ -99,6 +99,8 @@ data class ModelState(
     val camera: CameraState? = null,
     /** The sketch being edited, if any. */
     val sketch: SketchEditor? = null,
+    /** The sculpting session, if any. */
+    val sculpt: com.rm.parrotmetric.ui.sculpt.SculptEditor? = null,
     /** Where the right-click menu is open, in pixels on the view, or null. */
     val menu: Offset? = null,
     val layout: LayoutMode = LayoutMode.Automatic,
@@ -152,6 +154,11 @@ interface ModelActions {
     fun setCovered(left: Float, top: Float, right: Float, bottom: Float) {}
     fun viewFrom(yaw: Float, pitch: Float)
     fun pan(dx: Float, dy: Float)
+    fun orbit(dx: Float, dy: Float) {}
+    /** Starts sculpting: -1 the picked body, 0 a ball, 1 a block. */
+    fun startSculpt(shape: Int) {}
+    /** Ends sculpting, keeping what was done or not. */
+    fun finishSculpt(keep: Boolean) {}
     fun zoom(factor: Float)
     /** Zooms towards the point under (x, y), pixels on the view, which stays put. */
     fun zoomAt(factor: Float, x: Float, y: Float)
@@ -219,9 +226,11 @@ fun ModelScreen(
     // The screen itself has the keys, not a field in it.
     var screenFocused by remember { mutableStateOf(false) }
     val sketch = state.sketch
+    val sculpt = state.sculpt
     val context = ToolContext(state, design, actions) { sheet = it }
     val shortcuts = when {
         state.screen != AppScreen.Model -> emptyList()
+        sculpt != null -> sculptShortcuts(sculpt, actions) { keyList = true }
         sketch != null -> sketchShortcuts(sketch, actions, { finder = true }, { keyList = true })
         else -> modelShortcuts(context, { finder = true }, { keyList = true }, design.panel != null)
     }
@@ -265,7 +274,8 @@ fun ModelScreen(
     backHandler(state.screen != AppScreen.Start) {
         if (state.screen == AppScreen.Drawing) actions.showScreen(AppScreen.Model)
         else if (!escape()) {
-            if (sketch != null) actions.finishSketch() else actions.showScreen(AppScreen.Start)
+            if (sculpt != null) actions.finishSculpt(true)
+            else if (sketch != null) actions.finishSketch() else actions.showScreen(AppScreen.Start)
         }
     }
     // Keys come here when no field is focused, so the screen's own focus has to come back after fields and dialogs close.
@@ -402,7 +412,16 @@ fun ModelScreen(
             }
             androidx.compose.runtime.CompositionLocalProvider(LocalFieldChain provides chain, LocalKeyboard provides keyboard) {
             state.menu?.let { at -> SelectionMenu(at, context, actions::closeMenu) }
-            if (sketch != null) {
+            if (sculpt != null) {
+                Box(Modifier.fillMaxSize().then(refocus)) { com.rm.parrotmetric.ui.sculpt.SculptOverlay(sculpt, actions) }
+                Column(Modifier.fillMaxSize().safeDrawingPadding()) {
+                    com.rm.parrotmetric.ui.sculpt.SculptTopBar(sculpt, actions::fit, actions::finishSculpt)
+                    Box(Modifier.weight(1f).fillMaxWidth().openArea(actions)) {
+                        Box(Modifier.align(Alignment.TopCenter).padding(top = 6.dp)) { Message(design) }
+                    }
+                    com.rm.parrotmetric.ui.sculpt.SculptBottom(sculpt, expanded)
+                }
+            } else if (sketch != null) {
                 state.camera?.let {
                     Box(Modifier.fillMaxSize().then(refocus)) {
                         SketchOverlay(sketch, PlaneProjection(it, sketch.plane), actions::pan, actions::zoom, actions::zoomAt)

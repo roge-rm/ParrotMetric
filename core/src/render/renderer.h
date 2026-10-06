@@ -10,6 +10,8 @@
 
 namespace pm {
 
+class Sculpt;
+
 /** What a tap landed on. */
 struct Pick {
     enum Kind : uint8_t { None, Face, Edge, Vertex };
@@ -62,6 +64,13 @@ public:
         analysis_ = mode;
         limit_ = limit;
     }
+
+    /**
+     * Shows a mesh being sculpted, smooth shaded with its mask, along with the
+     * bodies; null stops. The renderer reads it while drawing, so the caller
+     * holds the same lock round changes to it. refit frames it.
+     */
+    void setSculpt(Sculpt* sculpt, bool refit);
 
     /** Sketch areas are picked over any body in front of them, for picking sections inside a preview. */
     void setAreasFirst(bool on) { areasFirst_ = on; }
@@ -136,6 +145,8 @@ private:
 
     void upload();
     void uploadSelection();
+    void uploadSculpt();
+    void drawSculpt(const float* vp, const float* normal);
     void releaseGpu();
     void camera(float* viewProjection, float* normal) const;
     void drawScene(bool ids, const float* vp, const float* normal);
@@ -169,6 +180,11 @@ private:
     bool clipping_ = false;
     int analysis_ = 0;
     bool areasFirst_ = false;
+    // The mesh being sculpted, and its GPU copies with room to grow.
+    Sculpt* sculpt_ = nullptr;
+    uint32_t sculptVao_ = 0, sculptVbo_ = 0, sculptIbo_ = 0, blankTexture_ = 0;
+    size_t sculptVertexRoom_ = 0, sculptTriangleRoom_ = 0;
+    void frame(const float lo[3], const float hi[3], bool refit);
     float covered_[4] = {0, 0, 0, 0};      // Left, top, right, bottom, pixels, as drawn now.
     float coveredGoal_[4] = {0, 0, 0, 0};  // Where they're heading.
     float limit_ = 0;

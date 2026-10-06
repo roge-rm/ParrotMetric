@@ -144,6 +144,20 @@ interface NativeCore {
     fun cameraState(): FloatArray
     /** Sketch areas are picked over bodies in front of them. */
     fun setAreasFirst(on: Boolean)
+    /** Starts sculpting a step's packed mesh, else a body, else a shape (0 sphere, 1 block) [size] mm across; see jni.cpp. */
+    fun sculptStart(body: Long, packed: ByteArray, shape: Int, size: Double, maxTriangles: Int): Boolean
+    fun sculptHit(x: Float, y: Float): Boolean
+    fun sculptBegin(x: Float, y: Float, pressure: Float, brush: Int, radius: Float, strength: Float, invert: Boolean, mirror: Int, dynamic: Boolean, detail: Float, pressureSize: Boolean, pressureStrength: Boolean): Boolean
+    fun sculptMove(x: Float, y: Float, pressure: Float)
+    fun sculptEnd()
+    fun sculptUndo(redo: Boolean): Boolean
+    /** Can undo, can redo, triangles, average edge in mm. */
+    fun sculptInfo(): DoubleArray
+    /** 0 clears the mask, 1 inverts it, 2 evens out the triangles at [edge] mm. */
+    fun sculptChange(what: Int, edge: Double)
+    /** Stops sculpting, giving the packed mesh with [keep]. */
+    fun sculptFinish(keep: Boolean): ByteArray
+    fun sculptedBody(id: Int, packed: ByteArray): Long
 }
 
 /** File formats, by the numbers the core uses. */

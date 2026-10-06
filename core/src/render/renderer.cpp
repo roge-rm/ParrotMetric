@@ -1,6 +1,7 @@
 #include "render/renderer.h"
 
 #include "render/gl.h"
+#include "sculpt/sculpt.h"
 
 #include <algorithm>
 #include <cmath>
@@ -60,6 +61,8 @@ uniform int analysis;
 uniform float limit;
 uniform float bedZ;
 uniform bool analysed;
+// A sculpted mesh: the shade is how masked it is, shown darker.
+uniform bool masking;
 out vec4 colour;
 void main() {
     if (clipping && dot(vec4(world, 1.0), clip) < 0.0) discard;
@@ -91,9 +94,12 @@ void main() {
         else if (thick < limit * 2.0) own = mix(vec3(0.95, 0.70, 0.25), vec3(0.62, 0.78, 0.70), (thick - limit) / limit);
         else own = vec3(0.62, 0.78, 0.70);
     }
+    if (masking) own = mix(own, vec3(0.22, 0.25, 0.28), clamp(thick, 0.0, 1.0) * 0.8);
     vec3 base = mix(own, vec3(1.0, 0.48, 0.24), chosen * 0.55);
     float alpha = faceColour.a < 1.0 ? mix(faceColour.a, 0.55, chosen) : 1.0;
     colour = vec4(base * (ambient + 0.72 * key) + rim * (1.0 - chosen), alpha);
+    // Clay being sculpted catches the light a little, which shows the shape's small turns.
+    if (masking) colour.rgb += vec3(0.16, 0.15, 0.13) * pow(max(reflect(-normalize(vec3(-0.45, 0.65, 0.62)), n).z, 0.0), 16.0) * (1.0 - thick * 0.8);
     if (analysed && analysis == 3) {
         // Stripes as a row of lights would reflect in it; limit is how many.
         vec3 r = reflect(vec3(0.0, 0.0, -1.0), n);
@@ -300,6 +306,8 @@ void Renderer::surfaceCreated() {
     canvasTextures_.clear();
     canvasVao_ = canvasVbo_ = 0;
     canvasesDirty_ = true;
+    sculptVao_ = sculptVbo_ = sculptIbo_ = blankTexture_ = 0;
+    sculptVertexRoom_ = sculptTriangleRoom_ = 0;
     // Desktop GL sizes points from the shader only when asked.
     if (desktopGl) glEnable(0x8642);  // GL_PROGRAM_POINT_SIZE
     glEnable(GL_DEPTH_TEST);
@@ -335,6 +343,11 @@ void Renderer::setBodies(std::vector<DisplayMesh> bodies, bool refit) {
     for (const auto& b : bodies_) {
         take(b.positions);
         for (const auto& e : b.edges) take(e.points);
+    }
+    if (sculpt_) {
+        auto box = sculpt_->bounds();
+        std::vector<float> corners{box[0], box[1], box[2], box[3], box[4], box[5]};
+        take(corners);
     }
     if (any) {
         float d2 = 0;
@@ -678,6 +691,7 @@ void Renderer::drawScene(bool ids, const float* vp, const float* normal) {
         }
     }
     glDisable(GL_POLYGON_OFFSET_FILL);
+    if (!ids && sculpt_ && sculptVao_) drawSculpt(vp, normal);
 
     if (!ids) {
         glEnable(GL_BLEND);
@@ -737,7 +751,100 @@ void Renderer::drawScene(bool ids, const float* vp, const float* normal) {
     if (!ids) glDisable(GL_BLEND);
 }
 
+void Renderer::setSculpt(Sculpt* sculpt, bool refit) {
+    sculpt_ = sculpt;
+    if (!sculpt) return;
+    // Sent whole on the next frame.
+    sculpt->takeDirty();
+    sculptVertexRoom_ = sculptTriangleRoom_ = 0;
+    auto box = sculpt->bounds();
+    float d2 = 0;
+    for (int k = 0; k < 3; ++k) {
+        centre_[k] = (box[size_t(k)] + box[size_t(k) + 3]) * 0.5f;
+        d2 += (box[size_t(k) + 3] - box[size_t(k)]) * (box[size_t(k) + 3] - box[size_t(k)]);
+    }
+    radius_ = std::max(std::sqrt(d2) * 0.5f, 0.1f);
+    if (refit) fit();
+}
+
+void Renderer::uploadSculpt() {
+    Sculpt& s = *sculpt_;
+    const auto& v = s.vertices();
+    const auto& t = s.triangles();
+    auto dirty = s.takeDirty();
+    const size_t vertexBytes = sizeof(Sculpt::Vertex);
+    if (!sculptVao_ || v.size() > sculptVertexRoom_ || t.size() > sculptTriangleRoom_) {
+        if (!sculptVao_) {
+            glGenVertexArrays(1, &sculptVao_);
+            glGenBuffers(1, &sculptVbo_);
+            glGenBuffers(1, &sculptIbo_);
+            blankTexture_ = makeSelectionTexture(1);
+        }
+        // Room to grow as detail is added, so a stroke doesn't send it all every frame.
+        sculptVertexRoom_ = v.size() + v.size() / 2 + 4096;
+        sculptTriangleRoom_ = t.size() + t.size() / 2 + 8192;
+        glBindVertexArray(sculptVao_);
+        glBindBuffer(GL_ARRAY_BUFFER, sculptVbo_);
+        glBufferData(GL_ARRAY_BUFFER, GLsizeiptr(sculptVertexRoom_ * vertexBytes), nullptr, GL_DYNAMIC_DRAW);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, GLsizeiptr(v.size() * vertexBytes), v.data());
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, GLsizei(vertexBytes), reinterpret_cast<void*>(offsetof(Sculpt::Vertex, p)));
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, GLsizei(vertexBytes), reinterpret_cast<void*>(offsetof(Sculpt::Vertex, n)));
+        glEnableVertexAttribArray(3);
+        glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, GLsizei(vertexBytes), reinterpret_cast<void*>(offsetof(Sculpt::Vertex, mask)));
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sculptIbo_);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, GLsizeiptr(sculptTriangleRoom_ * 12), nullptr, GL_DYNAMIC_DRAW);
+        glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, GLsizeiptr(t.size() * 12), t.data());
+        glBindVertexArray(0);
+        return;
+    }
+    glBindVertexArray(sculptVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, sculptVbo_);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sculptIbo_);
+    if (dirty.all) {
+        glBufferSubData(GL_ARRAY_BUFFER, 0, GLsizeiptr(v.size() * vertexBytes), v.data());
+        glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, GLsizeiptr(t.size() * 12), t.data());
+    } else {
+        for (uint32_t b : dirty.vertexBlocks) {
+            size_t from = size_t(b) * Sculpt::kBlock;
+            if (from >= v.size()) continue;
+            size_t count = std::min<size_t>(Sculpt::kBlock, v.size() - from);
+            glBufferSubData(GL_ARRAY_BUFFER, GLintptr(from * vertexBytes), GLsizeiptr(count * vertexBytes), &v[from]);
+        }
+        for (uint32_t b : dirty.triangleBlocks) {
+            size_t from = size_t(b) * Sculpt::kBlock;
+            if (from >= t.size()) continue;
+            size_t count = std::min<size_t>(Sculpt::kBlock, t.size() - from);
+            glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, GLintptr(from * 12), GLsizeiptr(count * 12), &t[from]);
+        }
+    }
+    glBindVertexArray(0);
+}
+
+void Renderer::drawSculpt(const float* vp, const float* normal) {
+    glUseProgram(faceProgram_);
+    glUniformMatrix4fv(glGetUniformLocation(faceProgram_, "viewProjection"), 1, GL_FALSE, vp);
+    glUniformMatrix3fv(glGetUniformLocation(faceProgram_, "view"), 1, GL_FALSE, normal);
+    glUniform4fv(glGetUniformLocation(faceProgram_, "clip"), 1, clip_);
+    glUniform1i(glGetUniformLocation(faceProgram_, "clipping"), clipping_ ? 1 : 0);
+    glUniform1i(glGetUniformLocation(faceProgram_, "selected"), 0);
+    glUniform1i(glGetUniformLocation(faceProgram_, "analysed"), 0);
+    glUniform1i(glGetUniformLocation(faceProgram_, "masking"), 1);
+    // Warm, like modelling clay.
+    const float clay[4] = {0.82f, 0.74f, 0.66f, 1.0f};
+    glUniform4fv(glGetUniformLocation(faceProgram_, "faceColour"), 1, clay);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, blankTexture_);
+    glBindVertexArray(sculptVao_);
+    glVertexAttribI4ui(2, 0, 0, 0, 0);
+    glDrawElements(GL_TRIANGLES, GLsizei(sculpt_->triangles().size() * 3), GL_UNSIGNED_INT, nullptr);
+    glBindVertexArray(0);
+    glUniform1i(glGetUniformLocation(faceProgram_, "masking"), 0);
+}
+
 bool Renderer::draw() {
+    if (sculpt_) uploadSculpt();
     if (bodiesDirty_) upload();
     if (selectionDirty_) uploadSelection();
     animate();

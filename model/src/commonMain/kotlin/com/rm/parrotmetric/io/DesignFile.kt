@@ -43,6 +43,7 @@ import com.rm.parrotmetric.design.StitchFeature
 import com.rm.parrotmetric.design.ThickenFeature
 import com.rm.parrotmetric.design.MeshEditFeature
 import com.rm.parrotmetric.design.ImportFeature
+import com.rm.parrotmetric.design.SculptFeature
 import com.rm.parrotmetric.design.Operation
 import com.rm.parrotmetric.design.Parameter
 import com.rm.parrotmetric.design.PlaneRef
@@ -284,6 +285,7 @@ object DesignFile {
                 "type" to "chamfer", "edges" to f.edges, "distance" to f.distance, "kind" to f.kind.name, "second" to f.second, "flip" to f.flip,
             )
             is ImportFeature -> mapOf("type" to "import", "format" to f.format, "data" to Base64.encode(f.data))
+            is SculptFeature -> mapOf("type" to "sculpt", "body" to f.body, "mesh" to Base64.encode(f.mesh))
             else -> throw IllegalArgumentException("Can't save ${f.name}")
         }
         return Json.of(base + extra + (if (f.only.isEmpty()) emptyMap() else mapOf("only" to f.only)))
@@ -396,6 +398,7 @@ object DesignFile {
                 o.numOr("second", 0.0), (o["flip"] as? Json.Bool)?.value ?: false,
             )
             "import" -> ImportFeature(id, name, Base64.decode(o.str("data")), o.int("format"))
+            "sculpt" -> SculptFeature(id, name, (o["body"] as? Json.Str)?.value, Base64.decode(o.str("mesh")))
             else -> throw IllegalArgumentException("This file has a step this version can't read: $type")
         }
     }

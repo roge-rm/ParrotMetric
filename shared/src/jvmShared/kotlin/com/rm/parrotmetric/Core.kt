@@ -84,6 +84,16 @@ object Core : NativeCore {
     override external fun setSection(on: Boolean, ox: Double, oy: Double, oz: Double, nx: Double, ny: Double, nz: Double)
     override external fun setAnalysis(mode: Int, limit: Double)
     override external fun setAreasFirst(on: Boolean)
+    override external fun sculptStart(body: Long, packed: ByteArray, shape: Int, size: Double, maxTriangles: Int): Boolean
+    override external fun sculptHit(x: Float, y: Float): Boolean
+    override external fun sculptBegin(x: Float, y: Float, pressure: Float, brush: Int, radius: Float, strength: Float, invert: Boolean, mirror: Int, dynamic: Boolean, detail: Float, pressureSize: Boolean, pressureStrength: Boolean): Boolean
+    override external fun sculptMove(x: Float, y: Float, pressure: Float)
+    override external fun sculptEnd()
+    override external fun sculptUndo(redo: Boolean): Boolean
+    override external fun sculptInfo(): DoubleArray
+    override external fun sculptChange(what: Int, edge: Double)
+    override external fun sculptFinish(keep: Boolean): ByteArray
+    override external fun sculptedBody(id: Int, packed: ByteArray): Long
     /** A face's edges as sketch curves on a plane; see jni.cpp. */
     override external fun faceOutline(body: Long, face: String, plane: DoubleArray): DoubleArray
     override external fun shownTriangles(): Int

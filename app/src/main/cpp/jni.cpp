@@ -44,6 +44,7 @@
 #include "model/store.h"
 #include "render/picture.h"
 #include "render/renderer.h"
+#include "sculpt/sculpt.h"
 #include "sketch/region_faces.h"
 #include "sketch/regions.h"
 #include "sketch/text.h"
@@ -55,6 +56,8 @@ namespace {
 std::mutex lock;
 pm::Renderer renderer;
 pm::BodyStore store;
+// The mesh being sculpted, if any; the renderer draws it.
+std::unique_ptr<pm::Sculpt> sculpt;
 
 /** What each displayed thing is, in the order the renderer numbers them. */
 struct Shown {
@@ -2109,6 +2112,151 @@ JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_emboss(JNIEnv* env, jobjec
         pm::NamedShape s = solidOf(body);
         g.unlock();
         return keep(pm::emboss(id, s, name, planeOf(p.data()), curvesOf(k.data(), i.data(), n.data(), k.size()), picks, depth, sink));
+    } catch (const std::exception& e) {
+        fail(env, e.what());
+        return 0;
+    }
+}
+
+
+// Sculpting. Every call is under the lock, which drawing takes too.
+
+/**
+ * Starts sculpting: the packed mesh of a sculpt step being changed, else the
+ * body (a solid is turned into even triangles first), else a shape: 0 a
+ * sphere [size] mm across, 1 a block. At most [maxTriangles] as detail is added.
+ */
+JNIEXPORT jboolean JNICALL Java_com_rm_parrotmetric_Core_sculptStart(JNIEnv* env, jobject, jlong body, jbyteArray packed, jint shape, jdouble size,
+                                                                     jint maxTriangles) {
+    try {
+        std::unique_lock<std::mutex> g(lock);
+        auto bytes = bytesOf(env, packed);
+        std::unique_ptr<pm::Sculpt> made;
+        if (!bytes.empty()) {
+            made = std::make_unique<pm::Sculpt>(pm::unpackMesh(bytes), size_t(maxTriangles));
+        } else if (body != 0) {
+            if (!store.has(body)) throw std::runtime_error("The body isn't there any more");
+            const pm::Body b = store.get(body);
+            g.unlock();
+            made = std::make_unique<pm::Sculpt>(b.asMesh().toMesh(), size_t(maxTriangles));
+            // Even triangles about a 120th of the way across, so every part takes detail alike.
+            auto box = made->bounds();
+            float across = std::sqrt((box[3] - box[0]) * (box[3] - box[0]) + (box[4] - box[1]) * (box[4] - box[1]) + (box[5] - box[2]) * (box[5] - box[2]));
+            made->evenOut(across / 120);
+            made->forget();
+            g.lock();
+        } else if (shape == 0) {
+            made = std::make_unique<pm::Sculpt>(pm::Sculpt::sphere(float(size / 2), 5), size_t(maxTriangles));
+        } else {
+            float side = float(size);
+            pm::Mesh box = pm::MeshBody::box(side, side, side).translated(-side / 2, -side / 2, -side / 2).toMesh();
+            g.unlock();
+            made = std::make_unique<pm::Sculpt>(box, size_t(maxTriangles));
+            made->evenOut(side / 40);
+            made->forget();
+            g.lock();
+        }
+        sculpt = std::move(made);
+        renderer.setSculpt(sculpt.get(), true);
+        return JNI_TRUE;
+    } catch (const std::exception& e) {
+        fail(env, e.what());
+        return JNI_FALSE;
+    }
+}
+
+/** Whether (x, y) on the view, in pixels, is over the mesh being sculpted. */
+JNIEXPORT jboolean JNICALL Java_com_rm_parrotmetric_Core_sculptHit(JNIEnv*, jobject, jfloat x, jfloat y) {
+    std::lock_guard<std::mutex> g(lock);
+    if (!sculpt) return JNI_FALSE;
+    sculpt->setCamera(renderer.viewProjection(), renderer.width(), renderer.height());
+    return sculpt->hit(x, y) ? JNI_TRUE : JNI_FALSE;
+}
+
+/** Starts a stroke; see pm::BrushSettings. False if (x, y) is off the mesh. */
+JNIEXPORT jboolean JNICALL Java_com_rm_parrotmetric_Core_sculptBegin(JNIEnv*, jobject, jfloat x, jfloat y, jfloat pressure, jint brush, jfloat radius,
+                                                                     jfloat strength, jboolean invert, jint mirror, jboolean dynamic, jfloat detail,
+                                                                     jboolean pressureSize, jboolean pressureStrength) {
+    std::lock_guard<std::mutex> g(lock);
+    if (!sculpt) return JNI_FALSE;
+    pm::BrushSettings b;
+    b.brush = pm::Brush(std::clamp(int(brush), 0, int(pm::Brush::Mask)));
+    b.radius = radius;
+    b.strength = strength;
+    b.invert = invert;
+    b.mirror = mirror;
+    b.dynamic = dynamic;
+    b.detail = detail;
+    b.pressureSize = pressureSize;
+    b.pressureStrength = pressureStrength;
+    sculpt->setCamera(renderer.viewProjection(), renderer.width(), renderer.height());
+    return sculpt->begin(x, y, pressure, b) ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_sculptMove(JNIEnv*, jobject, jfloat x, jfloat y, jfloat pressure) {
+    std::lock_guard<std::mutex> g(lock);
+    if (!sculpt) return;
+    sculpt->setCamera(renderer.viewProjection(), renderer.width(), renderer.height());
+    sculpt->move(x, y, pressure);
+}
+
+JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_sculptEnd(JNIEnv*, jobject) {
+    std::lock_guard<std::mutex> g(lock);
+    if (sculpt) sculpt->end();
+}
+
+JNIEXPORT jboolean JNICALL Java_com_rm_parrotmetric_Core_sculptUndo(JNIEnv*, jobject, jboolean redo) {
+    std::lock_guard<std::mutex> g(lock);
+    if (!sculpt) return JNI_FALSE;
+    return (redo ? sculpt->redo() : sculpt->undo()) ? JNI_TRUE : JNI_FALSE;
+}
+
+/** Whether it can undo, and redo, then its triangles and average edge length (mm). */
+JNIEXPORT jdoubleArray JNICALL Java_com_rm_parrotmetric_Core_sculptInfo(JNIEnv* env, jobject) {
+    std::lock_guard<std::mutex> g(lock);
+    double out[4] = {0, 0, 0, 0};
+    if (sculpt) {
+        out[0] = sculpt->canUndo();
+        out[1] = sculpt->canRedo();
+        out[2] = double(sculpt->triangleCount());
+        out[3] = sculpt->averageEdge();
+    }
+    jdoubleArray a = env->NewDoubleArray(4);
+    env->SetDoubleArrayRegion(a, 0, 4, out);
+    return a;
+}
+
+/** 0 clears the mask, 1 turns it inside out, 2 evens out the triangles at [edge] mm (0: as they are on average). */
+JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_sculptChange(JNIEnv*, jobject, jint what, jdouble edge) {
+    std::lock_guard<std::mutex> g(lock);
+    if (!sculpt) return;
+    if (what == 0) sculpt->clearMask();
+    else if (what == 1) sculpt->invertMask();
+    else sculpt->evenOut(edge > 0 ? float(edge) : sculpt->averageEdge());
+}
+
+/** Stops sculpting. With keep, the mesh packed for the design file; else nothing. */
+JNIEXPORT jbyteArray JNICALL Java_com_rm_parrotmetric_Core_sculptFinish(JNIEnv* env, jobject, jboolean keep) {
+    try {
+        std::lock_guard<std::mutex> g(lock);
+        renderer.setSculpt(nullptr, false);
+        std::unique_ptr<pm::Sculpt> done = std::move(sculpt);
+        if (!done || !keep) return array(env, {});
+        if (done->stroking()) done->end();
+        return array(env, pm::packMesh(done->mesh()));
+    } catch (const std::exception& e) {
+        fail(env, e.what());
+        return array(env, {});
+    }
+}
+
+/** A mesh body from a sculpt step's packed mesh. */
+JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_sculptedBody(JNIEnv* env, jobject, jint, jbyteArray packed) {
+    try {
+        pm::Body b;
+        b.mesh = pm::MeshBody::fromMesh(pm::unpackMesh(bytesOf(env, packed)));
+        std::lock_guard<std::mutex> g(lock);
+        return store.add(std::move(b));
     } catch (const std::exception& e) {
         fail(env, e.what());
         return 0;

@@ -159,7 +159,8 @@ class DesignEditor(
             val kind = when (f) {
                 is SketchFeature -> HistoryEntry.Kind.Sketch
                 is ExtrudeFeature, is RevolveFeature, is com.rm.parrotmetric.design.PrimitiveFeature, is com.rm.parrotmetric.design.SweepFeature,
-                is com.rm.parrotmetric.design.PipeFeature, is com.rm.parrotmetric.design.CoilFeature, is com.rm.parrotmetric.design.LoftFeature -> HistoryEntry.Kind.Create
+                is com.rm.parrotmetric.design.PipeFeature, is com.rm.parrotmetric.design.CoilFeature, is com.rm.parrotmetric.design.LoftFeature,
+                is com.rm.parrotmetric.design.SculptFeature -> HistoryEntry.Kind.Create
                 is ImportFeature -> HistoryEntry.Kind.Import
                 is PlaneFeature, is AxisFeature, is PointFeature, is com.rm.parrotmetric.design.CanvasFeature -> HistoryEntry.Kind.Construct
                 else -> HistoryEntry.Kind.Modify
@@ -202,6 +203,7 @@ class DesignEditor(
         is com.rm.parrotmetric.design.MoveFeature -> "move"
         is com.rm.parrotmetric.design.AlignFeature -> "align"
         is com.rm.parrotmetric.design.ConvertFeature -> "tosolid"
+        is com.rm.parrotmetric.design.SculptFeature -> "sculpt"
         is PlaneFeature -> "plane.offset"
         is AxisFeature -> "axis"
         is PointFeature -> "point"
@@ -650,7 +652,8 @@ class DesignEditor(
                         val shown = sketches.mapNotNull { s -> b.sketchPlanes[s.id]?.let { s to it } }
                         val refit = refitNow || (!hadBodies && b.bodies.isNotEmpty())
                         val planeFeatures = features.filterIsInstance<PlaneFeature>().filter { b.sketchPlanes.containsKey(it.id) && it.id !in design.hiddenPlanes }
-                        val visible = b.bodies.filter { !design.info(it.label).hidden }
+                        val hide = sculpting?.second
+                        val visible = b.bodies.filter { !design.info(it.label).hidden && it.label != hide }
                         shownBodies = visible
                         // Until the panel's picks are put back, a tap adds to them rather than starting afresh.
                         redrawing = draft != null
@@ -720,7 +723,37 @@ class DesignEditor(
 
     private fun featuresToBuild(): List<Feature> = com.rm.parrotmetric.design.Parametrics.apply(design, rawFeatures())
 
+    /**
+     * Being sculpted: the Sculpt step being changed, if it's one already made,
+     * and the body, which isn't shown meanwhile. Steps from that one on are left out.
+     */
+    var sculpting: Pair<Int?, String?>? = null
+
+    /** Puts what was sculpted into the history: in place of the step being changed, or as a new one. */
+    fun keepSculpt(packed: ByteArray) {
+        val (editing, body) = sculpting ?: return
+        sculpting = null
+        checkpoint()
+        val old = editing?.let { design.feature(it) } as? com.rm.parrotmetric.design.SculptFeature
+        if (old != null) design.replace(com.rm.parrotmetric.design.SculptFeature(old.id, old.name, old.body, packed))
+        else design.add(com.rm.parrotmetric.design.SculptFeature(newId(), nextName("Sculpt", design.features.count { it is com.rm.parrotmetric.design.SculptFeature }), body, packed))
+        changed()
+    }
+
+    /** Leaves sculpting without changing the history. */
+    fun dropSculpt() {
+        sculpting = null
+        rebuild()
+    }
+
+    /** The body under the first picked face, for sculpting: its label and handle. */
+    fun pickedBody(): com.rm.parrotmetric.design.BodyState? = viewport.selectedFaces().firstOrNull()?.let { shownBodies.getOrNull(it.first) }
+
     private fun rawFeatures(): List<Feature> {
+        sculpting?.first?.let { id ->
+            val i = design.built.indexOfFirst { it.id == id }
+            if (i >= 0) return design.built.subList(0, i)
+        }
         val active = design.built
         val draft = panel ?: return active
         // Fillets and chamfers pick edges on the body before them, so they're left out while being picked.
@@ -752,6 +785,7 @@ class DesignEditor(
             }
         }.toSet()
         // The open panel's own sketches stay, so their picks can be shown and added to.
+        if (sculpting != null) return emptyList()
         val keep = setOfNotNull((draft as? AreaDraft)?.sketchId) + ((draft as? LoftDraft)?.sections?.map { it.sketchId } ?: emptyList())
         return features.filterIsInstance<SketchFeature>().filter { it.id !in used || it.id in keep }
     }

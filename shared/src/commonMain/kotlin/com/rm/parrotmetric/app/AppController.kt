@@ -737,9 +737,70 @@ class AppController(
                 newSketch = null
                 // A sketch opened again starts with Select, to change what's there.
                 openSketch(SketchEditor(plane, f.name, f.sketch, regionFinder, outlineFor(f.plane, plane), design::names, design::constructionPoints, files::open, ::textOutline, design::shownNames, bodyOutlineFor(plane)).also { it.selectTool(SketchTool.Select) })
+            } else if (f is com.rm.parrotmetric.design.SculptFeature) {
+                beginSculpt(f.id, f.body, 0, f.mesh, 0)
             } else {
                 design.edit(id)
             }
+        }
+
+        override fun orbit(dx: Float, dy: Float) = gl { core.orbit(dx, dy) }
+
+        override fun startSculpt(shape: Int) {
+            if (state.sculpt != null || state.sketch != null) return
+            val body = if (shape < 0) design.pickedBody() else null
+            if (shape < 0 && body == null) {
+                design.message = "Pick a face of the body to sculpt"
+                return
+            }
+            beginSculpt(null, body?.label, body?.handle ?: 0L, ByteArray(0), shape.coerceAtLeast(0))
+        }
+
+        override fun finishSculpt(keep: Boolean) {
+            val editor = state.sculpt ?: return
+            editor.end()
+            state = state.copy(sculpt = null)
+            scope.launch {
+                // Packing a big mesh takes a moment.
+                val packed = withContext(Dispatchers.Default) { core.sculptFinish(keep) }
+                // A step being changed stays as it was if nothing was done to it.
+                if (keep && packed.isNotEmpty() && (editor.editing == null || editor.canUndo)) design.keepSculpt(packed) else design.dropSculpt()
+                gl {}
+            }
+        }
+    }
+
+    /**
+     * Starts sculpting: a Sculpt step's packed mesh, else the body with [handle] (labelled
+     * [label]), else a shape. The mesh is got ready away from the main thread.
+     */
+    private fun beginSculpt(editing: Int?, label: String?, handle: Long, packed: ByteArray, shape: Int) {
+        design.sculpting = editing to label
+        core.clearSelection()
+        state = state.copy(selectedFaces = 0, selectedEdges = 0, selectedAreas = 0, selectedPlanes = 0, selectedCorners = 0)
+        // How far detail can go, by how quick this device is.
+        val most = when (state.detail.takeIf { it != DisplayDetail.Automatic } ?: state.autoDetail) {
+            DisplayDetail.Low -> 500_000
+            DisplayDetail.High -> 3_000_000
+            else -> 1_200_000
+        }
+        design.message = "Getting it ready to sculpt"
+        scope.launch {
+            val ok = try {
+                withContext(Dispatchers.Default) { core.sculptStart(handle, packed, shape, 50.0, most) }
+            } catch (e: RuntimeException) {
+                design.message = e.message
+                false
+            }
+            if (!ok) {
+                design.dropSculpt()
+                return@launch
+            }
+            val editor = com.rm.parrotmetric.ui.sculpt.SculptEditor(core, gl, scope, editing, label)
+            editor.refresh()
+            state = state.copy(sculpt = editor)
+            design.rebuild()
+            gl {}
         }
     }
 

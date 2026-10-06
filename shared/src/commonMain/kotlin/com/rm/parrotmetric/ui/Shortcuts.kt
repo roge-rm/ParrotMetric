@@ -86,6 +86,26 @@ fun modelShortcuts(c: ToolContext, openFinder: () -> Unit, openKeys: () -> Unit,
     )
 }
 
+/** Sculpting's shortcuts: the brushes, the size and finishing. */
+fun sculptShortcuts(e: com.rm.parrotmetric.ui.sculpt.SculptEditor, actions: ModelActions, openKeys: () -> Unit): List<Shortcut> =
+    com.rm.parrotmetric.ui.sculpt.SculptBrush.entries.map { b -> Shortcut(b.label, keys(b.key), "Brushes") { e.brush = b; e.keep() } } + listOf(
+        Shortcut("Smaller", keys("["), "Brush") { e.resize(false) },
+        Shortcut("Bigger", keys("]"), "Brush") { e.resize(true) },
+        Shortcut("Invert", keys("X"), "Brush") { e.invert = !e.invert },
+        Shortcut("Mirror across x", keys(), "Brush") { e.toggleMirror(1) },
+        Shortcut("Detail as it goes", keys(), "Brush") { e.dynamic = !e.dynamic; e.keep() },
+        Shortcut("Undo", keys("Ctrl+Z"), "Edit", e.canUndo) { e.undo() },
+        Shortcut("Redo", keys("Ctrl+Shift+Z", "Ctrl+Y"), "Edit", e.canRedo) { e.redo() },
+        Shortcut("Clear the mask", keys(), "Edit") { e.clearMask() },
+        Shortcut("Invert the mask", keys(), "Edit") { e.invertMask() },
+        Shortcut("Even out the triangles", keys(), "Edit") { e.evenOut() },
+        Shortcut("Finer all over", keys("Shift+D"), "Edit") { e.evenOut(0.7) },
+        Shortcut("Coarser all over", keys(), "Edit") { e.evenOut(1.4) },
+        Shortcut("Fit the view", keys("V", "F6"), "Sculpt") { actions.fit() },
+        Shortcut("Done", keys("Ctrl+Enter"), "Sculpt") { actions.finishSculpt(true) },
+        Shortcut("List the keys", keys("?"), "Keys", run = openKeys),
+    )
+
 /** The sketch screen's shortcuts: drawing tools, editing, the constraints that fit the selection, and finishing. */
 fun sketchShortcuts(e: SketchEditor, actions: ModelActions, openFinder: () -> Unit, openKeys: () -> Unit): List<Shortcut> {
     // Pressing a tool's key again while it's in hand switches how it draws.

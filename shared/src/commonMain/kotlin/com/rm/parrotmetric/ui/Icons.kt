@@ -54,6 +54,20 @@ object Icons {
     val thread = stroke("thread", "M8 3v18M16 3v18", "M8 5l8 2M8 9l8 2M8 13l8 2M8 17l8 2")
     val text = stroke("text", "M5 6V4h14v2", "M12 4v16", "M9 20h6")
     val canvas = stroke("canvas", "M4 5h16v14H4z", "M4 16l5-5 4 4 2-2 5 5", circle(15f, 9f, 1.5f))
+    val sculpt = stroke("sculpt", "M3 20h18", "M5 20c0-5 3-9 7-9s7 4 7 9", "M15 3.5l-3 6.5")
+    val brushDraw = stroke("brushDraw", "M3 17h4c1.5 0 2.5-6 5-6s3.5 6 5 6h4")
+    val brushClay = stroke("brushClay", "M3 18h18", "M5 18v-3h14v3", "M8 15v-3h8v3")
+    val brushCrease = stroke("brushCrease", "M3 9h6l3 9 3-9h6")
+    val brushSmooth = stroke("brushSmooth", "M3 14c3 0 3-3 6-3s3 3 6 3 3-3 6-3")
+    val brushFlatten = stroke("brushFlatten", "M3 18l3-3 3 2 3-4 3 3 3-2 3 2", "M3 9h18")
+    val brushInflate = stroke("brushInflate", circle(12f, 12f, 4.5f), "M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3")
+    val brushPinch = stroke("brushPinch", "M3 12h6M21 12h-6", "M7 9.5l2 2.5-2 2.5", "M17 9.5l-2 2.5 2 2.5", "M12 5v14")
+    val brushGrab = stroke(
+        "brushGrab", "M8 12V6a1.5 1.5 0 0 1 3 0v5M11 11V4.5a1.5 1.5 0 0 1 3 0V11M14 11V6a1.5 1.5 0 0 1 3 0v7c0 4-2.5 7-6 7-3 0-4.5-2-6-5l-1.2-2.4a1.4 1.4 0 0 1 2.4-1.4L8 13",
+    )
+    val brushPull = stroke("brushPull", "M3 19c4 0 6-2 7-5s3-8 7-8h3", "M17 3l3 3-3 3")
+    val brushLayer = stroke("brushLayer", "M3 18h18", "M6 18v-6h12v6")
+    val brushMask = stroke("brushMask", "M4 4h16v16H4z", "M4 12l8-8M4 20L20 4M12 20l8-8")
     /** The Shift key, for key badges. */
     val shiftKey = stroke("shiftKey", "M12 4l8 9h-4.5v7h-7v-7H4z", width = 2.4f)
 

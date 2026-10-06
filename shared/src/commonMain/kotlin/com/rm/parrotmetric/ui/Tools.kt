@@ -58,6 +58,12 @@ object Tools {
         ToolDef("patch", "Patch", Icons.patch, ToolGroup.Create, cluster = "Surfaces") { it.design.startPatch() },
         ToolDef("stitch", "Stitch", Icons.patch, ToolGroup.Create, cluster = "Surfaces") { it.design.startStitch() },
         ToolDef("thicken", "Thicken", Icons.patch, ToolGroup.Create, cluster = "Surfaces") { it.design.startThicken() },
+        // The picked body, or with none picked a ball.
+        ToolDef("sculpt", "Sculpt", Icons.sculpt, ToolGroup.Create, key = "K", cluster = "Sculpt", suggest = { it.selectedFaces == 1 && it.selectedEdges == 0 }) {
+            it.actions.startSculpt(if (it.state.selectedFaces > 0) -1 else 0)
+        },
+        ToolDef("sculpt.ball", "Sculpt a ball", Icons.sphere, ToolGroup.Create, cluster = "Sculpt") { it.actions.startSculpt(0) },
+        ToolDef("sculpt.block", "Sculpt a block", Icons.box, ToolGroup.Create, cluster = "Sculpt") { it.actions.startSculpt(1) },
         ToolDef("box", "Box", Icons.box, ToolGroup.Create, cluster = "Shapes") { it.design.startPrimitive(PrimitiveKind.Box) },
         ToolDef("cylinder", "Cylinder", Icons.cylinder, ToolGroup.Create, cluster = "Shapes") { it.design.startPrimitive(PrimitiveKind.Cylinder) },
         ToolDef("sphere", "Sphere", Icons.sphere, ToolGroup.Create, cluster = "Shapes") { it.design.startPrimitive(PrimitiveKind.Sphere) },

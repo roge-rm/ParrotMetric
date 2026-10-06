@@ -74,7 +74,7 @@ TEST_CASE("curvature is one over the radius") {
     };
     DisplayMesh d = withCurvature(ball.display(), false);
     CHECK(median(d.shade) == Catch::Approx(0.1).epsilon(0.1));
-    // A mesh has flat normals: they're worked out again across triangles.
+    // A mesh's curvature is worked out again across its triangles.
     DisplayMesh m = withCurvature(displayMesh(ball.tessellate({})), true);
     CHECK(median(m.shade) == Catch::Approx(0.1).epsilon(0.15));
     // Flat faces aren't curved.

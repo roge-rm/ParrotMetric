@@ -67,6 +67,31 @@ DisplayMesh displayMesh(const Mesh& mesh, double flatAngle, double edgeAngle) {
         ++faces;
     }
 
+    // Each corner's normal: the triangles round its point that face within the edge angle of this one,
+    // weighted by size, so curved surfaces shade smoothly and sharp edges stay sharp.
+    std::vector<std::vector<uint32_t>> around(mesh.vertices.size());
+    for (uint32_t i = 0; i < n; ++i)
+        for (uint32_t v : mesh.triangles[i]) around[v].push_back(i);
+    std::vector<double> area(n);
+    for (uint32_t i = 0; i < n; ++i) {
+        const auto& t = mesh.triangles[i];
+        const auto &a = mesh.vertices[t[0]], &b = mesh.vertices[t[1]], &c = mesh.vertices[t[2]];
+        Vec u{b[0] - a[0], b[1] - a[1], b[2] - a[2]}, w{c[0] - a[0], c[1] - a[1], c[2] - a[2]};
+        Vec x{u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]};
+        area[i] = std::sqrt(dot(x, x));
+    }
+    const double smoothCos = std::cos(edgeAngle);
+    auto corner = [&](uint32_t i, uint32_t v) {
+        Vec sum{0, 0, 0};
+        for (uint32_t o : around[v])
+            if (dot(normal[o], normal[i]) >= smoothCos)
+                for (int k = 0; k < 3; ++k) sum[k] += normal[o][k] * area[o];
+        double len = std::sqrt(dot(sum, sum));
+        if (len <= 0) return normal[i];
+        for (double& x : sum) x /= len;
+        return sum;
+    };
+
     DisplayMesh d;
     d.faceCount = faces;
     d.positions.reserve(n * 9);
@@ -77,7 +102,8 @@ DisplayMesh displayMesh(const Mesh& mesh, double flatAngle, double edgeAngle) {
         for (uint32_t v : mesh.triangles[i]) {
             const auto& p = mesh.vertices[v];
             d.positions.insert(d.positions.end(), {p[0], p[1], p[2]});
-            d.normals.insert(d.normals.end(), {float(normal[i][0]), float(normal[i][1]), float(normal[i][2])});
+            Vec cn = corner(i, v);
+            d.normals.insert(d.normals.end(), {float(cn[0]), float(cn[1]), float(cn[2])});
             d.faceOfVertex.push_back(face[i]);
             d.indices.push_back(uint32_t(d.indices.size()));
         }

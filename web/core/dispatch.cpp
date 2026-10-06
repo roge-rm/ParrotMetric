@@ -92,6 +92,16 @@ JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_setCovered(JNIEnv*, jobject
 JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_viewFrom(JNIEnv*, jobject, jfloat, jfloat);
 JNIEXPORT jfloatArray JNICALL Java_com_rm_parrotmetric_Core_cameraState(JNIEnv*, jobject);
 JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_setAreasFirst(JNIEnv*, jobject, jboolean);
+JNIEXPORT jboolean JNICALL Java_com_rm_parrotmetric_Core_sculptStart(JNIEnv*, jobject, jlong, jbyteArray, jint, jdouble, jint);
+JNIEXPORT jboolean JNICALL Java_com_rm_parrotmetric_Core_sculptHit(JNIEnv*, jobject, jfloat, jfloat);
+JNIEXPORT jboolean JNICALL Java_com_rm_parrotmetric_Core_sculptBegin(JNIEnv*, jobject, jfloat, jfloat, jfloat, jint, jfloat, jfloat, jboolean, jint, jboolean, jfloat, jboolean, jboolean);
+JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_sculptMove(JNIEnv*, jobject, jfloat, jfloat, jfloat);
+JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_sculptEnd(JNIEnv*, jobject);
+JNIEXPORT jboolean JNICALL Java_com_rm_parrotmetric_Core_sculptUndo(JNIEnv*, jobject, jboolean);
+JNIEXPORT jdoubleArray JNICALL Java_com_rm_parrotmetric_Core_sculptInfo(JNIEnv*, jobject);
+JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_sculptChange(JNIEnv*, jobject, jint, jdouble);
+JNIEXPORT jbyteArray JNICALL Java_com_rm_parrotmetric_Core_sculptFinish(JNIEnv*, jobject, jboolean);
+JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_sculptedBody(JNIEnv*, jobject, jint, jbyteArray);
 }
 
 namespace pmweb {
@@ -834,6 +844,81 @@ void dispatch(int call, Reader& in, Writer& out, JNIEnv* env) {
         case 87: {  // setAreasFirst
             auto a0 = in.boolean();
             Java_com_rm_parrotmetric_Core_setAreasFirst(env, nullptr, a0);
+            break;
+        }
+        case 88: {  // sculptStart
+            auto a0 = in.i64();
+            auto a1 = in.bytes();
+            auto a2 = in.i32();
+            auto a3 = in.f64();
+            auto a4 = in.i32();
+            auto r = Java_com_rm_parrotmetric_Core_sculptStart(env, nullptr, a0, a1, a2, a3, a4);
+            if (!failed()) out.put(r);
+            break;
+        }
+        case 89: {  // sculptHit
+            auto a0 = in.f32();
+            auto a1 = in.f32();
+            auto r = Java_com_rm_parrotmetric_Core_sculptHit(env, nullptr, a0, a1);
+            if (!failed()) out.put(r);
+            break;
+        }
+        case 90: {  // sculptBegin
+            auto a0 = in.f32();
+            auto a1 = in.f32();
+            auto a2 = in.f32();
+            auto a3 = in.i32();
+            auto a4 = in.f32();
+            auto a5 = in.f32();
+            auto a6 = in.boolean();
+            auto a7 = in.i32();
+            auto a8 = in.boolean();
+            auto a9 = in.f32();
+            auto a10 = in.boolean();
+            auto a11 = in.boolean();
+            auto r = Java_com_rm_parrotmetric_Core_sculptBegin(env, nullptr, a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11);
+            if (!failed()) out.put(r);
+            break;
+        }
+        case 91: {  // sculptMove
+            auto a0 = in.f32();
+            auto a1 = in.f32();
+            auto a2 = in.f32();
+            Java_com_rm_parrotmetric_Core_sculptMove(env, nullptr, a0, a1, a2);
+            break;
+        }
+        case 92: {  // sculptEnd
+            Java_com_rm_parrotmetric_Core_sculptEnd(env, nullptr);
+            break;
+        }
+        case 93: {  // sculptUndo
+            auto a0 = in.boolean();
+            auto r = Java_com_rm_parrotmetric_Core_sculptUndo(env, nullptr, a0);
+            if (!failed()) out.put(r);
+            break;
+        }
+        case 94: {  // sculptInfo
+            auto r = Java_com_rm_parrotmetric_Core_sculptInfo(env, nullptr);
+            if (!failed()) out.put(r);
+            break;
+        }
+        case 95: {  // sculptChange
+            auto a0 = in.i32();
+            auto a1 = in.f64();
+            Java_com_rm_parrotmetric_Core_sculptChange(env, nullptr, a0, a1);
+            break;
+        }
+        case 96: {  // sculptFinish
+            auto a0 = in.boolean();
+            auto r = Java_com_rm_parrotmetric_Core_sculptFinish(env, nullptr, a0);
+            if (!failed()) out.put(r);
+            break;
+        }
+        case 97: {  // sculptedBody
+            auto a0 = in.i32();
+            auto a1 = in.bytes();
+            auto r = Java_com_rm_parrotmetric_Core_sculptedBody(env, nullptr, a0, a1);
+            if (!failed()) out.put(r);
             break;
         }
         default:

@@ -68,6 +68,7 @@
     X(PFNGLUNIFORMMATRIX4FVPROC, glUniformMatrix4fv) \
     X(PFNGLUSEPROGRAMPROC, glUseProgram) \
     X(PFNGLVERTEXATTRIBIPOINTERPROC, glVertexAttribIPointer) \
+    X(PFNGLVERTEXATTRIBI4UIPROC, glVertexAttribI4ui) \
     X(PFNGLVERTEXATTRIBPOINTERPROC, glVertexAttribPointer) \
     X(PFNGLVIEWPORTPROC, glViewport) \
     X(PFNGLBLITFRAMEBUFFERPROC, glBlitFramebuffer) \
@@ -135,6 +136,7 @@ PM_GL_CALLS(PM_GL_DECLARE)
 #define glUniformMatrix4fv pm_glUniformMatrix4fv
 #define glUseProgram pm_glUseProgram
 #define glVertexAttribIPointer pm_glVertexAttribIPointer
+#define glVertexAttribI4ui pm_glVertexAttribI4ui
 #define glVertexAttribPointer pm_glVertexAttribPointer
 #define glViewport pm_glViewport
 #define glBlitFramebuffer pm_glBlitFramebuffer

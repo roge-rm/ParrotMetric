@@ -762,4 +762,82 @@ object WebCore : NativeCore {
         args.boolean(on)
         call(87, args)
     }
+
+    override fun sculptStart(body: Long, packed: ByteArray, shape: Int, size: Double, maxTriangles: Int): Boolean {
+        val args = Args()
+        args.long(body)
+        args.bytes(packed)
+        args.int(shape)
+        args.double(size)
+        args.int(maxTriangles)
+        return call(88, args).boolean()
+    }
+
+    override fun sculptHit(x: Float, y: Float): Boolean {
+        val args = Args()
+        args.float(x)
+        args.float(y)
+        return call(89, args).boolean()
+    }
+
+    override fun sculptBegin(x: Float, y: Float, pressure: Float, brush: Int, radius: Float, strength: Float, invert: Boolean, mirror: Int, dynamic: Boolean, detail: Float, pressureSize: Boolean, pressureStrength: Boolean): Boolean {
+        val args = Args()
+        args.float(x)
+        args.float(y)
+        args.float(pressure)
+        args.int(brush)
+        args.float(radius)
+        args.float(strength)
+        args.boolean(invert)
+        args.int(mirror)
+        args.boolean(dynamic)
+        args.float(detail)
+        args.boolean(pressureSize)
+        args.boolean(pressureStrength)
+        return call(90, args).boolean()
+    }
+
+    override fun sculptMove(x: Float, y: Float, pressure: Float) {
+        val args = Args()
+        args.float(x)
+        args.float(y)
+        args.float(pressure)
+        call(91, args)
+    }
+
+    override fun sculptEnd() {
+        val args = Args()
+        call(92, args)
+    }
+
+    override fun sculptUndo(redo: Boolean): Boolean {
+        val args = Args()
+        args.boolean(redo)
+        return call(93, args).boolean()
+    }
+
+    override fun sculptInfo(): DoubleArray {
+        val args = Args()
+        return call(94, args).doubles()!!
+    }
+
+    override fun sculptChange(what: Int, edge: Double) {
+        val args = Args()
+        args.int(what)
+        args.double(edge)
+        call(95, args)
+    }
+
+    override fun sculptFinish(keep: Boolean): ByteArray {
+        val args = Args()
+        args.boolean(keep)
+        return call(96, args).bytes()!!
+    }
+
+    override fun sculptedBody(id: Int, packed: ByteArray): Long {
+        val args = Args()
+        args.int(id)
+        args.bytes(packed)
+        return call(97, args).long()
+    }
 }

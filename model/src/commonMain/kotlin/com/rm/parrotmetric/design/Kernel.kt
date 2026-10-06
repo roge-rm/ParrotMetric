@@ -31,6 +31,8 @@ interface Kernel {
     fun offsetFaces(id: Int, body: Long, faces: List<String>, distance: Double): Long = throw KernelException("Not here")
     /** A mesh body changed as MeshEditFeature says; kind is MeshEdit's ordinal. A solid is made a mesh first. */
     fun meshEdit(id: Int, body: Long, kind: Int, size: Double, steps: Int): Long = throw KernelException("Not here")
+    /** A mesh body from a sculpt step's packed mesh. */
+    fun sculptedBody(id: Int, packed: ByteArray): Long = throw KernelException("Not here")
     /** A rib or web from open curves, grown until it meets the body and joined to it; see RibFeature. */
     fun rib(id: Int, body: Long, plane: SketchPlane, curves: List<ProfileCurve>, thickness: Double, flip: Boolean, web: Boolean): Long = throw KernelException("Not here")
     /** Sketch areas projected onto a face of the body along the sketch's normal, raised or sunk; see EmbossFeature. */

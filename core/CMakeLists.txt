@@ -76,6 +76,7 @@ add_library(pmcore STATIC
         src/model/operations.cpp
         src/model/views.cpp
         src/model/store.cpp
+        src/sculpt/sculpt.cpp
         src/solid/solid.cpp
         src/solid/speed.cpp)
 # The renderer: OpenGL ES 3 on Android, WebGL 2 in the browser, and on desktop
@@ -110,7 +111,7 @@ target_link_libraries(pmcore PUBLIC manifold ${PM_ZLIB}
 
 if(PM_TESTS)
     add_subdirectory(${third_party}/catch2 ${CMAKE_BINARY_DIR}/catch2 EXCLUDE_FROM_ALL)
-    add_executable(pmcore_tests tests/stl_test.cpp tests/mesh_body_test.cpp tests/solid_test.cpp tests/exchange_test.cpp tests/display_test.cpp tests/regions_test.cpp tests/operations_test.cpp tests/mesh_formats_test.cpp tests/repair_test.cpp tests/views_test.cpp)
+    add_executable(pmcore_tests tests/stl_test.cpp tests/mesh_body_test.cpp tests/solid_test.cpp tests/exchange_test.cpp tests/display_test.cpp tests/regions_test.cpp tests/operations_test.cpp tests/mesh_formats_test.cpp tests/repair_test.cpp tests/views_test.cpp tests/sculpt_test.cpp)
     target_link_libraries(pmcore_tests PRIVATE pmcore Catch2::Catch2WithMain)
     include(CTest)
     add_test(NAME pmcore_tests COMMAND pmcore_tests)
