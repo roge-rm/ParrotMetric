@@ -95,6 +95,7 @@ object DesignFile {
         "expressions" to design.expressions.mapKeys { it.key.toString() },
         "suppressed" to design.suppressed.sorted(),
         "hiddenPlanes" to design.hiddenPlanes.sorted(),
+        "isolated" to design.isolated.sorted(),
         "configurations" to design.configurations.map { c ->
             mapOf("name" to c.name, "parameters" to c.parameters, "suppressed" to c.suppressed.sorted())
         },
@@ -147,6 +148,7 @@ object DesignFile {
             features, root.int("marker"), bodies, parameters, expressions, suppressed, hints,
             configurations, (root["configuration"] as? Json.Str)?.value,
             (root["hiddenPlanes"] as? Json.Arr)?.items?.map { (it as Json.Num).value.toInt() }?.toSet() ?: emptySet(),
+            (root["isolated"] as? Json.Arr)?.items?.let { strings(it) }?.toSet() ?: emptySet(),
         )
         into.drawing = (root["drawing"] as? Json.Obj)?.let { DrawingFile.read(it) }
         if (!keepVersions) {

@@ -41,6 +41,16 @@ class Design {
     /** Construction planes hidden from view, by feature id. */
     val hiddenPlanes = mutableSetOf<Int>()
 
+    /** Bodies shown on their own, by label, until isolating is turned off; empty when it's off. */
+    val isolated = mutableSetOf<String>()
+
+    /** Of [labels], the bodies to draw: those not hidden, and only the isolated ones while any of them are there. */
+    fun shown(labels: List<String>): List<String> {
+        val notHidden = labels.filter { !info(it).hidden }
+        val alone = notHidden.filter { it in isolated }
+        return alone.ifEmpty { notHidden }
+    }
+
     /** A named version of the design: its parameters' expressions and which features are off. */
     data class Configuration(val name: String, val parameters: Map<String, String>, val suppressed: Set<Int>)
 
@@ -98,11 +108,13 @@ class Design {
         parameters: List<Parameter> = emptyList(), expressions: Map<Int, Map<String, String>> = emptyMap(),
         suppressed: Set<Int> = emptySet(), hints: Map<String, DoubleArray> = emptyMap(),
         configurations: List<Configuration> = emptyList(), configuration: String? = null,
-        hiddenPlanes: Set<Int> = emptySet(),
+        hiddenPlanes: Set<Int> = emptySet(), isolated: Set<String> = emptySet(),
     ) {
         drawing = null
         this.hiddenPlanes.clear()
         this.hiddenPlanes += hiddenPlanes
+        this.isolated.clear()
+        this.isolated += isolated
         this.configurations.clear()
         this.configurations += configurations
         this.configuration = configuration?.takeIf { n -> configurations.any { it.name == n } }
@@ -168,6 +180,7 @@ class Design {
         internal val configuration: String? = null,
         internal val hiddenPlanes: Set<Int> = emptySet(),
         internal val drawing: com.rm.parrotmetric.drawing.Drawing? = null,
+        internal val isolated: Set<String> = emptySet(),
     )
 
     fun snapshot() = Snapshot(
@@ -183,6 +196,7 @@ class Design {
         configuration,
         hiddenPlanes.toSet(),
         drawing,
+        isolated.toSet(),
     )
 
     fun restore(s: Snapshot) {
@@ -195,6 +209,8 @@ class Design {
         bodies.putAll(s.bodies)
         hiddenPlanes.clear()
         hiddenPlanes += s.hiddenPlanes
+        isolated.clear()
+        isolated += s.isolated
         parameters.clear()
         parameters += s.parameters
         expressions.clear()
