@@ -99,6 +99,10 @@ object DesignFile {
         },
         "configuration" to design.configuration,
         "drawing" to design.drawing?.let { DrawingFile.write(it) },
+        // Only the font files some text uses.
+        "fonts" to design.fonts.filterKeys { name ->
+            design.features.any { f -> f is SketchFeature && f.sketch.texts.any { it.font == name } }
+        }.mapValues { Base64.encode(it.value) },
         // Only those of features still there.
         "hints" to design.hints.filterKeys { k -> design.feature(k.substringBefore(':').toIntOrNull() ?: -1) != null }
             .mapValues { it.value.toList() },
@@ -142,6 +146,8 @@ object DesignFile {
             (root["hiddenPlanes"] as? Json.Arr)?.items?.map { (it as Json.Num).value.toInt() }?.toSet() ?: emptySet(),
         )
         into.drawing = (root["drawing"] as? Json.Obj)?.let { DrawingFile.read(it) }
+        into.fonts.clear()
+        (root["fonts"] as? Json.Obj)?.fields?.forEach { (name, v) -> (v as? Json.Str)?.let { into.fonts[name] = Base64.decode(it.value) } }
         return (root["title"] as? Json.Str)?.value ?: "Untitled"
     }
 
@@ -466,7 +472,7 @@ object DesignFile {
         },
         "texts" to s.texts.map { t ->
             mapOf(
-                "id" to t.id, "anchor" to t.anchor.id, "text" to t.text, "height" to t.height, "bold" to t.bold, "angle" to t.angle, "align" to t.align.name,
+                "id" to t.id, "anchor" to t.anchor.id, "text" to t.text, "height" to t.height, "bold" to t.bold, "angle" to t.angle, "align" to t.align.name, "font" to t.font,
                 "outline" to t.outline.map { listOf(it.kind.ordinal, it.x1, it.y1, it.x2, it.y2, it.cx1, it.cy1, it.cx2, it.cy2) },
             )
         },
@@ -529,7 +535,8 @@ object DesignFile {
                 ProfileCurve(ProfileCurve.Kind.entries[n[0].toInt()], 0, n[1], n[2], n[3], n[4], cx1 = n[5], cy1 = n[6], cx2 = n[7], cy2 = n[8])
             }
             s.loadText(SketchText(t.int("id"), pt(t, "anchor"), t.str("text"), t.num("height"), t.bool("bold"), t.num("angle"), outline,
-                TextAlign.entries.firstOrNull { it.name == (t["align"] as? Json.Str)?.value } ?: TextAlign.Left))
+                TextAlign.entries.firstOrNull { it.name == (t["align"] as? Json.Str)?.value } ?: TextAlign.Left,
+                (t["font"] as? Json.Str)?.value ?: com.rm.parrotmetric.sketch.builtInFonts.first()))
         }
         fun line(c: Json.Obj, k: String) = s.curve(c.int(k)) as? Line ?: throw IllegalArgumentException("A sketch refers to a missing line")
         fun curve(c: Json.Obj, k: String) = s.curve(c.int(k)) ?: throw IllegalArgumentException("A sketch refers to a missing curve")

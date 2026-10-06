@@ -25,7 +25,9 @@ Tap to place each point. Points snap to the ends and middles of what's already t
 - **Spline** goes through the points you tap, or is pulled by them as control points. Tap **Spline** again to end it.
 - **Ellipse** is a centre, then the end of one axis, then the width.
 - **Conic** is two ends and a point the curve leans towards. Pick one and **Fullness** sets how full it is, between 0 and 1.
-- **Text** asks for the words, the height, whether it's bold, where the point you tapped is on it (**From the left**, **Centred** or **From the right**) and how far it's **Turned**. Its letters are areas like any other, so they extrude. **Change text**, or a double click on the text, edits it later.
+- **Text** asks for the words, the height, the font, whether it's bold, where the point you tapped is on it (**From the left**, **Centred** or **From the right**) and how far it's **Turned**. Its letters are areas like any other, so they extrude. **Change text**, or a double click on the text, edits it later.
+  - The fonts are **Sans**, **Serif**, **Mono** and **Rounded**. **Font file…** uses any TrueType or OpenType font (.ttf or .otf); it's kept with the design, so the text can be changed on any device. A font file has no bold.
+  - **Into lines** turns the text into the lines and curves of its letters, so you can change their shapes, add to them or dimension them. It stops being text.
 
 The styles of each tool show above the tools while it's in hand.
 

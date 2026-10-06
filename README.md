@@ -42,7 +42,7 @@ The box has rounded corners, a hollow, vents and a lid on a hinge joint, with it
 ### Sketching
 
 - Lines, rectangles (corner to corner, from the centre, or three points), circles (centre, two points, three points), arcs (centre and ends, three points, tangent), points, polygons, slots, ellipses, conics and splines (through points, or pulled by control points)
-- Text in a sketch, regular or bold, that extrudes like any other shape
+- Text in a sketch, in four fonts or any font file, regular or bold, that extrudes like any other shape or turns into lines to change
 - SVG and DXF drawings brought into a sketch, and pictures laid on a plane as a canvas to trace over
 - Constraints: coincident, horizontal, vertical, parallel, perpendicular, tangent, equal, fixed, midpoint, symmetric, concentric and collinear, many of them added as you draw
 - Dimensions for lengths, distances, radii, diameters and angles, typed as numbers or as expressions that use your parameters
@@ -225,7 +225,7 @@ ParrotMetric stands on a lot of other people's work. The modelling is all theirs
 - **[Eigen](https://eigen.tuxfamily.org/)** 5.0.1 does the maths in the sketch solver. MPL 2.0.
 - **[zlib](https://zlib.net/)** 1.3.1 reads and writes 3MF files on desktop and in the browser. zlib licence.
 - **[stb_truetype and stb_image](https://github.com/nothings/stb)** by Sean Barrett turn fonts into outlines and read pictures for canvases. MIT or public domain.
-- **[Noto Sans](https://fonts.google.com/noto/specimen/Noto+Sans)** is the font for text in sketches. SIL Open Font License 1.1.
+- **[Noto Sans](https://fonts.google.com/noto/specimen/Noto+Sans)**, **[DejaVu Serif](https://dejavu-fonts.github.io/)**, **[Hack](https://sourcefoundry.org/hack/)** and **[Quicksand](https://github.com/andrew-paglinawan/QuicksandFamily)** are the fonts for text in sketches, the last three cut down to Latin letters. SIL Open Font License 1.1 (Noto Sans and Quicksand), the Bitstream Vera licence (DejaVu) and MIT with the Bitstream Vera licence (Hack); the licences are in third_party/fonts/licences.
 - **[Catch2](https://github.com/catchorg/Catch2)** runs the core's tests (not part of the app). Boost Software License.
 - The OpenGL ES and EGL headers are the **[Khronos Group](https://www.khronos.org/)**'s, under the MIT and Apache 2.0 licences in each file.
 - The app is written in **[Kotlin](https://kotlinlang.org/)** with **[Compose Multiplatform](https://www.jetbrains.com/compose-multiplatform/)** by JetBrains, and uses AndroidX and kotlinx.coroutines (Apache 2.0).

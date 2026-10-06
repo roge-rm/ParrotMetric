@@ -67,4 +67,33 @@ class SketchTextTest {
         assertEquals(0.0, right.minOf { minOf(it.y1, it.y2) }, 1e-9)
         assertEquals(square, alignOutline(square, TextAlign.Left))
     }
+
+    @Test
+    fun aFontFileGoesWithTheDesignWhileTextUsesIt() {
+        val d = Design()
+        val s = Sketch()
+        s.addText(s.addPoint(0.0, 0.0), "Hi", 8.0, false, 0.0, square, font = "Stencil")
+        d.add(SketchFeature(d.newId(), "Sketch", PlaneRef.Fixed(SketchPlane.Top), s))
+        d.fonts["Stencil"] = byteArrayOf(1, 2, 3)
+        d.fonts["Unused"] = byteArrayOf(4)
+        val back = Design()
+        DesignFile.read(DesignFile.write(d, "x"), back)
+        assertEquals("Stencil", (back.features[0] as SketchFeature).sketch.texts.single().font)
+        assertEquals(listOf<Byte>(1, 2, 3), back.fonts["Stencil"]?.toList())
+        assertTrue("Unused" !in back.fonts)
+    }
+
+    @Test
+    fun aBezierSplineIsItsCurvesExactly() {
+        val s = Sketch()
+        val p = listOf(0.0 to 0.0, 1.0 to 2.0, 3.0 to 2.0, 4.0 to 0.0, 5.0 to -2.0, 7.0 to -2.0, 8.0 to 0.0).map { s.addPoint(it.first, it.second) }
+        s.addSpline(p, shape = Spline.Shape.Bezier)
+        val pieces = s.profileCurves()
+        assertEquals(2, pieces.size)
+        assertEquals(ProfileCurve.Kind.Bezier, pieces[0].kind)
+        assertEquals(1.0, pieces[0].cx1, 1e-9)
+        assertEquals(3.0, pieces[0].cx2, 1e-9)
+        assertEquals(4.0, pieces[0].x2, 1e-9)
+        assertEquals(8.0, pieces[1].x2, 1e-9)
+    }
 }

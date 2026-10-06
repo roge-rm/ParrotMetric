@@ -28,6 +28,8 @@ class Design {
     val expressions = mutableMapOf<Int, Map<String, String>>()
 
     /** Features turned off: kept in the history but not built. */
+    /** Font files the design's text uses, by name, so it can be changed anywhere. */
+    val fonts = mutableMapOf<String, ByteArray>()
     val suppressed = mutableSetOf<Int>()
 
     /** Construction planes hidden from view, by feature id. */

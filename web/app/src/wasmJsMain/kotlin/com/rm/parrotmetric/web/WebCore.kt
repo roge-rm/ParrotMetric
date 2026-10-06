@@ -392,11 +392,13 @@ object WebCore : NativeCore {
         return call(36, args).long()
     }
 
-    override fun textOutline(text: String, height: Double, bold: Boolean): DoubleArray {
+    override fun textOutline(text: String, height: Double, bold: Boolean, font: Int, data: ByteArray): DoubleArray {
         val args = Args()
         args.string(text)
         args.double(height)
         args.boolean(bold)
+        args.int(font)
+        args.bytes(data)
         return call(37, args).doubles()!!
     }
 

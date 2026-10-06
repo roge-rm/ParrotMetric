@@ -763,14 +763,14 @@ class AppController(
             val ref = PlaneRef.Construction(id)
             val plane = p.copy(name = f.name)
             newSketch = ref to name
-            openSketch(SketchEditor(plane, name, Sketch(), regionFinder, outlineFor(ref, plane), design::names, design::constructionPoints, files::open, ::textOutline, design::shownNames, bodyOutlineFor(plane)))
+            openSketch(SketchEditor(plane, name, Sketch(), regionFinder, outlineFor(ref, plane), design::names, design::constructionPoints, files::open, ::textOutline, design::shownNames, bodyOutlineFor(plane), ::fontNames, ::keepFont))
         }
 
         override fun startSketch(plane: SketchPlane?) {
             val name = design.nextSketchName()
             val (ref, p) = if (plane != null) PlaneRef.Fixed(plane) to plane else design.sketchPlaneUnderSelection(state.yaw, name) ?: return
             newSketch = ref to name
-            openSketch(SketchEditor(p, name, Sketch(), regionFinder, outlineFor(ref, p), design::names, design::constructionPoints, files::open, ::textOutline, design::shownNames, bodyOutlineFor(p)))
+            openSketch(SketchEditor(p, name, Sketch(), regionFinder, outlineFor(ref, p), design::names, design::constructionPoints, files::open, ::textOutline, design::shownNames, bodyOutlineFor(p), ::fontNames, ::keepFont))
         }
 
         override fun finishSketch() {
@@ -808,7 +808,7 @@ class AppController(
                 design.checkpoint()
                 newSketch = null
                 // A sketch opened again starts with Select, to change what's there.
-                openSketch(SketchEditor(plane, f.name, f.sketch, regionFinder, outlineFor(f.plane, plane), design::names, design::constructionPoints, files::open, ::textOutline, design::shownNames, bodyOutlineFor(plane)).also { it.selectTool(SketchTool.Select) })
+                openSketch(SketchEditor(plane, f.name, f.sketch, regionFinder, outlineFor(f.plane, plane), design::names, design::constructionPoints, files::open, ::textOutline, design::shownNames, bodyOutlineFor(plane), ::fontNames, ::keepFont).also { it.selectTool(SketchTool.Select) })
             } else if (f is com.rm.parrotmetric.design.SculptFeature) {
                 beginSculpt(f.id, f.body, 0, f.mesh, 0)
             } else {
@@ -879,9 +879,18 @@ class AppController(
         }
     }
 
-    /** Text as outline curves at (0, 0), from the core's fonts. */
-    private fun textOutline(text: String, height: Double, bold: Boolean): List<ProfileCurve> {
-        val n = core.textOutline(text, height, bold)
+    /** The fonts text can be in: the built-in ones, then the design's font files. */
+    private fun fontNames() = com.rm.parrotmetric.sketch.builtInFonts + design.design.fonts.keys.sorted()
+
+    private fun keepFont(name: String, bytes: ByteArray) {
+        design.design.fonts[name] = bytes
+    }
+
+    /** Text as outline curves at (0, 0), in a built-in font or one of the design's font files. */
+    private fun textOutline(text: String, height: Double, bold: Boolean, font: String): List<ProfileCurve> {
+        val builtIn = com.rm.parrotmetric.sketch.builtInFonts.indexOf(font)
+        val file = if (builtIn >= 0) ByteArray(0) else design.design.fonts[font] ?: throw RuntimeException("The font $font isn't with this design any more")
+        val n = core.textOutline(text, height, bold, builtIn.coerceAtLeast(0), file)
         return (0 until n.size / 9).map { i ->
             val o = i * 9
             ProfileCurve(

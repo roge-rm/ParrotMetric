@@ -9,20 +9,22 @@
 #include "stb_truetype.h"
 
 // The fonts, built in by CMake from third_party/fonts.
-extern const unsigned char pm_font_regular[];
-extern const unsigned char pm_font_bold[];
+extern const unsigned char pm_font_0_regular[], pm_font_0_bold[], pm_font_1_regular[], pm_font_1_bold[];
+extern const unsigned char pm_font_2_regular[], pm_font_2_bold[], pm_font_3_regular[], pm_font_3_bold[];
 
 namespace pm {
 namespace {
 
-const stbtt_fontinfo& font(bool bold) {
-    static stbtt_fontinfo fonts[2];
+const stbtt_fontinfo& builtIn(TextFont which, bool bold) {
+    static stbtt_fontinfo fonts[8];
     static std::once_flag ready;
     std::call_once(ready, [] {
-        if (!stbtt_InitFont(&fonts[0], pm_font_regular, 0) || !stbtt_InitFont(&fonts[1], pm_font_bold, 0))
-            throw std::runtime_error("The font couldn't be read");
+        const unsigned char* data[8] = {pm_font_0_regular, pm_font_0_bold, pm_font_1_regular, pm_font_1_bold,
+                                        pm_font_2_regular, pm_font_2_bold, pm_font_3_regular, pm_font_3_bold};
+        for (int i = 0; i < 8; ++i)
+            if (!stbtt_InitFont(&fonts[i], data[i], 0)) throw std::runtime_error("The font couldn't be read");
     });
-    return fonts[bold ? 1 : 0];
+    return fonts[int(which) * 2 + (bold ? 1 : 0)];
 }
 
 /** The next character of UTF-8 text, moving i past it. */
@@ -36,9 +38,15 @@ int nextCodepoint(const std::string& s, size_t& i) {
 
 }  // namespace
 
-std::vector<SketchCurve> textOutline(const std::string& utf8, double height, bool bold, int firstId) {
+std::vector<SketchCurve> textOutline(const std::string& utf8, double height, bool bold, int firstId, TextFont font,
+                                     const std::vector<uint8_t>* data) {
     if (height <= 0) throw std::runtime_error("The text has to be taller than 0");
-    const stbtt_fontinfo& f = font(bold);
+    stbtt_fontinfo own;
+    if (data) {
+        int offset = data->empty() ? -1 : stbtt_GetFontOffsetForIndex(data->data(), 0);
+        if (offset < 0 || !stbtt_InitFont(&own, data->data(), offset)) throw std::runtime_error("That isn't a font this can read");
+    }
+    const stbtt_fontinfo& f = data ? own : builtIn(font, bold);
     // Scaled so a capital H is the height asked for.
     int x0, y0, x1, y1;
     if (!stbtt_GetCodepointBox(&f, 'H', &x0, &y0, &x1, &y1) || y1 <= y0) throw std::runtime_error("The font couldn't be read");

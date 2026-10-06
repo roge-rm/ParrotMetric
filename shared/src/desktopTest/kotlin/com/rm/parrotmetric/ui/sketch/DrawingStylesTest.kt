@@ -7,6 +7,7 @@ import com.rm.parrotmetric.sketch.Line
 import com.rm.parrotmetric.sketch.RegionFinder
 import com.rm.parrotmetric.sketch.Sketch
 import com.rm.parrotmetric.sketch.SketchPlane
+import com.rm.parrotmetric.sketch.profileCurves
 import kotlin.math.PI
 import kotlin.math.tan
 import kotlin.test.Test
@@ -207,5 +208,34 @@ class DrawingStylesTest {
         near(e.sketch.x(closing.a), e.sketch.x(closing.b), "the closing side upright")
         near(40.0, e.sketch.length(lines[0]), "bottom")
         near(5.0, e.sketch.length(lines[4]), "top")
+    }
+
+    @Test
+    fun textTurnsIntoTheLinesAndCurvesOfItsLetters() {
+        // A "letter" that's three lines and a Bézier, closed.
+        val letter = listOf(
+            com.rm.parrotmetric.sketch.ProfileCurve(com.rm.parrotmetric.sketch.ProfileCurve.Kind.Line, 0, 0.0, 0.0, 4.0, 0.0),
+            com.rm.parrotmetric.sketch.ProfileCurve(com.rm.parrotmetric.sketch.ProfileCurve.Kind.Line, 0, 4.0, 0.0, 4.0, 4.0),
+            com.rm.parrotmetric.sketch.ProfileCurve(com.rm.parrotmetric.sketch.ProfileCurve.Kind.Bezier, 0, 4.0, 4.0, 0.0, 4.0, cx1 = 3.0, cy1 = 6.0, cx2 = 1.0, cy2 = 6.0),
+            com.rm.parrotmetric.sketch.ProfileCurve(com.rm.parrotmetric.sketch.ProfileCurve.Kind.Line, 0, 0.0, 4.0, 0.0, 0.0),
+        )
+        val fonts = mutableListOf<String>()
+        val e = SketchEditor(SketchPlane.Top, "Sketch", Sketch(), RegionFinder { emptyList() }, outliner = { _, _, _, font -> fonts += font; letter })
+        e.selectTool(SketchTool.Text)
+        e.tap(10.0, 20.0)
+        assertTrue(e.commitText("O", 4.0, false, 0.0, com.rm.parrotmetric.sketch.TextAlign.Left, "Serif"))
+        assertEquals(listOf("Serif"), fonts)
+        val t = e.sketch.texts.single()
+        assertEquals("Serif", t.font)
+        e.explodeText(t)
+        assertTrue(e.sketch.texts.isEmpty())
+        assertEquals(3, e.sketch.curves.filterIsInstance<Line>().size)
+        val curve = e.sketch.curves.filterIsInstance<com.rm.parrotmetric.sketch.Spline>().single()
+        // Its ends are the lines' ends, so the letter is still closed, where the text was.
+        assertTrue(e.sketch.curves.filterIsInstance<Line>().any { curve.through.first() in it.points() })
+        assertTrue(e.sketch.curves.filterIsInstance<Line>().any { curve.through.last() in it.points() })
+        val piece = e.sketch.profileCurves().single { it.kind == com.rm.parrotmetric.sketch.ProfileCurve.Kind.Bezier }
+        near(13.0, piece.cx1, "control x")
+        near(26.0, piece.cy1, "control y")
     }
 }

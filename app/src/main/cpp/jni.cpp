@@ -1106,14 +1106,19 @@ JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_loft(JNIEnv* env, jobject,
     }
 }
 
-/** Text as outline curves, nine numbers each: kind (0 line, 3 Bézier), start, end, then the two controls. See pm::textOutline. */
-JNIEXPORT jdoubleArray JNICALL Java_com_rm_parrotmetric_Core_textOutline(JNIEnv* env, jobject, jstring text, jdouble height, jboolean bold) {
+/**
+ * Text as outline curves, nine numbers each: kind (0 line, 3 Bézier), start, end, then the two
+ * controls. [font] is a built-in one (pm::TextFont); a font file in [data] is used instead if it isn't empty.
+ */
+JNIEXPORT jdoubleArray JNICALL Java_com_rm_parrotmetric_Core_textOutline(JNIEnv* env, jobject, jstring text, jdouble height, jboolean bold, jint font,
+                                                                        jbyteArray data) {
     try {
         const char* c = env->GetStringUTFChars(text, nullptr);
         std::string s(c);
         env->ReleaseStringUTFChars(text, c);
+        std::vector<uint8_t> file = bytesOf(env, data);
         std::vector<double> out;
-        for (const auto& k : pm::textOutline(s, height, bold, 0))
+        for (const auto& k : pm::textOutline(s, height, bold, 0, pm::TextFont(std::clamp(int(font), 0, 3)), file.empty() ? nullptr : &file))
             out.insert(out.end(), {double(k.kind), k.x1, k.y1, k.x2, k.y2, k.cx1, k.cy1, k.cx2, k.cy2});
         jdoubleArray a = env->NewDoubleArray(jsize(out.size()));
         env->SetDoubleArrayRegion(a, 0, jsize(out.size()), out.data());

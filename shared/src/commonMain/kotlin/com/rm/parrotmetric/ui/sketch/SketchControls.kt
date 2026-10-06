@@ -164,6 +164,7 @@ private fun ActionBar(editor: SketchEditor) {
         SketchAction("Cut corner", Icons.chamfer, if (corners) ({ editor.startCornerChamfer() }) else null),
         editor.selectedConic?.let { c -> SketchAction("Fullness ${kotlin.math.round(c.rho * 100) / 100}", Icons.conic, { editor.startConicFullness() }) },
         (editor.selection.singleOrNull() as? SketchItem.T)?.let { t -> SketchAction("Change text", Icons.text, { editor.editText(t.text) }) },
+        (editor.selection.singleOrNull() as? SketchItem.T)?.let { t -> SketchAction("Into lines", Icons.spline, { editor.explodeText(t.text) }) },
     )
     val mirror = curves.size >= 2 && curves.any { it is com.rm.parrotmetric.sketch.Line }
     val copy = listOf(
@@ -559,7 +560,11 @@ private fun DimensionEntry(editor: SketchEditor, edit: DimensionEdit) {
     }
 }
 
-/** Typing text: what it says, how tall its capitals are, bold, and its angle. */
+/** The font text was last set in, for the next. */
+private var lastFont = com.rm.parrotmetric.sketch.builtInFonts.first()
+
+/** Typing text: what it says, how tall its capitals are, its font, bold, and its angle. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun TextEntry(editor: SketchEditor, edit: TextEdit) {
     val old = edit.existing
@@ -568,6 +573,8 @@ private fun TextEntry(editor: SketchEditor, edit: TextEdit) {
     var bold by remember(edit) { mutableStateOf(old?.bold ?: false) }
     var degrees by remember(edit) { mutableStateOf((old?.angle ?: 0.0) * 180 / kotlin.math.PI) }
     var align by remember(edit) { mutableStateOf(old?.align ?: com.rm.parrotmetric.sketch.TextAlign.Left) }
+    var font by remember(edit) { mutableStateOf(old?.font ?: lastFont) }
+    var fonts by remember(edit) { mutableStateOf(editor.fonts()) }
     val focus = remember { FocusRequester() }
     LaunchedEffect(edit) { focus.requestFocus() }
     DisposableEffect(edit) {
@@ -585,12 +592,26 @@ private fun TextEntry(editor: SketchEditor, edit: TextEdit) {
                 cursorBrush = SolidColor(Palette.mint),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = { editor.commitText(text.text, height, bold, degrees, align) }),
+                keyboardActions = KeyboardActions(onDone = { editor.commitText(text.text, height, bold, degrees, align, font).also { if (it) lastFont = font } }),
                 decorationBox = { inner -> if (text.text.isEmpty()) Text("Text", color = Palette.faint, fontSize = 20.sp); inner() },
             )
-            val set = { editor.commitText(text.text, height, bold, degrees, align) }
+            val set = { editor.commitText(text.text, height, bold, degrees, align, font).also { if (it) lastFont = font } }
             com.rm.parrotmetric.ui.design.NumberRow("Height", height, "mm", allowNegative = false, onDone = { set() }) { height = it }
-            com.rm.parrotmetric.ui.design.Toggle("Bold", bold) { bold = it }
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                for (f in fonts) Surface(
+                    onClick = { font = f },
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (f == font) Palette.line else Palette.ground,
+                    contentColor = Palette.text,
+                ) { Text(f, Modifier.padding(horizontal = 10.dp, vertical = 7.dp), fontSize = 13.sp) }
+                editor.pickFont?.let { pick ->
+                    Surface(onClick = { pick { name -> fonts = editor.fonts(); font = name } }, shape = RoundedCornerShape(12.dp), color = Palette.ground, contentColor = Palette.mint) {
+                        Text("Font file…", Modifier.padding(horizontal = 10.dp, vertical = 7.dp), fontSize = 13.sp)
+                    }
+                }
+            }
+            // A font file is one weight only.
+            if (font in com.rm.parrotmetric.sketch.builtInFonts) com.rm.parrotmetric.ui.design.Toggle("Bold", bold) { bold = it }
             // Where the point tapped is on the text.
             com.rm.parrotmetric.ui.design.Segmented(listOf("From the left", "Centred", "From the right"), align.ordinal) {
                 align = com.rm.parrotmetric.sketch.TextAlign.entries[it]
@@ -601,7 +622,7 @@ private fun TextEntry(editor: SketchEditor, edit: TextEdit) {
                     Box(contentAlignment = Alignment.Center) { Text("Cancel", fontSize = 15.sp, fontWeight = FontWeight.SemiBold) }
                 }
                 Surface(
-                    onClick = { editor.commitText(text.text, height, bold, degrees, align) },
+                    onClick = { editor.commitText(text.text, height, bold, degrees, align, font).also { if (it) lastFont = font } },
                     modifier = Modifier.weight(1f).height(50.dp), shape = RoundedCornerShape(18.dp), color = Palette.mint, contentColor = Palette.ink,
                 ) {
                     Box(contentAlignment = Alignment.Center) { Text("Set", fontSize = 15.sp, fontWeight = FontWeight.Bold) }

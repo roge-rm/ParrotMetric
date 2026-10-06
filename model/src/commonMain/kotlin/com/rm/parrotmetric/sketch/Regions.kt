@@ -26,7 +26,8 @@ data class ProfileCurve(
 
 /**
  * Text in a sketch: [outline] is the text with (0, 0) where [align] says, put
- * at [anchor] and turned [angle] radians round it.
+ * at [anchor] and turned [angle] radians round it. [font] is one of
+ * [builtInFonts], or the name of a font file the design keeps (Design.fonts).
  */
 class SketchText(
     val id: Int,
@@ -37,7 +38,11 @@ class SketchText(
     val angle: Double,
     val outline: List<ProfileCurve>,
     val align: TextAlign = TextAlign.Left,
+    val font: String = builtInFonts.first(),
 )
+
+/** The fonts the app has, in the core's order (pm::TextFont). */
+val builtInFonts = listOf("Sans", "Serif", "Mono", "Rounded")
 
 /** Where text's anchor is: the start or end of its baseline, or its middle both ways. */
 enum class TextAlign { Left, Centre, Right }

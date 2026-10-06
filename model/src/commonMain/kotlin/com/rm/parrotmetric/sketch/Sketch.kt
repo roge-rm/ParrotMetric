@@ -38,8 +38,10 @@ class Sketch {
      * Adds text at [anchor]. Its [outline] (from the font, at (0, 0)) is
      * worked out by whoever sets the text, as the sketch has no fonts.
      */
-    fun addText(anchor: Point, text: String, height: Double, bold: Boolean, angle: Double, outline: List<ProfileCurve>, align: TextAlign = TextAlign.Left): SketchText =
-        SketchText(nextId++, anchor, text, height, bold, angle, outline, align).also { textMap[it.id] = it }
+    fun addText(
+        anchor: Point, text: String, height: Double, bold: Boolean, angle: Double, outline: List<ProfileCurve>, align: TextAlign = TextAlign.Left,
+        font: String = builtInFonts.first(),
+    ): SketchText = SketchText(nextId++, anchor, text, height, bold, angle, outline, align, font).also { textMap[it.id] = it }
 
     /** Puts [new] in place of the text with its id. */
     fun replaceText(new: SketchText) { if (textMap.containsKey(new.id)) textMap[new.id] = new }
@@ -107,6 +109,12 @@ class Sketch {
         Spline.Shape.Control -> controlPieces(sp)
         Spline.Shape.Ellipse -> ellipsePieces(sp)
         Spline.Shape.Conic -> conicPieces(sp)
+        Spline.Shape.Bezier -> sp.through.map { x(it) to y(it) }.let { p ->
+            (0 until (p.size - 1) / 3).map { i ->
+                val (a, b, c, d) = p.subList(3 * i, 3 * i + 4)
+                doubleArrayOf(a.first, a.second, b.first, b.second, c.first, c.second, d.first, d.second)
+            }
+        }
     }
 
     /**
@@ -448,6 +456,8 @@ class Spline internal constructor(id: Int, val through: List<Point>, constructio
         Ellipse,
         /** From the first point to the third, bent towards the second by [rho]. */
         Conic,
+        /** Béziers end to end: start, two controls, end, then two controls and an end for each more. */
+        Bezier,
     }
 
     /** A conic's fullness: towards 0 it flattens to a straight line, 0.5 is a parabola, towards 1 it reaches into the corner. */

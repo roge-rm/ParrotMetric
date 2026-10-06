@@ -3,6 +3,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <fstream>
+#include <iterator>
 
 #include "sketch/regions.h"
 
@@ -93,6 +95,25 @@ TEST_CASE("text outlines are capital letters the height asked for, and close int
     for (const auto& c : bold) boldWidth = std::max(boldWidth, std::max(c.x1, c.x2));
     CHECK(boldWidth > width);
     CHECK_THROWS(textOutline("H", 0, false, 0));
+}
+
+TEST_CASE("text can be in any of the built-in fonts or a font file") {
+    auto widest = [](const std::vector<SketchCurve>& curves) {
+        double w = 0;
+        for (const auto& c : curves) w = std::max(w, std::max(c.x1, c.x2));
+        return w;
+    };
+    // Monospaced: as wide whatever the letters.
+    CHECK(widest(textOutline("iiiiW", 10, false, 0, TextFont::Mono)) == Catch::Approx(widest(textOutline("WWWWW", 10, false, 0, TextFont::Mono))).epsilon(0.08));
+    CHECK(widest(textOutline("iiiiW", 10, false, 0, TextFont::Sans)) < 0.7 * widest(textOutline("WWWWW", 10, false, 0, TextFont::Sans)));
+    for (auto f : {TextFont::Serif, TextFont::Rounded}) CHECK(!textOutline("Ag", 10, true, 0, f).empty());
+    // A font file read in gives the same as the built-in font it is.
+    std::ifstream in(std::string(PM_SOURCE_DIR) + "/../third_party/fonts/Quicksand-Regular.ttf", std::ios::binary);
+    std::vector<uint8_t> file((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    REQUIRE(file.size() > 1000);
+    CHECK(widest(textOutline("Hello", 10, false, 0, TextFont::Sans, &file)) == Catch::Approx(widest(textOutline("Hello", 10, false, 0, TextFont::Rounded))));
+    std::vector<uint8_t> junk(500, 7);
+    CHECK_THROWS(textOutline("H", 10, false, 0, TextFont::Sans, &junk));
 }
 
 TEST_CASE("an open arc with lines off its ends has no area") {

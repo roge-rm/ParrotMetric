@@ -115,12 +115,16 @@ class SketchEditor(
     private val points: () -> List<com.rm.parrotmetric.sketch.Vec3> = { emptyList() },
     /** Asks for a file and calls back with its name and contents, for drawings to add; null where there's no picker. */
     private val pickFile: ((then: (String, ByteArray?) -> Unit) -> Unit)? = null,
-    /** Text as outline curves at (0, 0): text, capital height (mm), bold. Null where there are no fonts. */
-    private val outliner: ((String, Double, Boolean) -> List<ProfileCurve>)? = null,
+    /** Text as outline curves at (0, 0): text, capital height (mm), bold and font. Null where there are no fonts. */
+    private val outliner: ((String, Double, Boolean, String) -> List<ProfileCurve>)? = null,
     /** The bodies shown, by label and name, for projecting one by its outline. */
     val bodies: () -> List<Pair<String, String>> = { emptyList() },
     /** A body's outline, by label, flattened onto the sketch. */
     private val bodyOutline: ((String) -> com.rm.parrotmetric.sketch.ProjectedOutline?)? = null,
+    /** The fonts text can be in: the built-in ones, then font files the design keeps. */
+    val fonts: () -> List<String> = { com.rm.parrotmetric.sketch.builtInFonts },
+    /** Keeps a font file with the design, by name. */
+    private val keepFont: ((String, ByteArray) -> Unit)? = null,
 ) {
     /** Goes up whenever anything changes, so the overlay redraws. */
     var version by mutableIntStateOf(0)
@@ -1309,19 +1313,60 @@ class SketchEditor(
     }
 
     /** Sets the text being typed. False, with a message, if it can't be. */
-    fun commitText(text: String, height: Double, bold: Boolean, degrees: Double, align: com.rm.parrotmetric.sketch.TextAlign): Boolean {
+    /** Asks for a font file and keeps it with the design, calling back with its name; null where there's no picker. */
+    val pickFont: ((then: (String) -> Unit) -> Unit)? = if (pickFile == null || keepFont == null) null else { then ->
+        pickFile.invoke { file, bytes ->
+            val name = file.substringBeforeLast('.')
+            when {
+                bytes == null -> message = "Couldn't read the file"
+                !file.lowercase().let { it.endsWith(".ttf") || it.endsWith(".otf") } -> message = "Pick a .ttf or .otf font file"
+                else -> {
+                    keepFont.invoke(name, bytes)
+                    then(name)
+                }
+            }
+        }
+    }
+
+    /**
+     * Turns text into the lines and curves of its letters, as if they'd been
+     * drawn, so they can be changed one by one. The text goes.
+     */
+    fun explodeText(t: com.rm.parrotmetric.sketch.SketchText) {
+        val outline = sketch.placedOutline(t)
+        if (outline.isEmpty()) return
+        checkpoint()
+        // Ends that meet are one point, so each letter's outlines close.
+        val points = HashMap<Pair<Long, Long>, Point>()
+        fun at(x: Double, y: Double): Point = points.getOrPut(kotlin.math.round(x * 1e5).toLong() to kotlin.math.round(y * 1e5).toLong()) { sketch.addPoint(x, y) }
+        for (c in outline) when (c.kind) {
+            ProfileCurve.Kind.Line -> sketch.addLine(at(c.x1, c.y1), at(c.x2, c.y2))
+            ProfileCurve.Kind.Bezier -> sketch.addSpline(
+                listOf(at(c.x1, c.y1), sketch.addPoint(c.cx1, c.cy1), sketch.addPoint(c.cx2, c.cy2), at(c.x2, c.y2)),
+                shape = com.rm.parrotmetric.sketch.Spline.Shape.Bezier,
+            )
+            else -> {}
+        }
+        sketch.removeText(t)
+        // Its anchor goes too unless something else uses it.
+        if (t.anchor !== sketch.origin && sketch.curves.none { t.anchor in it.points() } && sketch.texts.none { it.anchor === t.anchor }) sketch.removePoint(t.anchor)
+        selection.clear()
+        changed()
+    }
+
+    fun commitText(text: String, height: Double, bold: Boolean, degrees: Double, align: com.rm.parrotmetric.sketch.TextAlign, font: String = com.rm.parrotmetric.sketch.builtInFonts.first()): Boolean {
         val edit = textEdit ?: return false
         val make = outliner ?: return false
         if (text.isBlank()) { message = "Type some text"; return false }
         if (height <= 0) { message = "The text has to be taller than 0"; return false }
-        val outline = try { com.rm.parrotmetric.sketch.alignOutline(make(text, height, bold), align) } catch (e: RuntimeException) { message = e.message; return false }
+        val outline = try { com.rm.parrotmetric.sketch.alignOutline(make(text, height, bold, font), align) } catch (e: RuntimeException) { message = e.message; return false }
         checkpoint()
         val angle = degrees * PI / 180
         val old = edit.existing
-        if (old != null) sketch.replaceText(com.rm.parrotmetric.sketch.SketchText(old.id, old.anchor, text, height, bold, angle, outline, align))
+        if (old != null) sketch.replaceText(com.rm.parrotmetric.sketch.SketchText(old.id, old.anchor, text, height, bold, angle, outline, align, font))
         else {
             val anchor = sketch.addPoint(edit.u, edit.v)
-            sketch.addText(anchor, text, height, bold, angle, outline, align)
+            sketch.addText(anchor, text, height, bold, angle, outline, align, font)
         }
         textEdit = null
         selection.clear()

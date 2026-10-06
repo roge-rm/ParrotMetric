@@ -56,7 +56,7 @@ interface NativeCore {
     /** Rings round the openings in a rim face, [inside] to [outside] mm out from their edges, [height] tall. */
     fun lipTool(id: Int, body: Long, face: String, inside: Double, outside: Double, height: Double, tag: String): Long
     /** Text as outline curves, nine numbers each: kind (0 line, 3 Bézier), start, end, then the two controls. */
-    fun textOutline(text: String, height: Double, bold: Boolean): DoubleArray
+    fun textOutline(text: String, height: Double, bold: Boolean, font: Int, data: ByteArray): DoubleArray
     /** Reads a picture (PNG or JPEG) and keeps it under key for canvases; its width and height, or null if it can't be read. */
     fun canvasImage(key: Int, bytes: ByteArray): IntArray?
     /** A loft through one area of each sketch: nine plane numbers and a curve count per sketch, then one pick per sketch. */
