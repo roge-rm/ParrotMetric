@@ -157,8 +157,13 @@ class DrawingState(val editor: DesignEditor) {
         val g = geometryOf(v) ?: return
         val s = drawing.scaleOf(v)
         val (mx, my) = Sheet.unplace(drawing, v, g, x, y)
+        // A corner, end or centre, or a circle's edge: whichever the tap is nearer.
         val snap = g.snap(mx, my, reach / s)
-        if (snap != null) {
+        val round = g.rounds.minByOrNull { abs(hypot(mx - it.x1, my - it.y1) - it.r) }
+            ?.takeIf { abs(hypot(mx - it.x1, my - it.y1) - it.r) <= reach / s && (it.kind == ProfileCurve.Kind.Circle || ViewGeometry.onArc(it.a0, it.a1, atan2(my - it.y1, mx - it.x1))) }
+        val snapGap = snap?.let { hypot(it.first - mx, it.second - my) } ?: Double.MAX_VALUE
+        val roundGap = round?.let { abs(hypot(mx - it.x1, my - it.y1) - it.r) } ?: Double.MAX_VALUE
+        if (snap != null && (snapGap <= roundGap || firstPoint?.first == v.id)) {
             val first = firstPoint
             if (first == null || first.first != v.id) {
                 firstPoint = Triple(v.id, snap.first, snap.second)
@@ -180,9 +185,6 @@ class DrawingState(val editor: DesignEditor) {
             picked = DrawingPick.Dimension(id)
             return
         }
-        // Near a circle's or arc's edge: its size.
-        val round = g.rounds.minByOrNull { abs(hypot(mx - it.x1, my - it.y1) - it.r) }
-            ?.takeIf { abs(hypot(mx - it.x1, my - it.y1) - it.r) <= reach / s && (it.kind == ProfileCurve.Kind.Circle || ViewGeometry.onArc(it.a0, it.a1, atan2(my - it.y1, mx - it.x1))) }
         if (round != null) {
             val a = atan2(my - round.y1, mx - round.x1)
             val kind = if (round.kind == ProfileCurve.Kind.Circle) DimensionKind.Diameter else DimensionKind.Radius

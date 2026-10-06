@@ -261,9 +261,10 @@ fun ModelScreen(
         }
         return true
     }
-    // Back, past what Esc closes: out of the sketch, then to the start screen.
+    // Back, past what Esc closes: out of the drawing or the sketch, then to the start screen.
     backHandler(state.screen != AppScreen.Start) {
-        if (!escape()) {
+        if (state.screen == AppScreen.Drawing) actions.showScreen(AppScreen.Model)
+        else if (!escape()) {
             if (sketch != null) actions.finishSketch() else actions.showScreen(AppScreen.Start)
         }
     }
