@@ -369,7 +369,8 @@ NamedShape combine(int id, const NamedShape& target, const NamedShape& tool, Com
         op->SetRunParallel(useCores());
         op->Build();
         if (!op->IsDone()) throw std::runtime_error("The bodies couldn't be combined");
-        if (!BRepCheck_Analyzer(op->Shape()).IsValid()) {
+        // Checked only when OCCT warns about something: clean results skip the cost.
+        if (op->HasWarnings() && !BRepCheck_Analyzer(op->Shape()).IsValid()) {
             // Surfaces that cross at a shallow angle, as crossed helical grooves do, can come out broken;
             // a small fuzzy tolerance usually sorts them out.
             op->SetFuzzyValue(1e-4);

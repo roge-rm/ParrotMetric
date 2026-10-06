@@ -19,6 +19,7 @@
 #include <gp_Ax2.hxx>
 
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
@@ -119,6 +120,27 @@ int main(int argc, char** argv) {
         std::printf("%-34s %9.1f\n", "rod: cylinder", tRod);
         std::printf("%-34s %9.1f\n", "rod: M10 thread", tThread);
         std::printf("%-34s %9.1f\n", "rod: display at medium", tThreadDisplay);
+        // A diamond knurl as the app builds it: one groove each way, then each one's 11 copies cut together.
+        pm::NamedShape knob = pm::primitive(40, top, pm::Primitive::Cylinder, 0, 0, 30, 15, 0);
+        pm::NamedShape groove = pm::coil(41, top, 0, 0, 30, 60, 0.3, 1.5, false);
+        const double flip[12] = {-1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0};
+        pm::NamedShape other = pm::transformed(42, groove, flip, "m");
+        pm::NamedShape knurled;
+        double tKnurl = best(1, [&] {
+            knurled = pm::combine(43, pm::combine(43, knob, groove, pm::Combine::Cut), other, pm::Combine::Cut);
+            for (const auto* src : {&groove, &other}) {
+                std::vector<pm::NamedShape> copies;
+                for (int i = 1; i < 12; ++i) {
+                    double a = 2 * M_PI * i / 12, c = std::cos(a), s = std::sin(a);
+                    const double turn[12] = {c, -s, 0, 0, s, c, 0, 0, 0, 0, 1, 0};
+                    copies.push_back(pm::transformed(44, *src, turn, "p" + std::to_string(i)));
+                }
+                knurled = pm::combine(45, knurled, pm::gather(copies), pm::Combine::Cut);
+            }
+        });
+        double tKnurlDisplay = best(1, [&] { BRepTools::Clean(knurled.shape); pm::Solid::fromShape(knurled.shape).display({0.05, 0.3}); });
+        std::printf("%-34s %9.1f\n", "knob: 24 crossed grooves", tKnurl);
+        std::printf("%-34s %9.1f\n", "knob: display at medium", tKnurlDisplay);
         return 0;
     }
 

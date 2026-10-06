@@ -365,7 +365,8 @@ fun ModelScreen(
         BoxWithConstraints((if (seeThrough) Modifier.fillMaxSize() else Modifier.fillMaxSize().background(Palette.ground)).then(keys)) {
             val screenHeight = maxHeight
             val expanded = when (state.layout) {
-                LayoutMode.Automatic -> maxWidth >= 840.dp
+                // Wide but short, like a small tablet on its side, gets the phone layout: the toolbar would take half the height.
+                LayoutMode.Automatic -> maxWidth >= 840.dp && maxHeight >= 640.dp
                 LayoutMode.Phone -> false
                 LayoutMode.Large -> true
             }
@@ -725,12 +726,15 @@ private fun ToolSheet(group: ToolGroup, state: ModelState, design: DesignEditor,
     val context = ToolContext(state, design, actions, onSheet)
     val tools = Tools.inGroup(group, meshTools) + if (group == ToolGroup.Sketch) Tools.planes(design) else emptyList()
     Surface(color = Palette.surface, shape = RoundedCornerShape(26.dp)) {
+        // Four across on a phone; more on a wide screen, so a tablet on its side keeps the model in view.
+        BoxWithConstraints {
+        val across = (maxWidth / 128.dp).toInt().coerceAtLeast(4)
         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(group.label, Modifier.weight(1f), fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = Palette.text)
                 if (group == ToolGroup.Modify) Box(Modifier.width(170.dp)) { Segmented(listOf("Solid", "Mesh"), if (meshTools) 1 else 0) { meshTools = it == 1 } }
             }
-            for (row in tools.chunked(4)) {
+            for (row in tools.chunked(across)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     for (t in row) {
                         val enabled = t.enabled(context)
@@ -752,9 +756,10 @@ private fun ToolSheet(group: ToolGroup, state: ModelState, design: DesignEditor,
                             }
                         }
                     }
-                    repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
+                    repeat(across - row.size) { Spacer(Modifier.weight(1f)) }
                 }
             }
+        }
         }
     }
 }

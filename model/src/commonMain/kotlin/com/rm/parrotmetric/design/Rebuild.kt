@@ -991,14 +991,47 @@ class Rebuilder(private val kernel: Kernel) {
         return (centre - plane.origin).dot(plane.normal)
     }
 
-    /** A cut that takes away far less than the volume it overlaps has failed in the kernel. */
-    private fun checkCut(before: Long, after: Long, overlap: Double) {
-        val was = kernel.properties(before)?.get(0) ?: return
-        val now = kernel.properties(after)?.get(0) ?: return
-        if (was - now < overlap * 0.1) {
-            kernel.release(after)
-            throw KernelException("The cut couldn't be worked out; try a slightly different size or place")
+    /**
+     * A cut tried on each body its box meets, kept where it took something away; [useTool] for a cut,
+     * without working out each overlap first (a second boolean as slow as the cut). Null where the
+     * kernel can't measure volumes. A cut into a body it overlaps that leaves it as it was has failed.
+     */
+    private fun cutInto(
+        f: Feature, tool: Long, bodies: List<BodyState>, pool: List<BodyState>, planes: Map<Int, SketchPlane>, made: Int, only: List<String>,
+    ): Step? {
+        if (pool.isEmpty() || kernel.properties(pool[0].handle) == null) return null
+        val reach = kernel.bounds(tool)
+        val out = mutableListOf<BodyState>()
+        var changed = 0
+        try {
+            for (b in bodies) {
+                val box = kernel.bounds(b.handle)
+                val near = b in pool && (0 until 3).all { box[it] <= reach[it + 3] && reach[it] <= box[it + 3] }
+                if (near) {
+                    val was = kernel.properties(b.handle)?.get(0) ?: 0.0
+                    val cut = kernel.combine(f.id, b.handle, tool, Operation.Cut)
+                    val now = kernel.properties(cut)?.get(0) ?: was
+                    if (was - now > was * 1e-9) {
+                        out += BodyState(b.label, cut)
+                        changed++
+                        continue
+                    }
+                    kernel.release(cut)
+                    if (kernel.overlapVolume(b.handle, tool) > 1e-9) throw KernelException("The cut couldn't be worked out; try a slightly different size or place")
+                }
+                kernel.retain(b.handle)
+                out += b
+            }
+        } catch (e: KernelException) {
+            out.forEach { kernel.release(it.handle) }
+            throw e
         }
+        if (changed == 0) {
+            out.forEach { kernel.release(it.handle) }
+            throw KernelException(if (only.isNotEmpty()) "It doesn't reach the bodies it's set to change" else "It doesn't reach any body to cut")
+        }
+        kernel.release(tool)
+        return Step(f.key(), out, planes, null, made)
     }
 
     /** Whether two solids share some volume, not just a face. */
@@ -1021,6 +1054,7 @@ class Rebuilder(private val kernel: Kernel) {
             // touches, as a post on a floor does, the body its sketch is on, or else all it touches.
             // When it's set to change only some bodies, the others are left as they are.
             val pool = if (only.isEmpty()) bodies else bodies.filter { it.label in only }
+            if (op == Operation.Cut) cutInto(f, tool, bodies, pool, planes, made, only)?.let { return it }
             val overlap = pool.associateWith { kernel.overlapVolume(it.handle, tool) }
             val touched = pool.filter { overlap.getValue(it) > 1e-9 }.ifEmpty {
                 if (op != Operation.Join) return@ifEmpty emptyList()
@@ -1055,7 +1089,7 @@ class Rebuilder(private val kernel: Kernel) {
                 }
             } else {
                 for (b in bodies) {
-                    if (b in touched) out += BodyState(b.label, kernel.combine(f.id, b.handle, tool, op).also { if (op == Operation.Cut) checkCut(b.handle, it, overlap.getValue(b)) })
+                    if (b in touched) out += BodyState(b.label, kernel.combine(f.id, b.handle, tool, op))
                     else { kernel.retain(b.handle); out += b }
                 }
             }
@@ -1092,16 +1126,21 @@ class Rebuilder(private val kernel: Kernel) {
                 for (m in mats) {
                     val at = Transforms.then(inner, m)
                     val n = numbers.getOrElse(id) { 0 }.also { numbers[id] = it + 1 }
-                    val copy = kernel.transform(f.id, src.tool, at, "f$id.$n")
+                    copies += kernel.transform(f.id, src.tool, at, "f$id.$n")
                     placed += id to at
-                    if (src.toolOp == Operation.Cut || src.toolOp == Operation.Intersect) {
-                        if (now.none { (only.isEmpty() || it.label in only) && shares(it.handle, copy) }) { kernel.release(copy); continue }
-                    }
-                    copies += copy
                 }
                 // A feature's cuts go in together: much quicker than one by one, and steadier where they cross others.
+                // Copies that miss do nothing in a cut made together, so they aren't checked one by one.
                 val together = if (src.toolOp == Operation.Cut && copies.size > 1) kernel.gather(copies) else null
-                val tools = if (together != null) { copies.forEach { kernel.release(it) }; listOf(together) } else copies
+                val tools = if (together != null) {
+                    copies.forEach { kernel.release(it) }
+                    listOf(together)
+                } else copies.filter { copy ->
+                    val reaches = (src.toolOp != Operation.Cut && src.toolOp != Operation.Intersect) ||
+                        now.any { (only.isEmpty() || it.label in only) && shares(it.handle, copy) }
+                    if (!reaches) kernel.release(copy)
+                    reaches
+                }
                 for (tool in tools) {
                     used++
                     val s = useTool(f, tool, src.toolOp, now, planes, count, only = only)
