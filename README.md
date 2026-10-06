@@ -13,8 +13,6 @@ There's a manual in [manual/](manual/README.md), and the same words are under He
 
 Please join me in the #parrotmetric channel **[on my discord](https://discord.gg/9Wun47jGC6)** to share what you've made, ask questions, report bugs or problems with different devices, or ask for new features. Or feel free to open an issue here.
 
-Disclaimer: I am not a great programmer so this was made using Claude Opus 5.5
-
 Enjoy!
 Dan
 
@@ -222,3 +220,5 @@ Their licences are in [licences/](licences/), and their sources are in third_par
 ## Licence
 
 ParrotMetric is under the GPL 3. See [LICENSE](LICENSE).
+
+Disclaimer: I am not a great programmer so this was made using Claude Opus 5.5
