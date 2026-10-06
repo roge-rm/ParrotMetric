@@ -238,6 +238,7 @@ private fun WebApp() {
             }
             override fun zoomAt(factor: Float, x: Float, y: Float) = view.gl { WebCore.zoomAt(factor, x, y) }
             override fun fit() = view.gl { WebCore.fit() }
+            override fun pitch() = WebCore.cameraState()[1]
             // While a tool is taking picks, a plain click adds to them.
             override fun click(x: Float, y: Float, add: Boolean) = view.gl { app.selectionChanged(WebCore.click(x, y, add || app.design.panel != null)) }
             override fun clickChain(x: Float, y: Float, add: Boolean) =

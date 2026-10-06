@@ -49,6 +49,7 @@ import com.rm.parrotmetric.design.PlaneRef
 import com.rm.parrotmetric.design.RegionRef
 import com.rm.parrotmetric.design.RevolveFeature
 import com.rm.parrotmetric.design.SketchFeature
+import com.rm.parrotmetric.sketch.TextAlign
 import com.rm.parrotmetric.sketch.Arc
 import com.rm.parrotmetric.sketch.Circle
 import com.rm.parrotmetric.sketch.Constraint
@@ -435,7 +436,7 @@ object DesignFile {
         },
         "texts" to s.texts.map { t ->
             mapOf(
-                "id" to t.id, "anchor" to t.anchor.id, "text" to t.text, "height" to t.height, "bold" to t.bold, "angle" to t.angle,
+                "id" to t.id, "anchor" to t.anchor.id, "text" to t.text, "height" to t.height, "bold" to t.bold, "angle" to t.angle, "align" to t.align.name,
                 "outline" to t.outline.map { listOf(it.kind.ordinal, it.x1, it.y1, it.x2, it.y2, it.cx1, it.cy1, it.cx2, it.cy2) },
             )
         },
@@ -497,7 +498,8 @@ object DesignFile {
                 val n = (r as Json.Arr).items.map { (it as Json.Num).value }
                 ProfileCurve(ProfileCurve.Kind.entries[n[0].toInt()], 0, n[1], n[2], n[3], n[4], cx1 = n[5], cy1 = n[6], cx2 = n[7], cy2 = n[8])
             }
-            s.loadText(SketchText(t.int("id"), pt(t, "anchor"), t.str("text"), t.num("height"), t.bool("bold"), t.num("angle"), outline))
+            s.loadText(SketchText(t.int("id"), pt(t, "anchor"), t.str("text"), t.num("height"), t.bool("bold"), t.num("angle"), outline,
+                TextAlign.entries.firstOrNull { it.name == (t["align"] as? Json.Str)?.value } ?: TextAlign.Left))
         }
         fun line(c: Json.Obj, k: String) = s.curve(c.int(k)) as? Line ?: throw IllegalArgumentException("A sketch refers to a missing line")
         fun curve(c: Json.Obj, k: String) = s.curve(c.int(k)) ?: throw IllegalArgumentException("A sketch refers to a missing curve")

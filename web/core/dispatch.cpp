@@ -91,6 +91,7 @@ JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_fit(JNIEnv*, jobject);
 JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_setCovered(JNIEnv*, jobject, jfloat, jfloat, jfloat, jfloat);
 JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_viewFrom(JNIEnv*, jobject, jfloat, jfloat);
 JNIEXPORT jfloatArray JNICALL Java_com_rm_parrotmetric_Core_cameraState(JNIEnv*, jobject);
+JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_setAreasFirst(JNIEnv*, jobject, jboolean);
 }
 
 namespace pmweb {
@@ -828,6 +829,11 @@ void dispatch(int call, Reader& in, Writer& out, JNIEnv* env) {
         case 86: {  // cameraState
             auto r = Java_com_rm_parrotmetric_Core_cameraState(env, nullptr);
             if (!failed()) out.put(r);
+            break;
+        }
+        case 87: {  // setAreasFirst
+            auto a0 = in.boolean();
+            Java_com_rm_parrotmetric_Core_setAreasFirst(env, nullptr, a0);
             break;
         }
         default:

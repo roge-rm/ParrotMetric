@@ -20,6 +20,8 @@ BodyStore::Handle BodyStore::add(Body b) {
     return h;
 }
 
+bool BodyStore::has(Handle h) const { return bodies_.count(h) > 0; }
+
 const Body& BodyStore::get(Handle h) const {
     auto it = bodies_.find(h);
     if (it == bodies_.end()) throw std::runtime_error("A body went missing");

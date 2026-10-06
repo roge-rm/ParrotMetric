@@ -1101,6 +1101,8 @@ JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_primitive(JNIEnv* env, job
 /** A body's volume (mm³), surface area (mm²) and centre of mass x, y, z. */
 JNIEXPORT jdoubleArray JNICALL Java_com_rm_parrotmetric_Core_properties(JNIEnv* env, jobject, jlong body) {
     std::unique_lock<std::mutex> g(lock);
+    // A body let go by a rebuild since it was asked for gives nothing.
+    if (!store.has(body)) return env->NewDoubleArray(0);
     const pm::Body b = store.get(body);
     g.unlock();
     double out[5] = {0, 0, 0, 0, 0};
@@ -1138,6 +1140,8 @@ JNIEXPORT jdoubleArray JNICALL Java_com_rm_parrotmetric_Core_properties(JNIEnv* 
 /** The box round a body: x, y, z low, then high. */
 JNIEXPORT jdoubleArray JNICALL Java_com_rm_parrotmetric_Core_bounds(JNIEnv* env, jobject, jlong body) {
     std::unique_lock<std::mutex> g(lock);
+    // A body let go by a rebuild since it was asked for gives nothing.
+    if (!store.has(body)) return env->NewDoubleArray(0);
     const pm::Body b = store.get(body);
     g.unlock();
     std::array<double, 6> box = b.mesh ? b.mesh->bounds() : pm::bounds(*b.solid);
@@ -1597,6 +1601,12 @@ JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_setAnalysis(JNIEnv*, jobjec
     std::lock_guard<std::mutex> g(lock);
     analysisMode = mode;
     renderer.setAnalysis(mode, float(limit));
+}
+
+/** Sketch areas win picks over bodies in front of them; see Renderer::setAreasFirst. */
+JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_setAreasFirst(JNIEnv*, jobject, jboolean on) {
+    std::lock_guard<std::mutex> g(lock);
+    renderer.setAreasFirst(on);
 }
 
 /** Shows a section: everything behind the plane through (ox, oy, oz) facing (nx, ny, nz) is hidden. */

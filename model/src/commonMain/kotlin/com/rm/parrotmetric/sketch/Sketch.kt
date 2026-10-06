@@ -38,8 +38,8 @@ class Sketch {
      * Adds text at [anchor]. Its [outline] (from the font, at (0, 0)) is
      * worked out by whoever sets the text, as the sketch has no fonts.
      */
-    fun addText(anchor: Point, text: String, height: Double, bold: Boolean, angle: Double, outline: List<ProfileCurve>): SketchText =
-        SketchText(nextId++, anchor, text, height, bold, angle, outline).also { textMap[it.id] = it }
+    fun addText(anchor: Point, text: String, height: Double, bold: Boolean, angle: Double, outline: List<ProfileCurve>, align: TextAlign = TextAlign.Left): SketchText =
+        SketchText(nextId++, anchor, text, height, bold, angle, outline, align).also { textMap[it.id] = it }
 
     /** Puts [new] in place of the text with its id. */
     fun replaceText(new: SketchText) { if (textMap.containsKey(new.id)) textMap[new.id] = new }

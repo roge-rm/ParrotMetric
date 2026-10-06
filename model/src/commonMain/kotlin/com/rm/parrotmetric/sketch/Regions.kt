@@ -25,8 +25,8 @@ data class ProfileCurve(
 }
 
 /**
- * Text in a sketch: [outline] is the text at (0, 0) on its baseline, put at
- * [anchor] and turned [angle] radians round it.
+ * Text in a sketch: [outline] is the text with (0, 0) where [align] says, put
+ * at [anchor] and turned [angle] radians round it.
  */
 class SketchText(
     val id: Int,
@@ -36,7 +36,24 @@ class SketchText(
     val bold: Boolean,
     val angle: Double,
     val outline: List<ProfileCurve>,
+    val align: TextAlign = TextAlign.Left,
 )
+
+/** Where text's anchor is: the start or end of its baseline, or its middle both ways. */
+enum class TextAlign { Left, Centre, Right }
+
+/** [outline], made at (0, 0) on the baseline's start, moved so (0, 0) is where [align] puts the anchor. */
+fun alignOutline(outline: List<ProfileCurve>, align: TextAlign): List<ProfileCurve> {
+    if (align == TextAlign.Left || outline.isEmpty()) return outline
+    // The box round the outline, from its ends and controls, which hold a Bezier.
+    val xs = outline.flatMap { if (it.kind == ProfileCurve.Kind.Bezier) listOf(it.x1, it.x2, it.cx1, it.cx2) else listOf(it.x1, it.x2) }
+    val ys = outline.flatMap { if (it.kind == ProfileCurve.Kind.Bezier) listOf(it.y1, it.y2, it.cy1, it.cy2) else listOf(it.y1, it.y2) }
+    val dx = if (align == TextAlign.Centre) -(xs.min() + xs.max()) / 2 else -xs.max()
+    val dy = if (align == TextAlign.Centre) -(ys.min() + ys.max()) / 2 else 0.0
+    return outline.map { p ->
+        p.copy(x1 = p.x1 + dx, y1 = p.y1 + dy, x2 = p.x2 + dx, y2 = p.y2 + dy, cx1 = p.cx1 + dx, cy1 = p.cy1 + dy, cx2 = p.cx2 + dx, cy2 = p.cy2 + dy)
+    }
+}
 
 /** A text's outline where it is in the sketch. Its curves are numbered apart from the sketch's own. */
 fun Sketch.placedOutline(t: SketchText): List<ProfileCurve> {

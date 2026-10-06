@@ -17,7 +17,7 @@ With a mesh picked, **Modify** shows the tools that work on it:
 - **Reduce** uses fewer triangles, within the **Allowed error** you give.
 - **Remesh** makes the triangles even, none longer than the **Longest edge**.
 - **Smooth** rounds it off over a number of **Steps**, keeping edges sharper than the angle in **Sharp over**.
-- **To solid** turns a small mesh into a solid, joining flat triangles into faces, so Fillet and the other solid tools work on it. A big mesh gets slow, so reduce it first.
+- **To solid** turns a small mesh into a solid (the only one shown, if none is picked), joining flat triangles into faces, so Fillet and the other solid tools work on it. A big mesh gets slow, so reduce it first.
 - **Hole**, **Mirror**, **Pattern**, **Combine**, **Split**, **Move**, **Scale**, **Align** and **Joint** work as they do for solids.
 
 The panel shows how many triangles there are.

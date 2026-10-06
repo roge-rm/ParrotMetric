@@ -111,6 +111,12 @@ fun ExportSheet(
     }
 }
 
+/** A size to a tenth of a mm, without a trailing .0. */
+private fun sizeText(v: Double): String {
+    val r = kotlin.math.round(v * 10) / 10
+    return if (r == kotlin.math.floor(r)) r.toLong().toString() else r.toString()
+}
+
 @Composable
 private fun BodyRow(label: String, on: Boolean, indent: Boolean = false, toggle: () -> Unit) {
     Surface(onClick = toggle, color = Color.Transparent, contentColor = Palette.text, shape = RoundedCornerShape(12.dp)) {
@@ -169,12 +175,20 @@ fun PartsSheet(editor: DesignEditor, close: () -> Unit) {
                         IconButton(onClick = { editor.setHidden(b.label, !info.hidden) }) {
                             Icon(if (info.hidden) Icons.hidden else Icons.shown, if (info.hidden) "Show" else "Hide", tint = if (info.hidden) Palette.faint else Palette.mint)
                         }
-                        Text(
-                            editor.design.nameOf(b.label),
-                            Modifier.weight(1f).alpha(if (info.hidden) 0.5f else 1f),
-                            fontSize = 15.sp,
-                            color = Palette.text,
-                        )
+                        // With a body tool open, a tap on the name picks the body for it.
+                        val picking = editor.picksBodies()
+                        val size = remember(editor.version, b.handle) { editor.sizeOf(b.label) }
+                        Column(
+                            Modifier.weight(1f).alpha(if (info.hidden) 0.5f else 1f)
+                                .then(if (picking != null) Modifier.clickable { editor.toggleBody(b.label) } else Modifier),
+                        ) {
+                            Text(
+                                editor.design.nameOf(b.label),
+                                fontSize = 15.sp,
+                                color = if (picking != null && b.label in picking.bodies) Palette.mint else Palette.text,
+                            )
+                            size?.let { (x, y, z) -> Text("${sizeText(x)} × ${sizeText(y)} × ${sizeText(z)} mm", fontSize = 11.sp, color = Palette.muted) }
+                        }
                         ColourPick(info.colour) { editor.setColour(b.label, it) }
                         Box {
                             IconButton(onClick = { menu = true }) { Icon(Icons.more, "Options", tint = Palette.muted) }

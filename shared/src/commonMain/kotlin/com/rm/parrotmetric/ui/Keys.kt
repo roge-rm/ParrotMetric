@@ -1,6 +1,14 @@
 package com.rm.parrotmetric.ui
 
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
@@ -58,7 +66,7 @@ fun keyName(e: KeyEvent): String? {
 fun typedChar(e: KeyEvent): Char? = e.utf16CodePoint.takeIf { it in 32..126 }?.toChar()
 
 /** Characters that start a number or carry one on. */
-fun startsNumber(c: Char) = c.isDigit() || c == '.'
+fun startsNumber(c: Char) = c.isDigit() || c == '.' || c == '-'
 
 /**
  * The number fields on screen, so keys can reach them: a digit typed with no
@@ -105,3 +113,22 @@ class FieldChain {
 }
 
 val LocalFieldChain = compositionLocalOf<FieldChain?> { null }
+
+/** Counts the text fields with focus, so keys they use, like Ctrl+Z, go to the screen when none has it. */
+object Typing {
+    var fields = 0
+        private set
+    val active get() = fields > 0
+
+    /** Marks a text field, keeping count while it has focus. */
+    fun Modifier.typing(): Modifier = composed {
+        var focused by remember { mutableStateOf(false) }
+        DisposableEffect(Unit) { onDispose { if (focused) fields-- } }
+        onFocusChanged {
+            if (it.isFocused != focused) {
+                focused = it.isFocused
+                fields += if (focused) 1 else -1
+            }
+        }
+    }
+}

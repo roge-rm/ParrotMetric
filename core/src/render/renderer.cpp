@@ -667,7 +667,10 @@ void Renderer::drawScene(bool ids, const float* vp, const float* normal) {
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, g.faceSelected);
             glBindVertexArray(g.faceVao);
+            bool onTop = ids && seeThrough && areasFirst_;
+            if (onTop) glDepthFunc(GL_ALWAYS);
             glDrawElements(GL_TRIANGLES, g.faceIndices, GL_UNSIGNED_INT, nullptr);
+            if (onTop) glDepthFunc(GL_LESS);
         }
         if (seeThrough && !ids) {
             glDepthMask(GL_TRUE);

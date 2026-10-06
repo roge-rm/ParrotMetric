@@ -481,8 +481,17 @@ private fun annotations(editor: SketchEditor, proj: PlaneProjection, dp: Float):
         val r = kotlin.math.round(v * 100) / 100
         return if (r == floor(r)) r.toLong().toString() else r.toString()
     }
+    // A polygon's ties show once: its sides equal to the first with one mark, and its corners on its circle with none.
+    val joinedEquals = s.constraints.filterIsInstance<Constraint.Equal>().groupBy { it.c1 }.values.filter { group ->
+        val lines = (group.map { it.c2 } + group[0].c1).filterIsInstance<Line>()
+        group.size >= 2 && lines.size == group.size + 1 && lines.all { l -> lines.any { o -> o !== l && (o.a === l.a || o.a === l.b || o.b === l.a || o.b === l.b) } }
+    }
+    val quietEquals = joinedEquals.flatMap { it.drop(1) }.toSet()
+    val roundCircles = s.constraints.filterIsInstance<Constraint.OnCircle>().groupBy { it.curve }
+        .filter { (curve, on) -> on.size >= 3 && curve.construction }.keys
     for (c in s.constraints) {
         val item = SketchItem.K(c)
+        if (c in quietEquals || (c is Constraint.OnCircle && c.curve in roundCircles)) continue
         when (c) {
             is Constraint.ArcRadius, is Constraint.EllipseAxes -> {}
             // What a rounded corner holds by itself: its smooth joins, and the sharp corner kept on both lines.
@@ -545,7 +554,7 @@ private fun annotations(editor: SketchEditor, proj: PlaneProjection, dp: Float):
             }
             else -> {
                 // Glyphs sit beside the first line they're about, or beside the point.
-                // Equal goes on the second, so a polygon's marks spread one to a side.
+                // Equal goes on the second line, so marks for two lines don't pile on the first.
                 val l = (if (c is Constraint.Equal) c.curves().lastOrNull { it is Line } else c.curves().firstOrNull { it is Line }) as Line?
                 if (l != null) {
                     val n = stacked.getOrElse(l) { 0 }

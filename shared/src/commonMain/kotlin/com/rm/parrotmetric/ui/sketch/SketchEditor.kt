@@ -433,7 +433,7 @@ class SketchEditor(
                 else -> listOf("Width" to false)
             }
             SketchTool.Circle -> if (circleStyle == CircleStyle.ThreePoints) null else listOf("Diameter" to false)
-            SketchTool.Polygon -> listOf("Radius" to false)
+            SketchTool.Polygon -> listOf("Diameter" to false, "Turn" to true)
             SketchTool.Arc -> when (arcStyle) {
                 ArcStyle.ThreePoints -> if (pending.size == 1) listOf("Length" to false) else null
                 ArcStyle.CentreEnds -> if (pending.size == 1) listOf("Radius" to false) else listOf("Angle" to true)
@@ -537,7 +537,12 @@ class SketchEditor(
                 }
             }
             SketchTool.Circle -> if (circleStyle == CircleStyle.TwoPoints) along(x0, y0, typedValue(0)) else along(x0, y0, typedValue(0)?.let { it / 2 })
-            SketchTool.Polygon -> along(x0, y0, typedValue(0))
+            SketchTool.Polygon -> {
+                // The turn is where the first corner points, or for a polygon round its circle the first side's middle.
+                val r = typedValue(0)?.let { it / 2 } ?: hypot(u - x0, v - y0)
+                val a = typedValue(1)?.let { it * PI / 180 } ?: atan2(v - y0, u - x0)
+                (x0 + r * cos(a)) to (y0 + r * sin(a))
+            }
             SketchTool.Arc -> if (arcStyle == ArcStyle.ThreePoints || pending.size == 1) along(x0, y0, typedValue(0)) else {
                 val sweep = typedValue(0) ?: return u to v
                 val p1 = pending[1]
@@ -620,7 +625,10 @@ class SketchEditor(
                 else -> made.filterIsInstance<Line>().getOrNull(1)?.let { side -> values[0]?.let { hold(Constraint.Length(side, it), 0) } }
             }
             SketchTool.Circle -> made.filterIsInstance<Circle>().firstOrNull()?.let { c -> values[0]?.let { hold(Constraint.Radius(c, true, it), 0) } }
-            SketchTool.Polygon -> made.filterIsInstance<Circle>().firstOrNull()?.let { c -> values[0]?.let { hold(Constraint.Radius(c, false, it), 0) } }
+            SketchTool.Polygon -> made.filterIsInstance<Circle>().firstOrNull()?.let { c ->
+                values[0]?.let { hold(Constraint.Radius(c, true, it), 0) }
+                if (values[1] != null) holdTurn(c.centre, made.filterIsInstance<Line>().map { it.a })
+            }
             // An overall slot's first two points are only guides, taken away once it's drawn.
             SketchTool.Arc, SketchTool.Slot -> if (started.size == 1 && !(drawing == SketchTool.Slot && slotStyle == SlotStyle.Overall)) {
                 // The second point: its distance from the first (a radius, or a length).
@@ -710,6 +718,7 @@ class SketchEditor(
                 if (start == null) {
                     checkpoint()
                     pending += placeForPending(s)
+                    chainStart = pending.first()
                 } else {
                     if (s.point === start || hypot(s.u - sketch.x(start), s.v - sketch.y(start)) < 1e-6) return
                     checkpoint()
@@ -717,9 +726,11 @@ class SketchEditor(
                     val line = sketch.addLine(start, p, construction)
                     offer(PlacedSize("Length", sketch.length(line)) { Constraint.Length(line, it) })
                     if (s.alignedWith === start) addQuietly(if (s.horizontal) Constraint.Horizontal(line) else Constraint.Vertical(line))
+                    // Ended on a point already there, such as closing a run of typed lines: square stays square.
+                    else if (s.point != null) squareUp(line)
                     placedForPending.clear()
                     // Closing the chain on its first point ends it.
-                    if (p === pending.first()) pending.clear() else {
+                    if (p === chainStart) { pending.clear(); chainStart = null } else {
                         pending.clear()
                         pending += p
                     }
@@ -930,7 +941,7 @@ class SketchEditor(
                     if (r < 1e-6) return
                     checkpoint()
                     val circle = polygon(centre, r, atan2(s.v - sketch.y(centre), s.u - sketch.x(centre)))
-                    offer(radiusOf(circle))
+                    offer(diameterOf(circle))
                     finishShape()
                 }
             }
@@ -1007,6 +1018,50 @@ class SketchEditor(
         for (i in 1 until n) addQuietly(Constraint.Equal(sides[0], sides[i]))
         if (outside) for (side in sides) addQuietly(Constraint.TangentLine(side, circle))
         return circle
+    }
+
+    /**
+     * Holds a line that came out straight across or up that way. Closing an
+     * outline whose sides all have lengths, the longest side across from it
+     * (other than the first) lets its length go, so changing one side's length
+     * moves the sides joined to it rather than skewing the last one.
+     */
+    private fun squareUp(line: Line) {
+        val dx = abs(sketch.x(line.b) - sketch.x(line.a)); val dy = abs(sketch.y(line.b) - sketch.y(line.a))
+        val across = dy < 1e-6
+        if (!across && dx >= 1e-6) return
+        val hold = if (across) Constraint.Horizontal(line) else Constraint.Vertical(line)
+        if (sketch.add(hold) != Sketch.Added.AlreadySet) return
+        val sides = SketchOps.connected(sketch, line).filterIsInstance<Line>().filter { it !== line }
+        val first = sides.firstOrNull { it.a === line.b || it.b === line.b }
+        // The other way to the closing line: lines held up and down for a line across.
+        val crossing = sides.filter { l -> l !== first && sketch.constraints.any { if (across) it is Constraint.Vertical && it.line === l else it is Constraint.Horizontal && it.line === l } }
+        val freed = crossing.mapNotNull { l -> sketch.constraints.firstOrNull { it is Constraint.Length && it.line === l } }
+            .maxByOrNull { (it as Constraint.Length).value } ?: return
+        sketch.remove(freed)
+        if (sketch.add(hold) != Sketch.Added.Yes) sketch.add(freed)
+    }
+
+    /**
+     * Holds a polygon's turn: a corner straight across or up from the centre
+     * keeps there, else the first corner keeps its angle to a construction line
+     * across from the centre.
+     */
+    private fun holdTurn(centre: Point, corners: List<Point>) {
+        val cx = sketch.x(centre); val cy = sketch.y(centre)
+        for (p in corners) {
+            val q = atan2(sketch.y(p) - cy, sketch.x(p) - cx) / (PI / 2)
+            if (abs(q - kotlin.math.round(q)) < 1e-9) {
+                addQuietly(if (kotlin.math.round(q).toInt() % 2 == 0) Constraint.HorizontalPoints(centre, p) else Constraint.VerticalPoints(centre, p))
+                return
+            }
+        }
+        val p = corners.firstOrNull() ?: return
+        val r = sketch.distance(centre, p)
+        val across = sketch.addLine(centre, sketch.addPoint(cx + r, cy), construction = true)
+        addQuietly(Constraint.Horizontal(across))
+        val spoke = sketch.addLine(centre, p, construction = true)
+        addQuietly(Constraint.Angle(across, spoke, atan2(sketch.y(p) - cy, sketch.x(p) - cx)))
     }
 
     /** A slot round two centres: an arc at each end joined by two straight sides. Returns the construction line between the centres, and an end. */
@@ -1115,6 +1170,9 @@ class SketchEditor(
             else -> emptyList()
         }
     }
+
+    /** Where the chain of lines being drawn began. */
+    private var chainStart: Point? = null
 
     private fun placeForPending(s: Snap): Point {
         val p = place(s)
@@ -1231,6 +1289,9 @@ class SketchEditor(
     /** Whether text can be set here. */
     val canWriteText get() = outliner != null
 
+    /** Types a key into the open sheet's field, after a click away from it took the keys. */
+    var fieldKey: ((Char) -> Unit)? = null
+
     /** Text being typed, with its sheet open. */
     var textEdit by mutableStateOf<TextEdit?>(null)
         private set
@@ -1246,19 +1307,19 @@ class SketchEditor(
     }
 
     /** Sets the text being typed. False, with a message, if it can't be. */
-    fun commitText(text: String, height: Double, bold: Boolean, degrees: Double): Boolean {
+    fun commitText(text: String, height: Double, bold: Boolean, degrees: Double, align: com.rm.parrotmetric.sketch.TextAlign): Boolean {
         val edit = textEdit ?: return false
         val make = outliner ?: return false
         if (text.isBlank()) { message = "Type some text"; return false }
         if (height <= 0) { message = "The text has to be taller than 0"; return false }
-        val outline = try { make(text, height, bold) } catch (e: RuntimeException) { message = e.message; return false }
+        val outline = try { com.rm.parrotmetric.sketch.alignOutline(make(text, height, bold), align) } catch (e: RuntimeException) { message = e.message; return false }
         checkpoint()
         val angle = degrees * PI / 180
         val old = edit.existing
-        if (old != null) sketch.replaceText(com.rm.parrotmetric.sketch.SketchText(old.id, old.anchor, text, height, bold, angle, outline))
+        if (old != null) sketch.replaceText(com.rm.parrotmetric.sketch.SketchText(old.id, old.anchor, text, height, bold, angle, outline, align))
         else {
             val anchor = sketch.addPoint(edit.u, edit.v)
-            sketch.addText(anchor, text, height, bold, angle, outline)
+            sketch.addText(anchor, text, height, bold, angle, outline, align)
         }
         textEdit = null
         selection.clear()

@@ -5,7 +5,7 @@ Everything works by touch, but with a mouse and a keyboard most things are quick
 
 ## The mouse
 
-- The middle button drags the view along, and Shift and the middle button turns it. Right drag turns it too, and Shift and a right drag drags it along, which is handy on a touchpad.
+- The middle button drags the view along, and Shift and the middle button turns it. Right drag turns it too, and Shift and a right drag drags it along, which is handy on a touchpad. Looking steeply down or up at the model, a turn started on the far half of the view goes the other way, so the side you grab follows the mouse.
 - The wheel zooms towards the pointer. A double middle click fits everything in view.
 - In a browser, a two-finger scroll on a touchpad drags the view along and a pinch zooms.
 - A click picks one thing in place of what was picked, and Shift or Ctrl and a click adds to it or takes away.
@@ -21,12 +21,13 @@ Press **?** for the list of every key, **S** to find a tool by typing its name a
 - **Ctrl+N**, **Ctrl+O**, **Ctrl+S**, **Ctrl+Shift+S** and **Ctrl+E** are new, open, save, save as and export. **Ctrl+Z** undoes, and **Ctrl+Shift+Z** or **Ctrl+Y** redoes. Alt works in place of Ctrl, for keyboards without one.
 - **1** to **6** look from the front, back, top, bottom, left and right, and **0** goes back to the home view. **V** fits everything in view.
 - **Esc** or **Backspace** backs out of a tool or a sketch tool.
-- In a tool's panel, typing a number, or the name of a parameter, goes into its first size. **Tab** moves to the next one, and **Enter** is **Done**.
+- In a tool's panel, typing a number, a minus sign, or the name of a parameter, goes into its first size. **Tab** moves to the next one, and **Enter** is **Done**.
 
 ## In a sketch
 
 - **L** line, **R** rectangle, **C** circle, **A** arc, **G** polygon, **Shift+L** slot, **Shift+S** spline, **Shift+C** ellipse, **Shift+P** point and **Shift+T** text. Pressing a tool's letter again switches between its styles.
 - **D** dimension, **T** trim, **E** extend, **B** break, **O** offset, **F** round corner, **Shift+F** cut corner, **M** move, **Shift+M** mirror and **X** construction. **H** and **V** make what's picked horizontal or vertical. **Delete** takes away what's picked.
 - While drawing, type a size and it's used for the next point. **Tab** moves between sizes, such as the width and height of a rectangle, and **Enter** or a click places the shape that way.
+- While a size, text or pattern sheet is open, typing goes into it, not to the tools.
 - **Ctrl+Enter** finishes the sketch.
 - With **Select**, dragging on empty space picks what's in a box, the same as on the model: to the right what's wholly inside, to the left anything it touches. Hold **Shift** to add to what's picked. Double-click a curve to pick its whole outline.

@@ -756,4 +756,10 @@ object WebCore : NativeCore {
         val args = Args()
         return call(86, args).floats()!!
     }
+
+    override fun setAreasFirst(on: Boolean) {
+        val args = Args()
+        args.boolean(on)
+        call(87, args)
+    }
 }

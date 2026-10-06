@@ -63,6 +63,9 @@ public:
         limit_ = limit;
     }
 
+    /** Sketch areas are picked over any body in front of them, for picking sections inside a preview. */
+    void setAreasFirst(bool on) { areasFirst_ = on; }
+
     /**
      * How much of each edge of the view panels cover, in pixels: left, top,
      * right, bottom. The model is centred and fitted in what's left, and the
@@ -165,6 +168,7 @@ private:
     float clip_[4] = {0, 0, 1, 0};
     bool clipping_ = false;
     int analysis_ = 0;
+    bool areasFirst_ = false;
     float covered_[4] = {0, 0, 0, 0};      // Left, top, right, bottom, pixels, as drawn now.
     float coveredGoal_[4] = {0, 0, 0, 0};  // Where they're heading.
     float limit_ = 0;

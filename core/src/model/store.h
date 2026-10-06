@@ -31,6 +31,8 @@ public:
     using Handle = int64_t;
 
     Handle add(Body b);
+    /** Whether [h] is still held. */
+    bool has(Handle h) const;
     const Body& get(Handle h) const;
     void retain(Handle h);
     void release(Handle h);

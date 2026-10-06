@@ -157,6 +157,7 @@ fun DesktopViewport(view: DesktopView, onMenu: (Float, Float) -> Unit, collectin
             override fun box(rect: androidx.compose.ui.geometry.Rect, crossing: Boolean, add: Boolean) =
                 view.select { Core.selectBox(rect.left, rect.top, rect.right, rect.bottom, crossing, add) }
             override fun menu(x: Float, y: Float) = onMenu(x, y)
+            override fun pitch() = Core.cameraState()[1]
         }
     }
     Box(Modifier.fillMaxSize().onSizeChanged { view.resize(it) }.viewGestures(controls) { box = it }) {

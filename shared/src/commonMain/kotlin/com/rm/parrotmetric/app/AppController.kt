@@ -18,6 +18,7 @@ import com.rm.parrotmetric.ui.design.DesignEditor
 import com.rm.parrotmetric.ui.design.ExportRequest
 import com.rm.parrotmetric.ui.sketch.CameraState
 import com.rm.parrotmetric.ui.sketch.SketchEditor
+import com.rm.parrotmetric.ui.sketch.SketchTool
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -734,7 +735,8 @@ class AppController(
                 val plane = design.planeOf(f) ?: return
                 design.checkpoint()
                 newSketch = null
-                openSketch(SketchEditor(plane, f.name, f.sketch, regionFinder, outlineFor(f.plane, plane), design::names, design::constructionPoints, files::open, ::textOutline, design::shownNames, bodyOutlineFor(plane)))
+                // A sketch opened again starts with Select, to change what's there.
+                openSketch(SketchEditor(plane, f.name, f.sketch, regionFinder, outlineFor(f.plane, plane), design::names, design::constructionPoints, files::open, ::textOutline, design::shownNames, bodyOutlineFor(plane)).also { it.selectTool(SketchTool.Select) })
             } else {
                 design.edit(id)
             }

@@ -1,5 +1,6 @@
 package com.rm.parrotmetric.ui.design
 
+import com.rm.parrotmetric.ui.Typing.typing
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -119,6 +120,7 @@ fun FeaturePanel(editor: DesignEditor, maxHeight: androidx.compose.ui.unit.Dp = 
                 is DesignEditor.CanvasDraft -> CanvasSettings(editor, d)
                 else -> {}
             }
+            if (d is DesignEditor.BodyDraft && editor.picksBodies() === d) BodyPicks(editor, d)
             }
             editor.panelProblem()?.let { Text(it, fontSize = 14.sp, color = Palette.orange) }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -148,9 +150,16 @@ internal fun count(n: Int, one: String, many: String) = if (n == 1) "1 $one" els
 @Composable
 private fun ExtrudeSettings(editor: DesignEditor, d: DesignEditor.ExtrudeDraft) {
     Header("Extrude", Icons.extrude, Palette.create, when { d.regions.isNotEmpty() -> count(d.regions.size, "area", "areas"); d.sketchId != null && d.thinOn -> "Open line"; else -> null })
+    // A sketch of many areas: one tap takes them all.
+    val areas = editor.areaCount(d)
+    if (areas > 1 && d.regions.size < areas) androidx.compose.material3.TextButton(onClick = { editor.pickAllAreas(d) }) {
+        Text("Take all $areas areas", color = Palette.mint, fontSize = 14.sp)
+    }
     Segmented(listOf("Distance", "Through all", "Up to"), if (d.throughAll) 1 else if (d.upToOn) 2 else 0) {
         d.throughAll = it == 1
         d.upToOn = it == 2
+        // Through all goes through bodies, so it cuts unless told otherwise.
+        if (it == 1 && d.operation != Operation.Intersect && editor.allBodies().isNotEmpty()) d.operation = Operation.Cut
         editor.draftChanged()
     }
     if (d.throughAll) {
@@ -177,6 +186,12 @@ private fun ExtrudeSettings(editor: DesignEditor, d: DesignEditor.ExtrudeDraft) 
         }
         if (d.direction == DesignEditor.Direction.TwoSides) Field(editor, d, "back", "Back", d.other, "mm", allowNegative = true) {
             d.other = it
+            editor.draftChanged()
+        }
+        // The other way is a distance below 0.
+        if (d.direction == DesignEditor.Direction.OneSide) Toggle("The other way", d.distance < 0) {
+            d.distance = -d.distance
+            d.exprs["forward"]?.let { e -> d.exprs["forward"] = if (e.startsWith("-(") && e.endsWith(")")) e.substring(2, e.length - 1) else "-($e)" }
             editor.draftChanged()
         }
     }
@@ -471,6 +486,23 @@ private fun OperationRow(op: Operation, onPick: (Operation) -> Unit) {
     Segmented(listOf("New body", "Join", "Cut", "Intersect"), op.ordinal) { onPick(Operation.entries[it]) }
 }
 
+/** The bodies by name, to pick ones that are hidden or hard to tap. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun BodyPicks(editor: DesignEditor, d: DesignEditor.BodyDraft) {
+    val labels = editor.allBodies().map { it.label }
+    if (labels.size < 2) return
+    Text("Bodies", fontSize = 13.sp, color = Palette.muted)
+    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        for (l in labels) Surface(
+            onClick = { editor.toggleBody(l) },
+            shape = RoundedCornerShape(12.dp),
+            color = if (l in d.bodies) Palette.line else Palette.ground,
+            contentColor = Palette.text,
+        ) { Text(editor.bodyTitle(l), Modifier.padding(horizontal = 10.dp, vertical = 7.dp), fontSize = 13.sp) }
+    }
+}
+
 /** Which bodies a join, cut or intersect changes: any it reaches, or the ones picked. */
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
@@ -533,10 +565,12 @@ fun NumberRow(
     // Focus is taken just after the key that started the field is done with.
     var starts by remember { mutableStateOf(0) }
     LaunchedEffect(starts) { if (starts > 0) focus.requestFocus() }
+    // The field's text is remembered afresh when its value changes, so the chain's start sets whichever is current.
+    val setField = androidx.compose.runtime.rememberUpdatedState<(TextFieldValue) -> Unit> { field = it }
     val link = remember {
         com.rm.parrotmetric.ui.FieldChain.Field(focus) { c ->
             started = true
-            field = TextFieldValue(c.toString(), TextRange(1))
+            setField.value(TextFieldValue(c.toString(), TextRange(1)))
             starts++
         }
     }
@@ -567,7 +601,7 @@ fun NumberRow(
             BasicTextField(
                 field,
                 onValueChange = { field = it },
-                modifier = Modifier.weight(1f).focusRequester(focus)
+                modifier = Modifier.typing().weight(1f).focusRequester(focus)
                     .onGloballyPositioned { val at = it.positionInRoot(); link.x = at.x; link.y = at.y }
                     .onFocusChanged {
                         if (focused && !it.isFocused) apply()
@@ -659,7 +693,10 @@ internal fun FaceSettings(editor: DesignEditor, d: DesignEditor.FaceDraft) {
             Field(editor, d, "size", "Angle", d.size, "°", allowNegative = true) { d.size = it; editor.draftChanged() }
         }
         DesignEditor.FaceTool.Shell -> Field(editor, d, "size", "Walls", d.size, "mm", allowNegative = false) { d.size = it; editor.draftChanged() }
-        DesignEditor.FaceTool.PressPull -> Field(editor, d, "size", "Distance", d.size, "mm", allowNegative = true) { d.size = it; editor.draftChanged() }
+        DesignEditor.FaceTool.PressPull -> {
+            Field(editor, d, "size", "Distance", d.size, "mm", allowNegative = true) { d.size = it; editor.draftChanged() }
+            editor.pressPullNote(d)?.let { Text(it, fontSize = 12.sp, color = Palette.muted) }
+        }
         DesignEditor.FaceTool.Delete -> {}
     }
 }

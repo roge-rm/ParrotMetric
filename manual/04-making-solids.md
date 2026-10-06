@@ -5,10 +5,11 @@ These are under **Create**. Most start from sketch areas: pick the areas, then t
 
 ## Extrude
 
-Pushes areas straight out of their plane. Tap the areas first, or with none tapped it takes the newest sketch when it has only one.
+Pushes areas straight out of their plane. Tap the areas first, or with none tapped it takes the newest sketch when it has only one. When that sketch has more, **Take all** takes every one of its areas.
 
 - **Distance** goes a set distance, **Through all** goes through everything in the way, and **Up to** stops at a face or plane you pick.
-- With a distance, it goes **One side**, **Both ways** (the same each way) or **Two sides** (a different distance each way). With the other two, pick **Forward**, **Back** or **Both ways**.
+- With a distance, it goes **One side**, **Both ways** (the same each way) or **Two sides** (a different distance each way). **The other way** turns a one-sided extrude round, the same as a distance below 0. With the other two, pick **Forward**, **Back** or **Both ways**.
+- **Through all** starts as **Cut**, since it goes through bodies.
 - **Taper** leans the sides in or out by an angle.
 - **Start at** starts it a distance away from the sketch's plane.
 - **Thin wall** makes a wall of a set thickness round the outline instead of a solid. A sketch of just an open line, like the shape of a clip, extrudes as a wall that thick along the line, with round ends.

@@ -38,6 +38,8 @@ interface ViewControls {
     fun box(rect: Rect, crossing: Boolean, add: Boolean)
     /** A right click: the menu for the selection, at (x, y). */
     fun menu(x: Float, y: Float)
+    /** How far the view looks down on the model, radians; below 0 looks up at it. */
+    fun pitch(): Float = 0f
 }
 
 /**
@@ -80,6 +82,8 @@ fun Modifier.viewGestures(controls: ViewControls, onBox: (Rect?) -> Unit = {}): 
         var button = 0
         var adding = false
         var orbiting = false
+        // Looking steeply down or up, a drag started on the far half of the view turns the other way, so the side grabbed follows.
+        var farSide = false
         fun centre() = down.values.fold(Offset.Zero) { a, b -> a + b } / down.size.toFloat()
         fun spread(c: Offset) = if (down.size < 2) 0f else down.values.map { (it - c).getDistance() }.average().toFloat()
         while (true) {
@@ -102,6 +106,8 @@ fun Modifier.viewGestures(controls: ViewControls, onBox: (Rect?) -> Unit = {}): 
                         adding = event.keyboardModifiers.isShiftPressed || event.keyboardModifiers.isCtrlPressed
                         // Shift swaps the two: right drag turns and Shift-right pans, for touchpads; middle pans and Shift-middle turns.
                         orbiting = (button == 2) != event.keyboardModifiers.isShiftPressed
+                        val pitch = controls.pitch()
+                        farSide = kotlin.math.abs(pitch) > 0.8f && (start.y < size.height / 2f) == (pitch > 0f)
                     } else if (!mouse) {
                         // A second finger: it's a pan and pinch from here on.
                         dragging = true
@@ -118,14 +124,14 @@ fun Modifier.viewGestures(controls: ViewControls, onBox: (Rect?) -> Unit = {}): 
                         val d = c - lastCentre
                         when {
                             mouse && button == 1 -> onBox(Rect(start, c))
-                            mouse -> if (orbiting) controls.orbit(d.x, d.y) else controls.pan(d.x, d.y)
+                            mouse -> if (orbiting) controls.orbit(if (farSide) -d.x else d.x, d.y) else controls.pan(d.x, d.y)
                             down.size >= 2 -> {
                                 controls.pan(d.x, d.y)
                                 val s = spread(c)
                                 if (lastSpread > 0f && s > 0f) controls.zoom(s / lastSpread)
                                 lastSpread = s
                             }
-                            else -> controls.orbit(d.x, d.y)
+                            else -> controls.orbit(if (farSide) -d.x else d.x, d.y)
                         }
                     }
                     lastCentre = c

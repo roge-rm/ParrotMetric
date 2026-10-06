@@ -8,7 +8,7 @@ A sketch is a flat drawing on a plane. The closed areas in it are what Extrude, 
 - **Sketch** then **Top**, **Front** or **Right** draws on one of the three main planes.
 - To draw on a flat face of a body, pick the face and tap **On selected** (the pencil). It works the same on a construction plane, and on a flat area of a mesh. Construction planes are also listed under Sketch, after Top, Front and Right.
 
-The view turns to look straight at the plane. The fit button at the top brings the whole sketch into view, and undo and redo there work inside the sketch. **Finish** ends the sketch.
+The view turns to look straight at the plane, with x running to the right. A sketch opened again from the history starts with **Select**. The fit button at the top brings the whole sketch into view, and undo and redo there work inside the sketch. **Finish** ends the sketch.
 
 ## Drawing
 
@@ -16,16 +16,16 @@ The tools are along the bottom: **Select**, **Line**, **Rectangle**, **Circle** 
 
 Tap to place each point. Points snap to the ends and middles of what's already there, and lines snap to level and upright, and the matching constraints are added as you draw.
 
-- **Line** carries on from the last point until you tap the first point again, which closes the shape, or tap **Line** again to stop.
+- **Line** carries on from the last point until you tap the first point again, which closes the shape, or tap **Line** again to stop. A line that ends on a point already there and comes out level or upright is held that way. Closing a shape whose sides all have lengths, the longest side across from the closing line lets its length go, so changing one side moves the sides joined to it.
 - **Rectangle** is corner to corner, from the centre, or three points for one at an angle.
 - **Circle** is a centre and a point on it, two points across it, or three points on it.
 - **Arc** is a centre then its ends, three points along it, or tangent, which carries on smoothly from the end of a line or arc.
-- **Polygon** has as many sides as you set, with its corners on the circle you draw or its sides touching it.
+- **Polygon** has as many sides as you set, with its corners on the circle you draw or its sides touching it. Its size is that circle's diameter. Typed while drawing, the diameter comes first, then **Turn**, the angle its first corner points at, or its first side's middle when the sides touch the circle.
 - **Slot** is centre to centre, end to end, or from the middle.
 - **Spline** goes through the points you tap, or is pulled by them as control points. Tap **Spline** again to end it.
 - **Ellipse** is a centre, then the end of one axis, then the width.
 - **Conic** is two ends and a point the curve leans towards. Pick one and **Fullness** sets how full it is, between 0 and 1.
-- **Text** asks for the words, the height and whether it's bold. Its letters are areas like any other, so they extrude. **Change text**, or a double click on the text, edits it later.
+- **Text** asks for the words, the height, whether it's bold, where the point you tapped is on it (**From the left**, **Centred** or **From the right**) and how far it's **Turned**. Its letters are areas like any other, so they extrude. **Change text**, or a double click on the text, edits it later.
 
 The styles of each tool show above the tools while it's in hand.
 

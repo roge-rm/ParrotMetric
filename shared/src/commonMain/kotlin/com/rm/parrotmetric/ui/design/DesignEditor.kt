@@ -73,6 +73,8 @@ interface Viewport {
     fun setSection(on: Boolean, origin: Vec3, normal: Vec3)
     /** Colours bodies to check them for printing: 0 off, 1 overhangs past limit radians, 2 walls thinner than limit mm. */
     fun setAnalysis(mode: Int, limit: Double) {}
+    /** Sketch areas are picked over bodies in front of them. */
+    fun setAreasFirst(on: Boolean) {}
     /** A face's edges as curves on a plane, for projecting into a sketch. Throws if the face is gone. */
     fun faceOutline(body: Long, face: String, plane: SketchPlane): List<ProfileCurve>
     fun selectedEdges(): List<String>
@@ -341,7 +343,7 @@ class DesignEditor(
         val shown = shownBodies
         val index = viewport.selectedFaces().firstOrNull()?.first ?: if (shown.size == 1) 0 else return null
         val b = shown.getOrNull(index) ?: return null
-        return b.label to (kernel.properties(b.handle) ?: return null)
+        return b.label to (kernel.properties(b.handle)?.takeIf { it.size >= 5 } ?: return null)
     }
 
     /** Hides the bodies under the selected faces. */
@@ -532,7 +534,14 @@ class DesignEditor(
         var x = ref.x - n * ref.x.dot(n)
         if (x.dot(x) < 1e-12) x = if (kotlin.math.abs(n.z) < 0.9) Vec3(0.0, 0.0, 1.0).cross(n) else Vec3(1.0, 0.0, 0.0).cross(n)
         x = x * (1 / kotlin.math.sqrt(x.dot(x)))
-        return ref to SketchPlane("On a face", ref.origin(Vec3(d[0], d[1], d[2]), n), x, n.cross(x))
+        // A face that isn't flat on top is looked at square on, with up kept up; x runs to the right that way,
+        // even when the face points away from how it was being looked at.
+        var face = ref
+        if (kotlin.math.abs(n.z) <= 0.999 && x.dot(Vec3(0.0, 0.0, 1.0).cross(n)) < 0) {
+            x = x * -1.0
+            face = ref.copy(x = ref.x * -1.0)
+        }
+        return face to SketchPlane("On a face", ref.origin(Vec3(d[0], d[1], d[2]), n), x, n.cross(x))
     }
 
     /** The bodies shown now, by label and the name they're shown by. */
@@ -611,6 +620,8 @@ class DesignEditor(
 
     private var pending = false
     private var pendingRefit = false
+    /** The display was just replaced, clearing the selection, and the panel's picks aren't back on it yet. */
+    @kotlin.concurrent.Volatile private var redrawing = false
 
     /** Rebuilds what's active, with the open panel's feature in place if it has one. */
     fun rebuild(refit: Boolean = false) {
@@ -641,6 +652,9 @@ class DesignEditor(
                         val planeFeatures = features.filterIsInstance<PlaneFeature>().filter { b.sketchPlanes.containsKey(it.id) && it.id !in design.hiddenPlanes }
                         val visible = b.bodies.filter { !design.info(it.label).hidden }
                         shownBodies = visible
+                        // Until the panel's picks are put back, a tap adds to them rather than starting afresh.
+                        redrawing = draft != null
+                        viewport.setAreasFirst(draft is LoftDraft)
                         viewport.show(
                             visible.map { it.handle }, shown.map { it.second to it.first.sketch.profileCurves() },
                             planeFeatures.map { b.sketchPlanes.getValue(it.id) }, b.axes.values.toList(), b.points.values.toList(), visible.map { design.info(it.label).colour ?: -1 }, canvasesToShow(b), refit,
@@ -670,6 +684,7 @@ class DesignEditor(
                 onShown()
                 // Show what the panel has picked on the fresh display.
                 result.third?.let { d -> if (d === panel) highlight(d) }
+                redrawing = false
             } while (pending)
             busy = false
         }
@@ -947,6 +962,11 @@ class DesignEditor(
                 d.thinOn = true
                 return@let
             }
+            // Several areas: none taken yet, but Extrude offers to take them all.
+            if (areas.size > 1 && d is ExtrudeDraft) {
+                d.sketchId = f.id
+                return@let
+            }
             val only = areas.singleOrNull() ?: return@let
             d.sketchId = f.id
             d.regions = listOf(RegionRef(only.curveIds, only.insideU, only.insideV))
@@ -1139,9 +1159,22 @@ class DesignEditor(
     fun axisFeatures(): List<AxisFeature> = design.active.filterIsInstance<AxisFeature>()
 
     fun startHole() {
-        panel = HoleDraft(null)
+        panel = HoleDraft(null).also { d ->
+            lastHole?.let { h ->
+                d.kind = h.kind
+                d.diameter = h.diameter
+                d.through = h.depth == 0.0
+                if (h.depth > 0) d.depth = h.depth
+                d.topDiameter = h.topDiameter
+                d.topDepth = h.topDepth
+                com.rm.parrotmetric.design.HolePresets.match(h.diameter)?.let { (fit, size) -> d.fit = fit; d.size = size } ?: run { d.fit = null }
+            }
+        }
         rebuild()
     }
+
+    /** The last hole made, which a new one starts like. */
+    private var lastHole: HoleFeature? = null
 
     fun startSnapFit() {
         panel = SnapFitDraft(null).also { snapBase(it) }
@@ -1204,7 +1237,14 @@ class DesignEditor(
         }
     }
     fun startPlaneCut() = openBodies(SplitDraft(null).also { it.keep = 1 })
-    fun startConvert() = openBodies(ConvertDraft(null))
+    fun startConvert() {
+        val d = ConvertDraft(null)
+        d.planes = planeChoices()
+        // With nothing picked, the only mesh shown.
+        d.bodies = pickedBodies().ifEmpty { listOfNotNull(shownBodies.filter { viewport.isMesh(it.handle) }.singleOrNull()?.label) }
+        panel = d
+        rebuild()
+    }
 
     fun startRib(web: Boolean) {
         panel = RibDraft(null, web)
@@ -1335,7 +1375,9 @@ class DesignEditor(
             }
             is LoftDraft -> {
                 // A tap on empty space keeps what's picked, as Sweep does.
-                loftPicks().takeIf { it.isNotEmpty() }?.let { d.sections = it }
+                loftPicks().takeIf { it.isNotEmpty() }?.let { picks ->
+                    d.sections = if (redrawing) d.sections + picks.filter { p -> d.sections.none { it.sketchId == p.sketchId } } else picks
+                }
                 rebuild()
             }
             is ThreadDraft -> {
@@ -1360,10 +1402,11 @@ class DesignEditor(
                 }
                 val sketch = shownSketches.getOrNull(picked[0].first) ?: return
                 val regions = finder.find(sketch.sketch.profileCurves())
+                val keep = if (redrawing && d.sketchId == sketch.id) d.regions else emptyList()
                 d.sketchId = sketch.id
-                d.regions = picked.filter { it.first == picked[0].first }.mapNotNull { (_, r) ->
+                d.regions = keep + picked.filter { it.first == picked[0].first }.mapNotNull { (_, r) ->
                     regions.getOrNull(r)?.let { RegionRef(it.curveIds, it.insideU, it.insideV) }
-                }
+                }.filter { r -> keep.none { it.curveIds == r.curveIds } }
                 joinOnFace(d)
                 rebuild()
             }
@@ -1394,7 +1437,7 @@ class DesignEditor(
                 val picked = pickedBodies()
                 if (picked.isNotEmpty() || viewport.selectedFaces().isEmpty()) {
                     // In the order tapped: Combine keeps the first.
-                    d.bodies = d.bodies.filter { it in picked } + picked.filter { it !in d.bodies }
+                    d.bodies = d.bodies.filter { redrawing || it in picked } + picked.filter { it !in d.bodies }
                     rebuild()
                 }
             }
@@ -1446,6 +1489,46 @@ class DesignEditor(
         return refs.mapNotNull { ref -> regions.indexOfFirst { it.curveIds == ref.curveIds }.takeIf { it >= 0 }?.let { s to it } }
     }
 
+    /** Which way press pull goes for what's picked, as it isn't plain from the sign. */
+    fun pressPullNote(d: FaceDraft): String? {
+        if (d.tool != FaceTool.PressPull || d.faces.isEmpty() || d.size == 0.0) return null
+        val holes = d.faces.all { f -> shownBodies.firstNotNullOfOrNull { kernel.shapeOf(it.handle, f, false) }?.let { it.size > 8 && it[8] == 1.0 } == true }
+        val grows = d.size > 0
+        return when {
+            holes -> if (grows) "The hole gets smaller" else "The hole gets bigger"
+            else -> if (grows) "The body gets bigger" else "The body gets smaller"
+        }
+    }
+
+    /** The open panel picks whole bodies, which can be picked by name too. */
+    fun picksBodies(): BodyDraft? = (panel as? BodyDraft)?.takeIf { (it as? PatternDraft)?.byFeatures != true && (it as? MirrorDraft)?.byFeatures != true }
+
+    /** Picks a body by name, or lets it go, for the open panel. */
+    fun toggleBody(label: String) {
+        val d = picksBodies() ?: return
+        d.bodies = if (label in d.bodies) d.bodies - label else d.bodies + label
+        rebuild()
+    }
+
+    /** A body's size along x, y and z, mm. */
+    fun sizeOf(label: String): Triple<Double, Double, Double>? {
+        val b = allBodies().firstOrNull { it.label == label } ?: return null
+        val box = try { kernel.bounds(b.handle) } catch (e: RuntimeException) { return null }
+        if (box.size < 6) return null
+        return Triple(box[3] - box[0], box[4] - box[1], box[5] - box[2])
+    }
+
+    /** Every area of the extrude's sketch. */
+    fun pickAllAreas(d: AreaDraft) {
+        val sketch = design.feature(d.sketchId ?: return) as? SketchFeature ?: return
+        d.regions = finder.find(sketch.sketch.profileCurves()).map { RegionRef(it.curveIds, it.insideU, it.insideV) }
+        joinOnFace(d)
+        rebuild()
+    }
+
+    /** How many areas the draft's sketch has. */
+    fun areaCount(d: AreaDraft): Int = (design.feature(d.sketchId ?: return 0) as? SketchFeature)?.let { finder.find(it.sketch.profileCurves()).size } ?: 0
+
     /** A value in the panel changed: show it. */
     fun draftChanged() = rebuild()
 
@@ -1465,6 +1548,7 @@ class DesignEditor(
             return false
         }
         checkpoint()
+        if (f is HoleFeature) lastHole = f
         if (design.feature(f.id) != null) design.replace(f) else design.add(f)
         if (d.exprs.isEmpty()) design.expressions.remove(f.id) else design.expressions[f.id] = d.exprs.toMap()
         panel = null

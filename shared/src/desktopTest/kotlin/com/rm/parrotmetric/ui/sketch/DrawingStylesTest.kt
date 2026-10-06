@@ -164,4 +164,48 @@ class DrawingStylesTest {
         // A quarter turn round the origin takes the end (10, 10) to (-10, 10).
         assertTrue(e.sketch.points.any { kotlin.math.abs(e.sketch.x(it) + 10) < 1e-9 && kotlin.math.abs(e.sketch.y(it) - 10) < 1e-9 })
     }
+
+    private fun SketchEditor.type(vararg sizes: String) {
+        sizes.forEachIndexed { i, size ->
+            if (i > 0) typedNext(false)
+            for (c in size) typeKey(c)
+        }
+        applyTyped()
+    }
+
+    @Test
+    fun polygonTakesATypedDiameterAndTurn() {
+        val e = editor()
+        e.selectTool(SketchTool.Polygon)
+        e.polygonSides = 6
+        e.tap(0.0, 0.0)
+        e.type("20", "30")
+        val circle = e.sketch.curves.filterIsInstance<Circle>().single()
+        val size = e.sketch.constraints.filterIsInstance<Constraint.Radius>().single()
+        assertTrue(size.diameter)
+        near(10.0, e.sketch.radius(circle), "radius")
+        // Turned 30°, a hexagon has a corner straight up, held there.
+        val top = e.sketch.points.single { kotlin.math.abs(e.sketch.x(it)) < 1e-6 && e.sketch.y(it) > 5 }
+        near(10.0, e.sketch.y(top), "top corner")
+        assertTrue(e.sketch.constraints.any { it is Constraint.VerticalPoints && top in it.points() })
+    }
+
+    @Test
+    fun closingATypedOutlineKeepsItSquare() {
+        val e = editor()
+        e.selectTool(SketchTool.Line)
+        e.tap(0.0, 0.0)
+        // An L: along the bottom, up, back in, up, back to the left side, then down to the start.
+        e.type("30", "0"); e.type("5", "90"); e.type("25", "180"); e.type("40", "90"); e.type("5", "180")
+        e.tap(0.0, 0.0)
+        assertTrue(e.pending.isEmpty(), "closing it ends the chain")
+        val lines = e.sketch.curves.filterIsInstance<Line>()
+        val closing = lines.last()
+        assertTrue(e.sketch.constraints.any { it is Constraint.Vertical && it.line === closing })
+        val bottom = e.sketch.constraints.filterIsInstance<Constraint.Length>().single { it.line === lines[0] }
+        assertTrue(e.sketch.setDimension(bottom, 40.0))
+        near(e.sketch.x(closing.a), e.sketch.x(closing.b), "the closing side upright")
+        near(40.0, e.sketch.length(lines[0]), "bottom")
+        near(5.0, e.sketch.length(lines[4]), "top")
+    }
 }

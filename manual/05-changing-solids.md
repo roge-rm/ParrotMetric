@@ -15,14 +15,14 @@ Edges that join smoothly are taken together, so one tap can pick the whole way r
 - **Shell** hollows the body out to the wall thickness you give. The faces you pick are left open, and with none it's hollow inside.
 - **Lip** stands a lip round the inside of an opening, on the top of its wall: tap the top face, then set the **Width** and **Height**. Under **Groove in**, pick the lid and it gets a groove the lip fits into, with the **Gap** you give all round (0.2 mm to start). The lid should sit on the top of the wall.
 - **Snap fit** puts a clip at each point in a sketch on a face, such as points along the inside of the walls on a lid's underside. Each is a beam standing out of the face with a hook at its end, pointing away from the middle of the part, so it catches the wall. Set its **Length**, **Width** and **Thickness**, how far the hook sticks out (**Overhang**) and how long it is (**Hook**). Under **Catch in**, pick the other part and it gets a recess for each hook, with the **Gap** you give.
-- **Press pull** moves a face in or out, and the faces next to it follow.
+- **Press pull** moves a face in or out, and the faces next to it follow. A distance above 0 adds to the body, which makes a hole smaller. The panel says which way it goes.
 - **Delete face** takes faces away and closes the gap, for getting rid of a round or a small feature.
 - **Draft** tilts faces by an angle, for parts that need to come out of a mould. Pick the faces to tilt, then switch to **Pivot face** and pick the face they turn about.
 
 ## Holes and threads
 
-- **Hole** puts a hole at each point in a sketch on a face, and at the corners and centres of its construction lines and circles, the origin too when a construction circle is round it. It's **Simple**, **Counterbore** (a wider, flat bottomed hole at the top for a bolt head) or **Countersink** (a cone at the top for a flat head screw). Set the **Diameter**, and the **Depth** or **All the way through**. For a screw in a printed part, pick **Insert** for a pocket that takes a heat-set insert, **Self-tap** for a hole the screw cuts its own thread in, or **Clearance** for a hole it passes through, then the screw size, M2 to M5. Insert also sets the depth to fit a standard insert, and Clearance with Countersink or Counterbore makes room for the screw's head. Typing a diameter goes back to **Any size**. **Changes** picks which bodies it cuts into.
-- **Thread** cuts a modelled ISO metric thread into a round face, a hole or a shaft, with the **Pitch** you give. **Clearance** makes a shaft smaller or a hole bigger by that much first, so printed threads screw together (0.2 to 0.4 mm on each part). Make a hole for a thread at the nut size first: the panel shows it for a shaft, and for a hole the bolt it takes. A hole's thread sits half a turn round from a shaft's, so a lid and its jar mesh where they stand.
+- **Hole** puts a hole at each point in a sketch on a face, and at the corners and centres of its construction lines and circles, the origin too when a construction circle is round it. It's **Simple**, **Counterbore** (a wider, flat bottomed hole at the top for a bolt head) or **Countersink** (a cone at the top for a flat head screw). Set the **Diameter**, and the **Depth** or **All the way through**. For a screw in a printed part, pick **Insert** for a pocket that takes a heat-set insert, **Self-tap** for a hole the screw cuts its own thread in, or **Clearance** for a hole it passes through, then the screw size, M2 to M5. Insert also sets the depth to fit a standard insert, and Clearance with Countersink or Counterbore makes room for the screw's head. Typing a diameter goes back to **Any size**. **Changes** picks which bodies it cuts into. A new hole starts the same as the last one made.
+- **Thread** cuts a modelled ISO metric thread into a round face, a hole or a shaft, with the **Pitch** you give, or the pitch of the size picked, M2 to M64. **Clearance** makes a shaft smaller or a hole bigger by that much first, so printed threads screw together (0.2 to 0.4 mm on each part). Make a hole for a thread at the nut size first: the panel shows it for a shaft, and for a hole the bolt it takes. A hole's thread sits half a turn round from a shaft's, so a lid and its jar mesh where they stand.
 
 ## Ribs and emboss
 
@@ -39,6 +39,8 @@ Both work on **Bodies**, or on **Features**: the steps that made something, like
 Along a path, the copies are spread evenly along it or **Spaced** a set distance apart. **Turn with the path** turns each one to follow the path, and **Start from the other end** starts from the path's other end.
 
 ## Bodies
+
+Tools that work on whole bodies also list them by name in their panel, to pick one that's hidden or hard to tap.
 
 - **Combine** joins, cuts or intersects bodies with each other. Tap the body to keep first, then each body to use on it (with a mouse, Shift-click those). **Keep the others** keeps the bodies used as tools.
 - **Split** cuts a body in two **By a plane** or **By a body**, keeping both pieces as bodies or only the side you want. It also trims surfaces.

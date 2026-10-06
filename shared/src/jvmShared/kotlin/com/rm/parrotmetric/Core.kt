@@ -83,6 +83,7 @@ object Core : NativeCore {
     override external fun measure(): Array<String>
     override external fun setSection(on: Boolean, ox: Double, oy: Double, oz: Double, nx: Double, ny: Double, nz: Double)
     override external fun setAnalysis(mode: Int, limit: Double)
+    override external fun setAreasFirst(on: Boolean)
     /** A face's edges as sketch curves on a plane; see jni.cpp. */
     override external fun faceOutline(body: Long, face: String, plane: DoubleArray): DoubleArray
     override external fun shownTriangles(): Int

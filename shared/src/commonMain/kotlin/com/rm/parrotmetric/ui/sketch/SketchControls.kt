@@ -1,5 +1,6 @@
 package com.rm.parrotmetric.ui.sketch
 
+import com.rm.parrotmetric.ui.Typing.typing
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -29,6 +30,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -481,7 +483,7 @@ private fun PlacedSizes(editor: SketchEditor, sizes: List<PlacedSize>) {
                     BasicTextField(
                         values[i].value,
                         onValueChange = { values[i].value = it },
-                        modifier = Modifier.weight(1f).then(if (i == 0) Modifier.focusRequester(first) else Modifier)
+                        modifier = Modifier.typing().weight(1f).then(if (i == 0) Modifier.focusRequester(first) else Modifier)
                             .onFocusChanged { f -> if (f.isFocused) focused = i else if (focused == i) focused = -1 },
                         textStyle = TextStyle(color = Palette.text, fontSize = 17.sp, fontFamily = FontFamily.Monospace),
                         cursorBrush = SolidColor(Palette.mint),
@@ -513,6 +515,10 @@ private fun DimensionEntry(editor: SketchEditor, edit: DimensionEdit) {
     var value by remember(edit) { mutableStateOf(start) }
     val focus = remember { FocusRequester() }
     LaunchedEffect(edit) { focus.requestFocus() }
+    DisposableEffect(edit) {
+        editor.fieldKey = { c -> value = TextFieldValue(c.toString(), TextRange(1)); focus.requestFocus() }
+        onDispose { editor.fieldKey = null }
+    }
     val label = edit.label
     Surface(color = Palette.surface, shape = RoundedCornerShape(26.dp)) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -525,7 +531,7 @@ private fun DimensionEntry(editor: SketchEditor, edit: DimensionEdit) {
                     BasicTextField(
                         value,
                         onValueChange = { value = it },
-                        modifier = Modifier.weight(1f).focusRequester(focus),
+                        modifier = Modifier.typing().weight(1f).focusRequester(focus),
                         textStyle = TextStyle(color = Palette.text, fontSize = 20.sp, fontFamily = FontFamily.Monospace),
                         cursorBrush = SolidColor(Palette.mint),
                         singleLine = true,
@@ -561,32 +567,41 @@ private fun TextEntry(editor: SketchEditor, edit: TextEdit) {
     var height by remember(edit) { mutableStateOf(old?.height ?: 10.0) }
     var bold by remember(edit) { mutableStateOf(old?.bold ?: false) }
     var degrees by remember(edit) { mutableStateOf((old?.angle ?: 0.0) * 180 / kotlin.math.PI) }
+    var align by remember(edit) { mutableStateOf(old?.align ?: com.rm.parrotmetric.sketch.TextAlign.Left) }
     val focus = remember { FocusRequester() }
     LaunchedEffect(edit) { focus.requestFocus() }
+    DisposableEffect(edit) {
+        editor.fieldKey = { c -> text = TextFieldValue(text.text + c, TextRange(text.text.length + 1)); focus.requestFocus() }
+        onDispose { editor.fieldKey = null }
+    }
     Surface(color = Palette.surface, shape = RoundedCornerShape(26.dp)) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             BasicTextField(
                 text,
                 onValueChange = { text = it },
-                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Palette.ground)
+                modifier = Modifier.typing().fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Palette.ground)
                     .padding(horizontal = 14.dp, vertical = 12.dp).focusRequester(focus),
                 textStyle = TextStyle(color = Palette.text, fontSize = 20.sp),
                 cursorBrush = SolidColor(Palette.mint),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = { editor.commitText(text.text, height, bold, degrees) }),
+                keyboardActions = KeyboardActions(onDone = { editor.commitText(text.text, height, bold, degrees, align) }),
                 decorationBox = { inner -> if (text.text.isEmpty()) Text("Text", color = Palette.faint, fontSize = 20.sp); inner() },
             )
-            val set = { editor.commitText(text.text, height, bold, degrees) }
+            val set = { editor.commitText(text.text, height, bold, degrees, align) }
             com.rm.parrotmetric.ui.design.NumberRow("Height", height, "mm", allowNegative = false, onDone = { set() }) { height = it }
-            com.rm.parrotmetric.ui.design.NumberRow("Angle", degrees, "°", allowNegative = true, onDone = { set() }) { degrees = it }
             com.rm.parrotmetric.ui.design.Toggle("Bold", bold) { bold = it }
+            // Where the point tapped is on the text.
+            com.rm.parrotmetric.ui.design.Segmented(listOf("From the left", "Centred", "From the right"), align.ordinal) {
+                align = com.rm.parrotmetric.sketch.TextAlign.entries[it]
+            }
+            com.rm.parrotmetric.ui.design.NumberRow("Turned", degrees, "°", allowNegative = true, onDone = { set() }) { degrees = it }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Surface(onClick = editor::cancelText, modifier = Modifier.weight(1f).height(50.dp), shape = RoundedCornerShape(18.dp), color = Palette.raised, contentColor = Palette.text) {
                     Box(contentAlignment = Alignment.Center) { Text("Cancel", fontSize = 15.sp, fontWeight = FontWeight.SemiBold) }
                 }
                 Surface(
-                    onClick = { editor.commitText(text.text, height, bold, degrees) },
+                    onClick = { editor.commitText(text.text, height, bold, degrees, align) },
                     modifier = Modifier.weight(1f).height(50.dp), shape = RoundedCornerShape(18.dp), color = Palette.mint, contentColor = Palette.ink,
                 ) {
                     Box(contentAlignment = Alignment.Center) { Text("Set", fontSize = 15.sp, fontWeight = FontWeight.Bold) }

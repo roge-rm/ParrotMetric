@@ -142,6 +142,8 @@ interface NativeCore {
     fun viewFrom(yaw: Float, pitch: Float)
     /** Yaw, pitch, viewport width and height, then the last frame's view-projection matrix. */
     fun cameraState(): FloatArray
+    /** Sketch areas are picked over bodies in front of them. */
+    fun setAreasFirst(on: Boolean)
 }
 
 /** File formats, by the numbers the core uses. */

@@ -313,7 +313,7 @@ fun ModelScreen(
                     sketch?.typedNext(back) == true || (chain.any && chain.next(back))
                 }
                 // A field keeps its own undo, copy and paste.
-                name in fieldKeys && !screenFocused -> false
+                name in fieldKeys && Typing.active -> false
                 name.startsWith("Ctrl+") -> shortcuts.press(name)
                 else -> false
             }
@@ -323,6 +323,13 @@ fun ModelScreen(
             if (e.type != KeyEventType.KeyDown || !screenFocused || finder || keyList || state.screen != AppScreen.Model) return@onKeyEvent false
             val name = keyName(e)
             val c = typedChar(e)
+            // A sheet with fields is open: what's typed goes into it, not to the tools.
+            if (sketch != null && (sketch.editing != null || sketch.textEdit != null || sketch.transform != null)) {
+                if (c != null && c != ' ') {
+                    sketch.fieldKey?.invoke(c) ?: chain.startFirst(c)
+                    return@onKeyEvent true
+                }
+            }
             if (sketch != null && sketch.editing == null && sketch.textEdit == null) {
                 if (c != null && sketch.typeKey(c)) return@onKeyEvent true
                 if (c != null && startsNumber(c)) {

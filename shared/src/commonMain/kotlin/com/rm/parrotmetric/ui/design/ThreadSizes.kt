@@ -5,6 +5,7 @@ object ThreadSizes {
     val all = listOf(
         "M2" to 0.4, "M2.5" to 0.45, "M3" to 0.5, "M4" to 0.7, "M5" to 0.8, "M6" to 1.0,
         "M8" to 1.25, "M10" to 1.5, "M12" to 1.75, "M16" to 2.0, "M20" to 2.5, "M24" to 3.0,
+        "M30" to 3.5, "M36" to 4.0, "M42" to 4.5, "M48" to 5.0, "M56" to 5.5, "M64" to 6.0,
     )
 
     private fun size(name: String) = name.removePrefix("M").toDouble()
