@@ -84,6 +84,11 @@ class WebDavFolder(private val login: DavLogin, private val http: Http) : Projec
         return modified(name)
     }
 
+    override suspend fun rename(from: String, to: String): Boolean {
+        val r = http.send("MOVE", fileUrl(from), auth + mapOf("Destination" to fileUrl(to), "Overwrite" to "F"), null) ?: return false
+        return r.code in 200..299
+    }
+
     private companion object {
         const val PROPS = """<?xml version="1.0" encoding="utf-8"?><d:propfind xmlns:d="DAV:"><d:prop><d:getlastmodified/></d:prop></d:propfind>"""
     }

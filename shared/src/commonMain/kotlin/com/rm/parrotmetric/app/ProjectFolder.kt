@@ -22,6 +22,9 @@ interface ProjectFolder {
 
     /** Writes a whole file, making it if need be. Its new modified time, or null if it couldn't. */
     suspend fun write(name: String, bytes: ByteArray): Long?
+
+    /** Gives a file a new name. False if it couldn't, leaving it as it was. */
+    suspend fun rename(from: String, to: String): Boolean = false
 }
 
 /** A file name for a design called [title], without characters file systems refuse. */

@@ -565,6 +565,39 @@ class AppController(
             else design.insertDesign(name, text)
         }
 
+        override fun rename(title: String) {
+            val name = title.trim()
+            if (name.isEmpty() || name == state.title) return
+            val f = folder
+            val from = folderFile
+            if (f == null || from == null) {
+                // Not in the projects folder yet: the name it's saved under follows the title.
+                state = state.copy(title = name)
+                scheduleAutosave()
+                return
+            }
+            scope.launch {
+                val to = projectFileName(name)
+                if (to != from) {
+                    val taken = withContext(Dispatchers.Default) { runCatching { f.list().map { it.name }.toSet() }.getOrDefault(emptySet()) }
+                    if (to in taken) {
+                        design.message = "There's already a design called ${to.removeSuffix(".pmet")}"
+                        return@launch
+                    }
+                    if (!withContext(Dispatchers.Default) { runCatching { f.rename(from, to) }.getOrDefault(false) }) {
+                        design.message = "Couldn't rename it in ${f.name}"
+                        return@launch
+                    }
+                    folderFile = to
+                    folderStamp = withContext(Dispatchers.Default) { runCatching { f.modified(to) }.getOrNull() }
+                    rememberLastFile()
+                }
+                state = state.copy(title = name)
+                writeToFolder(quiet = true)
+                refreshProjects()
+            }
+        }
+
         override fun updateLinks() {
             scope.launch {
                 val n = bringLinksUpToDate()
@@ -613,7 +646,9 @@ class AppController(
                 }
                 val text = bytes.decodeToString()
                 try {
-                    state = state.copy(title = design.openFile(text))
+                    design.openFile(text)
+                    // In the projects folder a design goes by its file's name, as the list shows it.
+                    state = state.copy(title = name.removeSuffix(".pmet"))
                     document = null
                     folderFile = name
                     folderStamp = stamp

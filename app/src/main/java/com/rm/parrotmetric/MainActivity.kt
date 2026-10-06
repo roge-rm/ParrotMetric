@@ -307,4 +307,14 @@ private class TreeFolder(private val resolver: android.content.ContentResolver, 
             find(name)?.modified ?: System.currentTimeMillis()
         }.getOrNull()
     }
+
+    override suspend fun rename(from: String, to: String) = withContext(Dispatchers.IO) {
+        runCatching {
+            if (find(to) != null) return@runCatching false
+            val c = find(from) ?: return@runCatching false
+            // A provider may change the name it's given, as when one like it is there; that counts as not done.
+            val renamed = DocumentsContract.renameDocument(resolver, DocumentsContract.buildDocumentUriUsingTree(tree, c.id), to) ?: return@runCatching false
+            find(to) != null || renamed.toString().endsWith(Uri.encode(to))
+        }.getOrDefault(false)
+    }
 }

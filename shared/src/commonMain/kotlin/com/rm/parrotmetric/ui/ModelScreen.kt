@@ -36,6 +36,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.foundation.clickable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -183,6 +184,8 @@ interface ModelActions {
     fun insertDesign(name: String?) {}
     /** Brings inserted designs up to date from their files. */
     fun updateLinks() {}
+    /** Gives the design a new name, and its file in the projects folder with it. */
+    fun rename(title: String) {}
     fun quit()
     /** Opens a design from the projects folder. */
     fun openProject(name: String) {}
@@ -554,7 +557,11 @@ private fun TopBar(logo: @Composable () -> Unit, state: ModelState, design: Desi
             }
         }
         Column(Modifier.weight(1f).padding(start = 2.dp)) {
-            Text(state.title, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = Palette.text, maxLines = 1)
+            var renaming by remember { mutableStateOf(false) }
+            Text(
+                state.title, Modifier.clickable { renaming = true }, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = Palette.text, maxLines = 1,
+            )
+            if (renaming) com.rm.parrotmetric.ui.design.NameDialog("Rename", state.title, { renaming = false }) { renaming = false; actions.rename(it) }
             val triangles = design.triangles
             Text(
                 when {

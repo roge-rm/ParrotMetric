@@ -43,7 +43,7 @@ object Manual {
             ManualBlock(ManualKind.Para, "ParrotMetric has a layout for phones and one for large screens. It picks one by the size of the window, or you can set it in Settings. A wide but short screen, like a small tablet on its side, gets the phone layout, with the tool groups spread wider."),
             ManualBlock(ManualKind.Bullet, "On a phone, the tools are in five groups along the bottom: **Sketch**, **Create**, **Modify**, **Construct** and **Inspect**. Tap a group to see its tools. Tool settings open in a panel at the bottom."),
             ManualBlock(ManualKind.Bullet, "On a tablet, a computer or in a browser, every tool is in a toolbar along the top, the parts list is down the left and tool settings open on the right. Tools that come in a few kinds, like the planes, have a small arrow for the rest."),
-            ManualBlock(ManualKind.Para, "The bar at the top has the menu under the parrot, the design's name and how many bodies it has, the parts list, and undo and redo."),
+            ManualBlock(ManualKind.Para, "The bar at the top has the menu under the parrot, the design's name and how many bodies it has, the parts list, and undo and redo. Tap the name to rename the design; in the projects folder its file is renamed too."),
             ManualBlock(ManualKind.Heading, "Moving the view"),
             ManualBlock(ManualKind.Bullet, "One finger turns the view."),
             ManualBlock(ManualKind.Bullet, "Two fingers move it, and pinching zooms."),

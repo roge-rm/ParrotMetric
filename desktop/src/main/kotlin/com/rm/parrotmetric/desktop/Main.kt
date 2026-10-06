@@ -181,6 +181,11 @@ private class LocalFolder(private val dir: File) : ProjectFolder {
         val file = File(dir, name)
         return if (LocalFile(file).write(bytes)) file.lastModified() else null
     }
+
+    override suspend fun rename(from: String, to: String): Boolean {
+        val target = File(dir, to)
+        return !target.exists() && File(dir, from).renameTo(target)
+    }
 }
 
 fun main(args: Array<String>) {

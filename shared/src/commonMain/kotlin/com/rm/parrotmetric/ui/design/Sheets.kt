@@ -237,7 +237,7 @@ fun PartsSheet(editor: DesignEditor, close: () -> Unit) {
 }
 
 @Composable
-private fun NameDialog(title: String, start: String, dismiss: () -> Unit, done: (String) -> Unit) {
+internal fun NameDialog(title: String, start: String, dismiss: () -> Unit, done: (String) -> Unit) {
     // The suggested name is selected, so typing replaces it, and Enter is Done.
     var text by remember { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(start, androidx.compose.ui.text.TextRange(0, start.length))) }
     val focus = remember { androidx.compose.ui.focus.FocusRequester() }

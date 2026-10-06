@@ -8,7 +8,7 @@ ParrotMetric has a layout for phones and one for large screens. It picks one by 
 - On a phone, the tools are in five groups along the bottom: **Sketch**, **Create**, **Modify**, **Construct** and **Inspect**. Tap a group to see its tools. Tool settings open in a panel at the bottom.
 - On a tablet, a computer or in a browser, every tool is in a toolbar along the top, the parts list is down the left and tool settings open on the right. Tools that come in a few kinds, like the planes, have a small arrow for the rest.
 
-The bar at the top has the menu under the parrot, the design's name and how many bodies it has, the parts list, and undo and redo.
+The bar at the top has the menu under the parrot, the design's name and how many bodies it has, the parts list, and undo and redo. Tap the name to rename the design; in the projects folder its file is renamed too.
 
 ## Moving the view
 
