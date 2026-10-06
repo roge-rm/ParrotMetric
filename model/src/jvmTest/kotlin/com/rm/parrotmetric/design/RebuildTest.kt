@@ -153,7 +153,7 @@ private class FakeKernel : Kernel {
         calls += "thread $id $face $pitch" + (if (clearance > 0) " $clearance" else "")
         return make(bodies.getValue(body).let { it.copy(faces = it.faces + "F$id.t0") })
     }
-    override fun loft(id: Int, sections: List<Triple<SketchPlane, List<ProfileCurve>, RegionRef>>, ruled: Boolean): Long {
+    override fun loft(id: Int, sections: List<Triple<SketchPlane, List<ProfileCurve>, RegionRef>>, ruled: Boolean, twist: Double, guide: KernelPath?): Long {
         calls += "loft $id ${sections.size}"
         return make(Box(200.0, 210.0, listOf("F$id.start", "F$id.end")))
     }

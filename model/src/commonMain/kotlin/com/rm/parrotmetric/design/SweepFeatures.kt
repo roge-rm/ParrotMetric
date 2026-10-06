@@ -60,13 +60,20 @@ data class ThreadFeature(override val id: Int, override val name: String, val fa
 /** One area of one sketch, for a loft. */
 data class LoftSection(val sketchId: Int, val region: RegionRef)
 
-/** A solid through areas of two or more sketches, in order: smooth, or [ruled] straight from one to the next. */
+/**
+ * A solid through areas of two or more sketches, in order: smooth, or [ruled]
+ * straight from one to the next. [twist] radians turns the areas about their
+ * middles, none on the first and all of it on the last. With a [guide], the
+ * areas grow and shrink to touch it all the way.
+ */
 data class LoftFeature(
     override val id: Int,
     override val name: String,
     val sections: List<LoftSection>,
     val ruled: Boolean,
     val operation: Operation,
+    val twist: Double = 0.0,
+    val guide: PathRef? = null,
 ) : Feature() {
     override fun key() = this
 }

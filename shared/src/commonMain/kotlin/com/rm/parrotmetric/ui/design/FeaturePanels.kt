@@ -390,6 +390,13 @@ private fun ThreadSettings(editor: DesignEditor, d: DesignEditor.ThreadDraft) {
 private fun LoftSettings(editor: DesignEditor, d: DesignEditor.LoftDraft) {
     Header("Loft", Icons.loft, Palette.create, if (d.sections.isEmpty()) null else count(d.sections.size, "area", "areas"))
     Toggle("Straight between them", d.ruled) { d.ruled = it; editor.draftChanged() }
+    Field(editor, d, "twist", "Twist", d.twistDegrees, "°", allowNegative = true) { d.twistDegrees = it; editor.draftChanged() }
+    Toggle("Follow a guide", d.guideOn) { d.guideOn = it; editor.draftChanged() }
+    if (d.guideOn) PathRow(editor, null, d.guideByEdges, d.guideSketch, d.guideEdges.size) { byEdges, sketch ->
+        d.guideByEdges = byEdges
+        d.guideSketch = sketch
+        editor.draftChanged()
+    }
     OperationRow(d.operation) {
         d.operation = it
         editor.draftChanged()

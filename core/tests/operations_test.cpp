@@ -1,3 +1,6 @@
+#include <BRepBuilderAPI_MakeWire.hxx>
+#include <TColgp_HArray1OfPnt.hxx>
+#include <GeomAPI_Interpolate.hxx>
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
@@ -603,6 +606,28 @@ TEST_CASE("a loft between two squares is a box") {
     CHECK(std::count(names.begin(), names.end(), "F1.start") == 1);
     CHECK(std::count(names.begin(), names.end(), "F1.s2") == 1);
     CHECK_THROWS(loft(1, {low}, false));
+}
+
+TEST_CASE("a loft can twist and follow a guide") {
+    gp_Ax3 up(gp_Pnt(0, 0, 20), gp::DZ(), gp::DX());
+    LoftProfile low{top, rectangle(10, 10), {{1, 2, 3, 4}, 5, 5}};
+    LoftProfile high{up, rectangle(10, 10), {{1, 2, 3, 4}, 5, 5}};
+    // A quarter of a right angle's turn: the top square's corners reach out past the bottom's.
+    NamedShape twisted = loft(1, {low, high}, false, M_PI / 4);
+    auto b = bounds(twisted);
+    CHECK(b[3] == Catch::Approx(5 + 5 * std::sqrt(2.0)).margin(0.05));
+    CHECK(volume(twisted) < 2000);
+    CHECK(volume(twisted) > 1500);
+    // A guide bulging out beside the right side: the middle swells to touch it.
+    Handle(TColgp_HArray1OfPnt) pts = new TColgp_HArray1OfPnt(1, 3);
+    pts->SetValue(1, gp_Pnt(10, 5, 0));
+    pts->SetValue(2, gp_Pnt(13, 5, 10));
+    pts->SetValue(3, gp_Pnt(10, 5, 20));
+    GeomAPI_Interpolate through(pts, false, 1e-7);
+    through.Perform();
+    TopoDS_Wire guide = BRepBuilderAPI_MakeWire(BRepBuilderAPI_MakeEdge(through.Curve()).Edge()).Wire();
+    NamedShape guided = loft(2, {low, high}, false, 0, &guide);
+    CHECK(volume(guided) > 3000);
 }
 
 TEST_CASE("pressing and pulling a flat face keeps its name") {

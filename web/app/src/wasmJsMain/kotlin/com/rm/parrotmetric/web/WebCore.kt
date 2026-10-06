@@ -407,7 +407,7 @@ object WebCore : NativeCore {
         return call(38, args).ints()
     }
 
-    override fun loft(id: Int, planes: DoubleArray, curveCounts: IntArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, pickCounts: IntArray, pickIds: IntArray, pickPoints: DoubleArray, ruled: Boolean): Long {
+    override fun loft(id: Int, planes: DoubleArray, curveCounts: IntArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, pickCounts: IntArray, pickIds: IntArray, pickPoints: DoubleArray, ruled: Boolean, twist: Double, hasGuide: Boolean, pathPlane: DoubleArray, pathKinds: IntArray, pathIds: IntArray, pathNums: DoubleArray, pathBody: Long, pathEdges: Array<String>): Long {
         val args = Args()
         args.int(id)
         args.doubles(planes)
@@ -419,6 +419,14 @@ object WebCore : NativeCore {
         args.ints(pickIds)
         args.doubles(pickPoints)
         args.boolean(ruled)
+        args.double(twist)
+        args.boolean(hasGuide)
+        args.doubles(pathPlane)
+        args.ints(pathKinds)
+        args.ints(pathIds)
+        args.doubles(pathNums)
+        args.long(pathBody)
+        args.strings(pathEdges)
         return call(39, args).long()
     }
 

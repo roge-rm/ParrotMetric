@@ -43,7 +43,7 @@ JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_thread(JNIEnv*, jobject, j
 JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_lipTool(JNIEnv*, jobject, jint, jlong, jstring, jdouble, jdouble, jdouble, jstring);
 JNIEXPORT jdoubleArray JNICALL Java_com_rm_parrotmetric_Core_textOutline(JNIEnv*, jobject, jstring, jdouble, jboolean);
 JNIEXPORT jintArray JNICALL Java_com_rm_parrotmetric_Core_canvasImage(JNIEnv*, jobject, jint, jbyteArray);
-JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_loft(JNIEnv*, jobject, jint, jdoubleArray, jintArray, jintArray, jintArray, jdoubleArray, jintArray, jintArray, jdoubleArray, jboolean);
+JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_loft(JNIEnv*, jobject, jint, jdoubleArray, jintArray, jintArray, jintArray, jdoubleArray, jintArray, jintArray, jdoubleArray, jboolean, jdouble, jboolean, jdoubleArray, jintArray, jintArray, jdoubleArray, jlong, jobjectArray);
 JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_primitive(JNIEnv*, jobject, jint, jdoubleArray, jint, jdouble, jdouble, jdouble, jdouble, jdouble);
 JNIEXPORT jdoubleArray JNICALL Java_com_rm_parrotmetric_Core_bounds(JNIEnv*, jobject, jlong);
 JNIEXPORT jlongArray JNICALL Java_com_rm_parrotmetric_Core_splitBy(JNIEnv*, jobject, jint, jlong, jlong);
@@ -522,7 +522,15 @@ void dispatch(int call, Reader& in, Writer& out, JNIEnv* env) {
             auto a7 = in.ints();
             auto a8 = in.doubles();
             auto a9 = in.boolean();
-            auto r = Java_com_rm_parrotmetric_Core_loft(env, nullptr, a0, a1, a2, a3, a4, a5, a6, a7, a8, a9);
+            auto a10 = in.f64();
+            auto a11 = in.boolean();
+            auto a12 = in.doubles();
+            auto a13 = in.ints();
+            auto a14 = in.ints();
+            auto a15 = in.doubles();
+            auto a16 = in.i64();
+            auto a17 = in.strings();
+            auto r = Java_com_rm_parrotmetric_Core_loft(env, nullptr, a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17);
             if (!failed()) out.put(r);
             break;
         }

@@ -54,7 +54,7 @@ object Core : NativeCore {
     override external fun lipTool(id: Int, body: Long, face: String, inside: Double, outside: Double, height: Double, tag: String): Long
     override external fun textOutline(text: String, height: Double, bold: Boolean): DoubleArray
     override external fun canvasImage(key: Int, bytes: ByteArray): IntArray?
-    override external fun loft(id: Int, planes: DoubleArray, curveCounts: IntArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, pickCounts: IntArray, pickIds: IntArray, pickPoints: DoubleArray, ruled: Boolean): Long
+    override external fun loft(id: Int, planes: DoubleArray, curveCounts: IntArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, pickCounts: IntArray, pickIds: IntArray, pickPoints: DoubleArray, ruled: Boolean, twist: Double, hasGuide: Boolean, pathPlane: DoubleArray, pathKinds: IntArray, pathIds: IntArray, pathNums: DoubleArray, pathBody: Long, pathEdges: Array<String>): Long
     override external fun primitive(id: Int, plane: DoubleArray, kind: Int, u: Double, v: Double, a: Double, b: Double, c: Double): Long
     override external fun bounds(body: Long): DoubleArray
     override external fun splitBy(id: Int, body: Long, tool: Long): LongArray

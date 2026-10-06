@@ -205,8 +205,14 @@ struct LoftProfile {
     RegionPick pick;
 };
 
-/** A solid through areas in order, smooth or [ruled] (straight between them). The ends are F<id>.start and F<id>.end. */
-NamedShape loft(int id, const std::vector<LoftProfile>& profiles, bool ruled);
+/**
+ * A solid through areas in order, smooth or [ruled] (straight between them).
+ * [twist] radians turns the areas about their middles, shared out from none on
+ * the first to all of it on the last. With a [guide], the areas are swept along
+ * a path through their middles, growing and shrinking to touch the guide all
+ * the way. The ends are F<id>.start and F<id>.end.
+ */
+NamedShape loft(int id, const std::vector<LoftProfile>& profiles, bool ruled, double twist = 0, const TopoDS_Wire* guide = nullptr);
 
 /** The box round a body: x, y, z low, then x, y, z high. */
 std::array<double, 6> bounds(const NamedShape& body);

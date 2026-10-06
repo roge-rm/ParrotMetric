@@ -177,12 +177,19 @@ class CoreKernel(private val core: NativeCore) : Kernel {
     override fun lipTool(id: Int, body: Long, face: String, inside: Double, outside: Double, height: Double, tag: String) =
         call { core.lipTool(id, body, face, inside, outside, height, tag) }
 
-    override fun loft(id: Int, sections: List<Triple<SketchPlane, List<ProfileCurve>, RegionRef>>, ruled: Boolean): Long {
+    override fun loft(id: Int, sections: List<Triple<SketchPlane, List<ProfileCurve>, RegionRef>>, ruled: Boolean, twist: Double, guide: KernelPath?): Long {
         val c = Curves(sections.flatMap { it.second })
         val p = Picks(sections.map { it.third })
         val planes = sections.flatMap { it.first.numbers().asList() }.toDoubleArray()
         val counts = IntArray(sections.size) { sections[it].second.size }
-        return call { core.loft(id, planes, counts, c.kinds, c.ids, c.nums, p.counts, p.ids, p.points, ruled) }
+        if (guide == null) return call {
+            core.loft(id, planes, counts, c.kinds, c.ids, c.nums, p.counts, p.ids, p.points, ruled, twist, false, DoubleArray(9), IntArray(0), IntArray(0), DoubleArray(0), 0L, emptyArray())
+        }
+        return call {
+            withPath(guide) { pp, pc, body, edges ->
+                core.loft(id, planes, counts, c.kinds, c.ids, c.nums, p.counts, p.ids, p.points, ruled, twist, true, pp, pc.kinds, pc.ids, pc.nums, body, edges)
+            }
+        }
     }
 
     override fun corner(body: Long, name: String) = core.corner(body, name)?.let { Vec3(it[0], it[1], it[2]) }

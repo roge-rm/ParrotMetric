@@ -60,7 +60,8 @@ interface NativeCore {
     /** Reads a picture (PNG or JPEG) and keeps it under key for canvases; its width and height, or null if it can't be read. */
     fun canvasImage(key: Int, bytes: ByteArray): IntArray?
     /** A loft through one area of each sketch: nine plane numbers and a curve count per sketch, then one pick per sketch. */
-    fun loft(id: Int, planes: DoubleArray, curveCounts: IntArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, pickCounts: IntArray, pickIds: IntArray, pickPoints: DoubleArray, ruled: Boolean): Long
+    /** With [hasGuide], the guide is the path given as for a sweep. */
+    fun loft(id: Int, planes: DoubleArray, curveCounts: IntArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, pickCounts: IntArray, pickIds: IntArray, pickPoints: DoubleArray, ruled: Boolean, twist: Double, hasGuide: Boolean, pathPlane: DoubleArray, pathKinds: IntArray, pathIds: IntArray, pathNums: DoubleArray, pathBody: Long, pathEdges: Array<String>): Long
     /** kind: 0 box, 1 cylinder, 2 sphere, 3 torus, 4 cone; sizes as Kernel.primitive. */
     fun primitive(id: Int, plane: DoubleArray, kind: Int, u: Double, v: Double, a: Double, b: Double, c: Double): Long
     /** The box round a body: x, y, z low, then high. */

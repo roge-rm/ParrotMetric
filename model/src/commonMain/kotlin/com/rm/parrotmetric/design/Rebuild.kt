@@ -358,7 +358,8 @@ class Rebuilder(private val kernel: Kernel) {
                 val sketch = sketchOf(s.sketchId, all)
                 Triple(planes[s.sketchId] ?: throw KernelException("A sketch of it couldn't be built"), sketch.curves(), s.region)
             }
-            applyTool(f, kernel.loft(f.id, sections, f.ruled), f.operation, bodies, planes, made)
+            val guide = f.guide?.let { pathOf(it, f, bodies, planes, all) }
+            applyTool(f, kernel.loft(f.id, sections, f.ruled, f.twist, guide), f.operation, bodies, planes, made)
         }
         is CanvasFeature -> {
             val plane = resolvePlane(f.plane, bodies, f, planes)

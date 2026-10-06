@@ -805,7 +805,7 @@ class DesignEditor(
         }.toSet()
         // The open panel's own sketches stay, so their picks can be shown and added to.
         if (sculpting != null) return emptyList()
-        val keep = setOfNotNull((draft as? AreaDraft)?.sketchId) + ((draft as? LoftDraft)?.sections?.map { it.sketchId } ?: emptyList())
+        val keep = setOfNotNull((draft as? AreaDraft)?.sketchId, (draft as? LoftDraft)?.guideSketch) + ((draft as? LoftDraft)?.sections?.map { it.sketchId } ?: emptyList())
         return features.filterIsInstance<SketchFeature>().filter { it.id !in used || it.id in keep }
     }
 
@@ -1427,6 +1427,11 @@ class DesignEditor(
                 rebuild()
             }
             is LoftDraft -> {
+                if (d.guideOn && d.guideByEdges) {
+                    d.guideEdges = viewport.selectedEdges()
+                    rebuild()
+                    return
+                }
                 // A tap on empty space keeps what's picked, as Sweep does.
                 loftPicks().takeIf { it.isNotEmpty() }?.let { picks ->
                     d.sections = if (redrawing) d.sections + picks.filter { p -> d.sections.none { it.sketchId == p.sketchId } } else picks
@@ -1506,7 +1511,7 @@ class DesignEditor(
             is JointDraft -> viewport.select(listOfNotNull(d.edge), emptyList(), listOfNotNull(d.face))
             is SweepDraft -> viewport.select(d.pathEdges, regionPairs(d.sketchId, d.regions))
             is PipeDraft -> viewport.select(d.pathEdges, emptyList())
-            is LoftDraft -> viewport.select(emptyList(), d.sections.flatMap { regionPairs(it.sketchId, listOf(it.region)) })
+            is LoftDraft -> viewport.select(if (d.guideOn && d.guideByEdges) d.guideEdges else emptyList(), d.sections.flatMap { regionPairs(it.sketchId, listOf(it.region)) })
             is ThreadDraft -> viewport.select(emptyList(), emptyList(), listOfNotNull(d.face))
             is LipDraft -> viewport.select(emptyList(), emptyList(), listOfNotNull(d.face))
             is AreaDraft -> {
@@ -1813,8 +1818,20 @@ class DesignEditor(
         var sections by mutableStateOf(editing?.sections ?: emptyList())
         var ruled by mutableStateOf(editing?.ruled ?: false)
         var operation by mutableStateOf(editing?.operation ?: Operation.NewBody)
-        override fun feature(): Feature? = if (sections.size < 2) null else com.rm.parrotmetric.design.LoftFeature(id, name, sections, ruled, operation)
-        override fun missing() = "Tap an area in each of two or more sketches"
+        var twistDegrees by mutableStateOf((editing?.twist ?: 0.0) * 180 / PI)
+        /** A guide the areas grow and shrink to touch: a sketch's line, or edges picked in the view. */
+        var guideOn by mutableStateOf(editing?.guide != null)
+        var guideByEdges by mutableStateOf(editing?.guide is com.rm.parrotmetric.design.PathRef.Edges)
+        var guideSketch by mutableStateOf((editing?.guide as? com.rm.parrotmetric.design.PathRef.Sketch)?.sketchId)
+        var guideEdges by mutableStateOf((editing?.guide as? com.rm.parrotmetric.design.PathRef.Edges)?.names ?: emptyList())
+        override fun feature(): Feature? {
+            if (sections.size < 2) return null
+            val guide = if (!guideOn) null
+            else if (guideByEdges) guideEdges.takeIf { it.isNotEmpty() }?.let { com.rm.parrotmetric.design.PathRef.Edges(it) } ?: return null
+            else guideSketch?.let { com.rm.parrotmetric.design.PathRef.Sketch(it) } ?: return null
+            return com.rm.parrotmetric.design.LoftFeature(id, name, sections, ruled, operation, twistDegrees * PI / 180, guide)
+        }
+        override fun missing() = if (sections.size < 2) "Tap an area in each of two or more sketches" else "Pick the guide"
     }
 
     inner class RevolveDraft(editing: RevolveFeature?) : AreaDraft(editing) {

@@ -73,6 +73,7 @@ object Parametrics {
                 else -> f
             }
             is RevolveFeature -> if (field == "angle") f.copy(angle = rad) else f
+            is LoftFeature -> if (field == "twist") f.copy(twist = rad) else f
             is FilletFeature -> when (field) {
                 "size" -> f.copy(radius = v)
                 "second" -> f.copy(second = v)

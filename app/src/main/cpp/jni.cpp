@@ -1047,7 +1047,9 @@ JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_thread(JNIEnv* env, jobjec
  */
 JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_loft(JNIEnv* env, jobject, jint id, jdoubleArray planes, jintArray curveCounts, jintArray kinds,
                                                           jintArray ids, jdoubleArray nums, jintArray pickCounts, jintArray pickIds,
-                                                          jdoubleArray pickPoints, jboolean ruled) {
+                                                          jdoubleArray pickPoints, jboolean ruled, jdouble twist, jboolean hasGuide,
+                                                          jdoubleArray pathPlane, jintArray pathKinds, jintArray pathIds, jdoubleArray pathNums,
+                                                          jlong pathBody, jobjectArray pathEdges) {
     try {
         auto p = doubles(env, planes);
         auto counts = ints(env, curveCounts);
@@ -1061,7 +1063,9 @@ JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_loft(JNIEnv* env, jobject,
             profiles.push_back({planeOf(p.data() + s * 9), curvesOf(k.data() + start, i.data() + start, n.data() + start * kCurveNumbers, c), picks[s]});
             start += c;
         }
-        return keep(pm::loft(id, profiles, ruled));
+        if (!hasGuide) return keep(pm::loft(id, profiles, ruled, twist));
+        TopoDS_Wire guide = pathOf(env, pathPlane, pathKinds, pathIds, pathNums, pathBody, pathEdges);
+        return keep(pm::loft(id, profiles, ruled, twist, &guide));
     } catch (const std::exception& e) {
         fail(env, e.what());
         return 0;

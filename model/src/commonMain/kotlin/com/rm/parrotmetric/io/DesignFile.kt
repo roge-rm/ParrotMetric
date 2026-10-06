@@ -237,7 +237,7 @@ object DesignFile {
             )
             is LoftFeature -> mapOf(
                 "type" to "loft", "sections" to f.sections.map { mapOf("sketch" to it.sketchId, "region" to writeRegions(listOf(it.region)).first()) },
-                "ruled" to f.ruled, "operation" to f.operation.name,
+                "ruled" to f.ruled, "operation" to f.operation.name, "twist" to f.twist, "guide" to f.guide?.let { path(it) },
             )
             is AlignFeature -> mapOf(
                 "type" to "align", "bodies" to f.bodies, "face" to f.face, "target" to plane(f.target),
@@ -346,7 +346,7 @@ object DesignFile {
             )
             "loft" -> LoftFeature(
                 id, name, o.arr("sections").map { s -> s as Json.Obj; LoftSection(s.int("sketch"), readRegions(listOf(s.obj("region"))).first()) },
-                o.bool("ruled"), Operation.valueOf(o.str("operation")),
+                o.bool("ruled"), Operation.valueOf(o.str("operation")), o.numOr("twist", 0.0), (o["guide"] as? Json.Obj)?.let { path(it) },
             )
             "align" -> AlignFeature(
                 id, name, strings(o.arr("bodies")), o.str("face"), plane(o.obj("target")), o.bool("sameWay"), o.bool("centred"), o.numOr("gap", 0.0),

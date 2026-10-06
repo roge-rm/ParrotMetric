@@ -124,7 +124,7 @@ interface Kernel {
      */
     fun lipTool(id: Int, body: Long, face: String, inside: Double, outside: Double, height: Double, tag: String): Long
     /** A solid through one area of each sketch, in order. */
-    fun loft(id: Int, sections: List<Triple<SketchPlane, List<ProfileCurve>, RegionRef>>, ruled: Boolean): Long
+    fun loft(id: Int, sections: List<Triple<SketchPlane, List<ProfileCurve>, RegionRef>>, ruled: Boolean, twist: Double = 0.0, guide: KernelPath? = null): Long
     fun retain(body: Long)
     fun release(body: Long)
     /** Where a named face (or edge) of a body is and how big, to find it again by shape; null if the body hasn't got it. */

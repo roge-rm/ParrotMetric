@@ -146,6 +146,8 @@ object Manual {
             ManualBlock(ManualKind.Para, "Moves areas along a path: a sketch's curves, or edges you pick. Pick the areas, start **Sweep**, then choose the path under **Along**."),
             ManualBlock(ManualKind.Heading, "Loft"),
             ManualBlock(ManualKind.Para, "Joins areas in different sketches into one shape, in the order you pick them. Each sketch is usually on a plane above the last. **Straight between them** joins them with flat sides instead of a smooth curve through all of them."),
+            ManualBlock(ManualKind.Bullet, "**Twist** turns the areas round, the last by the angle given and those between in step, for twisted vases and columns."),
+            ManualBlock(ManualKind.Bullet, "**Follow a guide** makes the sides run along a line from a sketch, or edges picked in the view. The line should start on the first area and end on the last."),
             ManualBlock(ManualKind.Heading, "Pipe"),
             ManualBlock(ManualKind.Para, "A round pipe along a path, with its **Diameter**. **Hollow** makes it a tube with the inside diameter you give."),
             ManualBlock(ManualKind.Heading, "Coil"),
