@@ -928,6 +928,16 @@ class DesignEditor(
         changed()
     }
 
+    /** Sets parameters from a CSV of name, expression and value, adding new ones, and says what changed. */
+    fun readParameterCsv(text: String) {
+        val r = com.rm.parrotmetric.io.ParameterCsv.read(text, design.parameters)
+        if (r.changed + r.added > 0) setParameters(r.parameters)
+        message = listOfNotNull(
+            "Changed ${r.changed}, added ${r.added}",
+            if (r.skipped > 0) "skipped ${r.skipped} without a usable name or value" else null,
+        ).joinToString(", ")
+    }
+
     private fun featuresToBuild(): List<Feature> = com.rm.parrotmetric.design.Parametrics.apply(design, rawFeatures())
 
     /**

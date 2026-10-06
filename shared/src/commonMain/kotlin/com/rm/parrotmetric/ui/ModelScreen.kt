@@ -143,6 +143,8 @@ interface ModelActions {
     fun export(request: com.rm.parrotmetric.ui.design.ExportRequest)
     /** Asks where to save a file named [name], then writes what [bytes] makes, off the main thread. */
     fun saveFile(name: String, bytes: () -> ByteArray) {}
+    /** Asks for a file and calls back with its name and contents (null if unreadable), without opening it as a design. */
+    fun readFile(then: (name: String, bytes: ByteArray?) -> Unit) {}
     /** Today, year-month-day, for a drawing's title block. */
     fun today(): String = com.rm.parrotmetric.ui.drawing.DrawingState.today()
     /** Hands the bodies to an app such as a slicer, one of [ModelState.handOffs]. */
@@ -486,7 +488,7 @@ fun ModelScreen(
                     } else if (sheet == "versions") {
                         com.rm.parrotmetric.ui.design.VersionsSheet(design, state.title, actions::today) { sheet = null }
                     } else if (sheet == "parameters") {
-                        com.rm.parrotmetric.ui.design.ParametersSheet(design) { sheet = null }
+                        com.rm.parrotmetric.ui.design.ParametersSheet(design, actions) { sheet = null }
                     } else if (sheet == "export") {
                         com.rm.parrotmetric.ui.design.ExportSheet(design, { sheet = null }, state.handOffs, { to, r -> actions.handOff(to, r); sheet = null }) { actions.export(it); sheet = null }
                     } else {
@@ -898,7 +900,7 @@ private fun ExpandedModel(
                     sheet == "printcheck" -> com.rm.parrotmetric.ui.design.PrintCheckSheet(design) { design.stopPrintCheck(); setSheet(null) }
                     sheet == "surfacecheck" -> com.rm.parrotmetric.ui.design.SurfaceCheckSheet(design) { design.stopPrintCheck(); setSheet(null) }
                     sheet == "interference" -> com.rm.parrotmetric.ui.design.InterferenceSheet(design) { setSheet(null) }
-                    sheet == "parameters" -> com.rm.parrotmetric.ui.design.ParametersSheet(design) { setSheet(null) }
+                    sheet == "parameters" -> com.rm.parrotmetric.ui.design.ParametersSheet(design, actions) { setSheet(null) }
                     sheet == "insert" -> com.rm.parrotmetric.ui.design.InsertSheet(state.projects.map { it.name }, actions::insertDesign, actions::updateLinks) { setSheet(null) }
                     sheet == "partslist" -> com.rm.parrotmetric.ui.design.PartsListSheet(design) { setSheet(null) }
                     sheet == "versions" -> com.rm.parrotmetric.ui.design.VersionsSheet(design, state.title, actions::today) { setSheet(null) }

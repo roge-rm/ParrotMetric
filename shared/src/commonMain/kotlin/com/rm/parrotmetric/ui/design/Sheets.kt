@@ -264,7 +264,7 @@ internal fun NameDialog(title: String, start: String, dismiss: () -> Unit, done:
 
 /** The parameters table: named values any number field can use. */
 @Composable
-fun ParametersSheet(editor: DesignEditor, close: () -> Unit) {
+fun ParametersSheet(editor: DesignEditor, actions: com.rm.parrotmetric.ui.ModelActions, close: () -> Unit) {
     editor.version
     val list = editor.design.parameters.toList()
     val values = editor.names()
@@ -304,6 +304,17 @@ fun ParametersSheet(editor: DesignEditor, close: () -> Unit) {
         }
         Surface(onClick = { adding = true }, modifier = Modifier.fillMaxWidth().height(46.dp), shape = RoundedCornerShape(16.dp), color = Palette.raised, contentColor = Palette.text) {
             Box(contentAlignment = Alignment.Center) { Text("Add a parameter", fontSize = 14.sp, fontWeight = FontWeight.SemiBold) }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (list.isNotEmpty()) TextButton(onClick = {
+                val text = com.rm.parrotmetric.io.ParameterCsv.write(list)
+                actions.saveFile("Parameters.csv") { text.encodeToByteArray() }
+            }) { Text("Save as CSV", color = Palette.mint) }
+            TextButton(onClick = {
+                actions.readFile { _, bytes ->
+                    if (bytes == null) editor.message = "Couldn't read the file" else editor.readParameterCsv(bytes.decodeToString())
+                }
+            }) { Text("Read CSV", color = Palette.mint) }
         }
     }
     if (naming) NameDialog("New configuration", "Configuration ${editor.design.configurations.size + 1}", { naming = false }) { name ->
