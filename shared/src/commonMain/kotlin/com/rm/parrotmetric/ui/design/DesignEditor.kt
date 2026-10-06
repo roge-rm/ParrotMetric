@@ -531,10 +531,11 @@ class DesignEditor(
         return title
     }
 
-    /** Starts again with nothing. Undo brings the old design back. */
+    /** Starts again with nothing. Undo brings the old design back, but not its versions, which stay in its file. */
     fun newDesign() {
         checkpoint()
         design.load(emptyList(), 0)
+        design.versions.clear()
         panel = null
         changed(refit = true)
     }
@@ -644,6 +645,40 @@ class DesignEditor(
         val fasteners = hardware.groupBy { b.hardware.getValue(it.label) }.map { (what, list) -> PartLine(what, list.size, null, null) }
         return lines + fasteners.sortedBy { it.name }
     }
+
+    /** Keeps a copy of the design as it is now, named, for going back to. [title] and [date] go with it. */
+    fun saveVersion(name: String, title: String, date: String) {
+        design.versions += com.rm.parrotmetric.design.Design.Version(name.trim().ifEmpty { "Version ${design.versions.size + 1}" }, date, DesignFile.write(design, title, withVersions = false))
+        versionsChanged++
+        onHistoryChanged()
+    }
+
+    /** Makes the design what it was in a version. Undo brings back what it was before. */
+    fun goBackTo(v: com.rm.parrotmetric.design.Design.Version) {
+        checkpoint()
+        try {
+            DesignFile.read(v.text, design, keepVersions = true)
+        } catch (e: IllegalArgumentException) {
+            undoStack.removeLastOrNull()?.let { design.restore(it) }
+            message = "That version can't be read"
+            return
+        }
+        panel = null
+        changed(refit = true)
+    }
+
+    fun deleteVersion(v: com.rm.parrotmetric.design.Design.Version) {
+        design.versions.remove(v)
+        versionsChanged++
+        onHistoryChanged()
+    }
+
+    /** Goes up when the versions change, to show them again. */
+    var versionsChanged by mutableIntStateOf(0)
+        private set
+
+    /** A sketch's shapes as a DXF file's text. */
+    fun sketchDxf(id: Int): String? = (design.feature(id) as? SketchFeature)?.let { com.rm.parrotmetric.drawing.SketchDxf.write(it.sketch) }
 
     fun delete(id: Int) {
         checkpoint()

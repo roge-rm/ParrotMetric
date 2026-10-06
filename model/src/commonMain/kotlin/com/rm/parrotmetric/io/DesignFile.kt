@@ -83,7 +83,8 @@ object DesignFile {
 
     val extraCodecs = mutableListOf<Codec>()
 
-    fun write(design: Design, title: String): String = Json.obj(
+    /** The design as a file; [withVersions] puts its named versions in too, which a version's own copy hasn't. */
+    fun write(design: Design, title: String, withVersions: Boolean = true): String = Json.obj(
         "format" to "parrotmetric",
         "version" to VERSION,
         "title" to title,
@@ -103,6 +104,7 @@ object DesignFile {
         "fonts" to design.fonts.filterKeys { name ->
             design.features.any { f -> f is SketchFeature && f.sketch.texts.any { it.font == name } }
         }.mapValues { Base64.encode(it.value) },
+        "versions" to if (withVersions) design.versions.map { mapOf("name" to it.name, "date" to it.date, "text" to it.text) } else null,
         // Only those of features still there.
         "hints" to design.hints.filterKeys { k -> design.feature(k.substringBefore(':').toIntOrNull() ?: -1) != null }
             .mapValues { it.value.toList() },
@@ -116,7 +118,8 @@ object DesignFile {
     }
 
     /** Reads a file into the design. Returns its title. Throws IllegalArgumentException if it can't. */
-    fun read(text: String, into: Design): String {
+    /** Reads a design file into [into], its title back. With [keepVersions] the named versions [into] has stay as they are. */
+    fun read(text: String, into: Design, keepVersions: Boolean = false): String {
         val root = Json.parse(text) as? Json.Obj ?: throw IllegalArgumentException("Not a design file")
         if (root["format"] != Json.Str("parrotmetric")) throw IllegalArgumentException("Not a design file")
         if (root.int("version") > VERSION) throw IllegalArgumentException("This file was saved by a newer ParrotMetric")
@@ -146,6 +149,13 @@ object DesignFile {
             (root["hiddenPlanes"] as? Json.Arr)?.items?.map { (it as Json.Num).value.toInt() }?.toSet() ?: emptySet(),
         )
         into.drawing = (root["drawing"] as? Json.Obj)?.let { DrawingFile.read(it) }
+        if (!keepVersions) {
+            into.versions.clear()
+            for (v in root.arr("versions")) {
+                v as Json.Obj
+                into.versions += Design.Version(v.str("name"), v.str("date"), v.str("text"))
+            }
+        }
         into.fonts.clear()
         (root["fonts"] as? Json.Obj)?.fields?.forEach { (name, v) -> (v as? Json.Str)?.let { into.fonts[name] = Base64.decode(it.value) } }
         return (root["title"] as? Json.Str)?.value ?: "Untitled"

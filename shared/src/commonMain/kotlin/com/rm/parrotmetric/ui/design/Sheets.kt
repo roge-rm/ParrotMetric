@@ -521,3 +521,33 @@ fun PartsListSheet(editor: DesignEditor, close: () -> Unit) {
         Slider(value = editor.explode.toFloat(), onValueChange = { editor.explodeBy(it.toDouble()) }, valueRange = 0f..2f)
     }
 }
+
+/** Named versions of the design: keep one, or go back to one. */
+@Composable
+fun VersionsSheet(editor: DesignEditor, title: String, today: () -> String, close: () -> Unit) {
+    editor.versionsChanged
+    var naming by remember { mutableStateOf(false) }
+    SheetFrame("Versions", close) {
+        val versions = editor.design.versions.reversed()
+        if (versions.isEmpty()) Text("None kept yet", fontSize = 14.sp, color = Palette.muted)
+        for (v in versions) Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(v.name, fontSize = 15.sp, color = Palette.text)
+                Text(v.date, fontSize = 12.sp, color = Palette.muted)
+            }
+            var menu by remember { mutableStateOf(false) }
+            Box {
+                TextButton(onClick = { menu = true }) { Text("Go back…", color = Palette.mint) }
+                DropdownMenu(menu, onDismissRequest = { menu = false }, containerColor = Palette.raised) {
+                    DropdownMenuItem({ Text("Go back to this version") }, onClick = { menu = false; editor.goBackTo(v); close() })
+                    DropdownMenuItem({ Text("Delete it") }, onClick = { menu = false; editor.deleteVersion(v) })
+                }
+            }
+        }
+        TextButton(onClick = { naming = true }) { Text("Keep this version…", color = Palette.mint) }
+    }
+    if (naming) NameDialog("Keep this version", "Version ${editor.design.versions.size + 1}", { naming = false }) {
+        editor.saveVersion(it, title, today())
+        naming = false
+    }
+}

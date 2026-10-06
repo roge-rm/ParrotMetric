@@ -40,3 +40,5 @@ Each step is a chip along the bottom: the sketch, the extrude and the fillet. Ta
 ## Saving and printing
 
 Your design is saved as you go, and comes back next time with **Continue**. To keep it under a name, use **Save as…** in the menu under the parrot in the top corner. To print it, use **Export…** in the same menu and pick STL or 3MF.
+
+**Versions…** in that menu keeps copies of the design as it is now under a name, such as "Before the lid", to go back to later. They're kept in the design's file. Going back to one can be undone.

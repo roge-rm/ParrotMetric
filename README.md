@@ -131,6 +131,9 @@ The box has rounded corners, a hollow, vents and a lid on a hinge joint, with it
 - Import STEP and IGES as solids you can keep working on
 - A projects folder, so your designs are the same on every device: a folder a sync app looks after (Nextcloud, Syncthing and the like), or a folder on a WebDAV server such as Nextcloud. If a design was changed in two places at once, both versions are kept
 - Autosave every 30 seconds, and whenever it goes to the background or closes, so a crash or a phone call doesn't lose your work
+- Named versions kept in the design's file, to go back to
+- Tap the design's name to rename it and its file
+- A sketch saved as DXF, for a laser cutter
 
 ### Controls
 

@@ -28,6 +28,12 @@ class Design {
     val expressions = mutableMapOf<Int, Map<String, String>>()
 
     /** Features turned off: kept in the history but not built. */
+    /** A copy of the design kept under a name: the design file's text as it was, and the day, year-month-day. */
+    data class Version(val name: String, val date: String, val text: String)
+
+    /** Named versions, oldest first. They aren't part of undo: they belong to the file. */
+    val versions = mutableListOf<Version>()
+
     /** Font files the design's text uses, by name, so it can be changed anywhere. */
     val fonts = mutableMapOf<String, ByteArray>()
     val suppressed = mutableSetOf<Int>()

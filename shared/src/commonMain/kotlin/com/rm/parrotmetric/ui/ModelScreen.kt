@@ -444,7 +444,7 @@ fun ModelScreen(
             } else if (expanded) {
                 ExpandedModel(logo, state, design, actions, sheet) { sheet = it }
             } else Column(Modifier.fillMaxSize().safeDrawingPadding()) {
-                TopBar(logo, state, design, actions, onParts = { sheet = if (sheet == "parts") null else "parts" }, onExport = { sheet = "export" })
+                TopBar(logo, state, design, actions, onParts = { sheet = if (sheet == "parts") null else "parts" }, onExport = { sheet = "export" }, onVersions = { sheet = "versions" })
                 Box(Modifier.weight(1f).fillMaxWidth().openArea(actions)) {
                     Column(
                         Modifier.align(Alignment.TopEnd).padding(top = 6.dp, end = 12.dp),
@@ -483,6 +483,8 @@ fun ModelScreen(
                         com.rm.parrotmetric.ui.design.InsertSheet(state.projects.map { it.name }, actions::insertDesign, actions::updateLinks) { sheet = null }
                     } else if (sheet == "partslist") {
                         com.rm.parrotmetric.ui.design.PartsListSheet(design) { sheet = null }
+                    } else if (sheet == "versions") {
+                        com.rm.parrotmetric.ui.design.VersionsSheet(design, state.title, actions::today) { sheet = null }
                     } else if (sheet == "parameters") {
                         com.rm.parrotmetric.ui.design.ParametersSheet(design) { sheet = null }
                     } else if (sheet == "export") {
@@ -537,7 +539,7 @@ private val fieldKeys = setOf("Ctrl+Z", "Ctrl+Shift+Z", "Ctrl+Y", "Ctrl+A", "Ctr
 val LocalKeyboard = androidx.compose.runtime.compositionLocalOf { false }
 
 @Composable
-private fun TopBar(logo: @Composable () -> Unit, state: ModelState, design: DesignEditor, actions: ModelActions, onParts: () -> Unit, onExport: () -> Unit) {
+private fun TopBar(logo: @Composable () -> Unit, state: ModelState, design: DesignEditor, actions: ModelActions, onParts: () -> Unit, onExport: () -> Unit, onVersions: () -> Unit) {
     var menu by remember { mutableStateOf(false) }
     design.version
     val bodies = design.built?.bodies?.size ?: 0
@@ -550,6 +552,7 @@ private fun TopBar(logo: @Composable () -> Unit, state: ModelState, design: Desi
                 DropdownMenuItem({ Text("Save") }, onClick = { menu = false; actions.save() }, leadingIcon = { Icon(Icons.save, null, tint = Palette.mint) })
                 DropdownMenuItem({ Text("Save as…") }, onClick = { menu = false; actions.saveAs() }, leadingIcon = { Icon(Icons.save, null, tint = Palette.mint) })
                 DropdownMenuItem({ Text("Export…") }, onClick = { menu = false; onExport() }, leadingIcon = { Icon(Icons.export, null, tint = Palette.mint) })
+                DropdownMenuItem({ Text("Versions…") }, onClick = { menu = false; onVersions() }, leadingIcon = { Icon(Icons.versions, null, tint = Palette.mint) })
                 androidx.compose.material3.HorizontalDivider(color = Palette.line)
                 DropdownMenuItem({ Text("Settings…") }, onClick = { menu = false; actions.showScreen(AppScreen.Settings) }, leadingIcon = { Icon(Icons.parameters, null, tint = Palette.mint) })
                 DropdownMenuItem({ Text("Help") }, onClick = { menu = false; actions.showScreen(AppScreen.Help) }, leadingIcon = { Icon(Icons.help, null, tint = Palette.mint) })
@@ -723,6 +726,10 @@ private fun HistoryChip(design: DesignEditor, actions: ModelActions, entry: Hist
             if (entry.kind == HistoryEntry.Kind.Sketch) DropdownMenuItem(
                 { Text("Move to picked face") }, onClick = { menu = false; design.moveSketch(entry.id) }, enabled = design.hasPickedPlane(),
             )
+            if (entry.kind == HistoryEntry.Kind.Sketch) DropdownMenuItem(
+                { Text("Save as DXF…") },
+                onClick = { menu = false; design.sketchDxf(entry.id)?.let { text -> actions.saveFile("${entry.name}.dxf") { text.encodeToByteArray() } } },
+            )
             DropdownMenuItem({ Text(if (entry.active) "Roll back to here" else "Roll forward to here") }, onClick = { menu = false; design.rollTo(index) })
             DropdownMenuItem({ Text(if (entry.off) "Turn on" else "Turn off") }, onClick = { menu = false; design.setOff(entry.id, !entry.off) })
             DropdownMenuItem({ Text("Delete") }, onClick = { menu = false; design.delete(entry.id) })
@@ -860,7 +867,7 @@ private fun ExpandedModel(
     var partsOpen by remember { mutableStateOf(true) }
     val context = ToolContext(state, design, actions) { setSheet(it) }
     Column(Modifier.fillMaxSize().safeDrawingPadding()) {
-        TopBar(logo, state, design, actions, onParts = { partsOpen = !partsOpen }, onExport = { setSheet("export") })
+        TopBar(logo, state, design, actions, onParts = { partsOpen = !partsOpen }, onExport = { setSheet("export") }, onVersions = { setSheet("versions") })
         Toolbar(context)
         Row(Modifier.weight(1f).fillMaxWidth().padding(10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             if (partsOpen) Box(Modifier.width(300.dp)) { com.rm.parrotmetric.ui.design.PartsSheet(design) { partsOpen = false } }
@@ -882,7 +889,7 @@ private fun ExpandedModel(
                     Message(design)
                 }
             }
-            val docked = design.panel != null || sheet in setOf("measure", "section", "printcheck", "surfacecheck", "interference", "parameters", "export", "insert", "partslist")
+            val docked = design.panel != null || sheet in setOf("measure", "section", "printcheck", "surfacecheck", "interference", "parameters", "export", "insert", "partslist", "versions")
             if (docked) Box(Modifier.width(380.dp)) {
                 when {
                     design.panel != null -> FeaturePanel(design)
@@ -894,6 +901,7 @@ private fun ExpandedModel(
                     sheet == "parameters" -> com.rm.parrotmetric.ui.design.ParametersSheet(design) { setSheet(null) }
                     sheet == "insert" -> com.rm.parrotmetric.ui.design.InsertSheet(state.projects.map { it.name }, actions::insertDesign, actions::updateLinks) { setSheet(null) }
                     sheet == "partslist" -> com.rm.parrotmetric.ui.design.PartsListSheet(design) { setSheet(null) }
+                    sheet == "versions" -> com.rm.parrotmetric.ui.design.VersionsSheet(design, state.title, actions::today) { setSheet(null) }
                     sheet == "export" -> com.rm.parrotmetric.ui.design.ExportSheet(design, { setSheet(null) }, state.handOffs, { to, r -> actions.handOff(to, r); setSheet(null) }) { actions.export(it); setSheet(null) }
                 }
             }
