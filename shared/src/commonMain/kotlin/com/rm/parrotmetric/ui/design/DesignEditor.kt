@@ -424,13 +424,77 @@ class DesignEditor(
      * How the shown solid bodies look from [side], for the drawing; null if they can't be worked out.
      * Off the main thread, while no rebuild is using the kernel.
      */
-    suspend fun projectView(side: com.rm.parrotmetric.drawing.ViewSide): com.rm.parrotmetric.drawing.ViewGeometry? =
+    suspend fun projectView(side: com.rm.parrotmetric.drawing.ViewSide, cut: Double? = null): com.rm.parrotmetric.drawing.ViewGeometry? =
         withContext(Dispatchers.Default) {
             lock.withLock {
                 val bodies = current?.bodies?.filter { !design.info(it.label).hidden }?.map { it.handle } ?: return@withLock null
-                kernel.projectView(bodies, side.towards, side.right, true)?.let { (seen, hidden) -> com.rm.parrotmetric.drawing.ViewGeometry(seen, hidden) }
+                if (cut == null) return@withLock kernel.projectView(bodies, side.towards, side.right, true)?.let { (seen, hidden) -> com.rm.parrotmetric.drawing.ViewGeometry(seen, hidden) }
+                // A section: what's behind the plane, and the outline where the plane cuts through.
+                val t = side.towards
+                val origin = t * cut
+                // A body the plane misses is kept whole, if it's behind.
+                val pieces = bodies.flatMap { h -> runCatching { kernel.split(0, h, origin, t) }.getOrNull()?.takeIf { it.isNotEmpty() } ?: run { kernel.retain(h); listOf(h) } }
+                try {
+                    val behind = pieces.filter { p ->
+                        val box = runCatching { kernel.bounds(p) }.getOrNull() ?: return@filter false
+                        Vec3((box[0] + box[3]) / 2, (box[1] + box[4]) / 2, (box[2] + box[5]) / 2).dot(t) < cut
+                    }
+                    val plane = SketchPlane("Section", origin, side.right, t.cross(side.right))
+                    val outline = kernel.section(bodies, plane) ?: emptyList()
+                    kernel.projectView(behind, side.towards, side.right, true)?.let { (seen, hidden) -> com.rm.parrotmetric.drawing.ViewGeometry(seen, hidden, outline) }
+                } finally {
+                    pieces.forEach { kernel.release(it) }
+                }
             }
         }
+
+    /** The middle of the shown bodies along [direction], for where a section cuts. */
+    fun middleAlong(direction: Vec3): Double {
+        val boxes = (current?.bodies ?: return 0.0).filter { !design.info(it.label).hidden }.mapNotNull { runCatching { kernel.bounds(it.handle) }.getOrNull()?.takeIf { b -> b.size >= 6 } }
+        if (boxes.isEmpty()) return 0.0
+        // The box's corners along the direction.
+        val values = boxes.flatMap { b -> listOf(Vec3(b[0], b[1], b[2]), Vec3(b[3], b[4], b[5]), Vec3(b[0], b[4], b[2]), Vec3(b[3], b[1], b[5])) }.map { it.dot(direction) }
+        return (values.min() + values.max()) / 2
+    }
+
+    /** A hole a drawing can call out: a point on its axis, the axis, its diameter there, and what to say about it. */
+    class HoleCallout(val at: Vec3, val axis: Vec3, val diameter: Double, val lines: List<String>)
+
+    /** The holes made with Hole, and threads in holes, for drawing callouts; threads first. */
+    fun holeCallouts(): List<HoleCallout> {
+        val b = built ?: return emptyList()
+        val threads = mutableListOf<HoleCallout>()
+        val holes = mutableListOf<HoleCallout>()
+        fun n(v: Double) = (kotlin.math.round(v * 100) / 100).toString().removeSuffix(".0")
+        for (f in design.built) when (f) {
+            is HoleFeature -> {
+                val plane = b.sketchPlanes[f.sketchId] ?: continue
+                val s = (design.feature(f.sketchId) as? SketchFeature)?.sketch ?: continue
+                val points = s.holePoints()
+                val count = if (points.size > 1) "${points.size}× " else ""
+                val lines = listOf(count + "Ø${n(f.diameter)} " + if (f.depth <= 0) "THRU" else "DEEP ${n(f.depth)}") + when (f.kind) {
+                    com.rm.parrotmetric.design.HoleKind.Counterbore -> listOf("CBORE Ø${n(f.topDiameter)} DEEP ${n(f.topDepth)}")
+                    com.rm.parrotmetric.design.HoleKind.Countersink -> listOf("CSK Ø${n(f.topDiameter)} × 90°")
+                    else -> emptyList()
+                }
+                for (p in points) {
+                    val at = plane.toWorld(s.x(p), s.y(p))
+                    holes += HoleCallout(at, plane.normal, f.diameter, lines)
+                    if (f.kind != com.rm.parrotmetric.design.HoleKind.Simple) holes += HoleCallout(at, plane.normal, f.topDiameter, lines)
+                }
+            }
+            is com.rm.parrotmetric.design.ThreadFeature -> {
+                val shape = b.bodies.firstNotNullOfOrNull { kernel.shapeOf(it.handle, f.face, false) }?.takeIf { it[0] == 2.0 && it.size > 8 && it[8] == 1.0 } ?: continue
+                val across = 2 * shape[7]
+                // A tapped hole is the thread's size less 1.0825 pitches.
+                val size = across + 1.0825 * f.pitch
+                val named = (ThreadSizes.metric + ThreadSizes.inch).firstOrNull { kotlin.math.abs(it.pitch - f.pitch) < 1e-6 && kotlin.math.abs(it.across - size) < 0.3 }
+                threads += HoleCallout(Vec3(shape[1], shape[2], shape[3]), Vec3(shape[4], shape[5], shape[6]), across, listOf(named?.let { if (it.name.startsWith("M")) "${it.name}×${n(it.pitch)}" else "${it.name} UNC" } ?: "M${n(size)}×${n(f.pitch)}"))
+            }
+            else -> {}
+        }
+        return threads + holes
+    }
 
     /**
      * The design as a .pmet file. A new sketch still being drawn ([drawing]:

@@ -65,6 +65,39 @@ class SheetTest {
     }
 
     @Test
+    fun aSectionIsHatchedAndItsPlaneShownOnTheTopView() {
+        // A 40 x 20 cut face with a 10 x 10 hole in it: hatch lines inside the outline, none in the hole.
+        val hole = rect(10.0, 10.0).map { it.copy(x1 = it.x1 + 15, x2 = it.x2 + 15, y1 = it.y1 + 5, y2 = it.y2 + 5) }
+        val g = ViewGeometry(rect(40.0, 20.0), emptyList(), rect(40.0, 20.0) + hole)
+        val section = DrawingView(1, ViewSide.Front, 100.0, 100.0, hidden = false, cut = -10.0, label = "A")
+        val top = DrawingView(2, ViewSide.Top, 100.0, 160.0)
+        val d = Drawing(views = listOf(section, top))
+        val topG = ViewGeometry(rect(40.0, 30.0), emptyList())
+        val marks = Sheet.marks(d, mapOf(1 to g, 2 to topG), "")
+        assertTrue(marks.any { it is Mark.Text && it.text == "SECTION A-A" })
+        val hatch = marks.filterIsInstance<Mark.Line>().filter { it.pen == Pen.Thin && it.y1 < 130 && kotlin.math.abs(kotlin.math.abs(it.x2 - it.x1) - kotlin.math.abs(it.y2 - it.y1)) < 1e-6 }
+        assertTrue(hatch.size > 10)
+        // No hatch crosses the hole's middle, which is at sheet (100, 100).
+        assertTrue(hatch.none { DrawingState2.passesNear(it, 100.0, 100.0, 0.5) })
+        // The front looks along -y, so seen from the top its plane is the line y = 10, lettered at both ends.
+        assertEquals(2, marks.count { it is Mark.Text && it.text == "A" })
+        assertTrue(marks.any { it is Mark.Line && it.pen == Pen.Thin && it.y1 == it.y2 && kotlin.math.abs(it.y1 - (160.0 + 10 - 15)) < 1e-6 })
+    }
+
+    @Test
+    fun aHoleCalloutSaysWhatItsToldOnALineEach() {
+        val view = DrawingView(1, ViewSide.Top, 100.0, 100.0)
+        val c = ViewGeometry(listOf(ProfileCurve(ProfileCurve.Kind.Circle, 0, 5.0, 5.0, r = 2.0)), emptyList())
+        val d = Drawing(views = listOf(view), dimensions = listOf(DrawingDimension(3, 1, DimensionKind.Hole, 5.0, 5.0, 7.0, 5.0)))
+        val texts = Sheet.marks(d, mapOf(1 to c), "", mapOf(3 to listOf("4× Ø4 THRU", "CBORE Ø7 DEEP 3"))).filterIsInstance<Mark.Text>()
+        val a = texts.first { it.text == "4× Ø4 THRU" }
+        val b = texts.first { it.text == "CBORE Ø7 DEEP 3" }
+        assertTrue(b.y < a.y)
+        // Told nothing, it says its diameter.
+        assertTrue(Sheet.marks(d, mapOf(1 to c), "").any { it is Mark.Text && it.text == "Ø4" })
+    }
+
+    @Test
     fun aDimensionAcrossThePartGrowsWithIt() {
         val view = DrawingView(1, ViewSide.Front, 100.0, 100.0)
         val dim = DrawingDimension(2, 1, DimensionKind.Horizontal, 0.0, 0.0, 40.0, 0.0, box = listOf(0.0, 0.0, 40.0, 20.0))
@@ -101,5 +134,13 @@ class SheetTest {
         assertEquals(-10.0, g.minX, 1e-9)
         assertEquals(10.0, g.maxY, 1e-9)
         assertEquals(0.0, g.minY, 1e-9)
+    }
+}
+
+private object DrawingState2 {
+    fun passesNear(l: Mark.Line, x: Double, y: Double, r: Double): Boolean {
+        val dx = l.x2 - l.x1; val dy = l.y2 - l.y1
+        val t = (((x - l.x1) * dx + (y - l.y1) * dy) / (dx * dx + dy * dy)).coerceIn(0.0, 1.0)
+        return kotlin.math.hypot(l.x1 + t * dx - x, l.y1 + t * dy - y) < r
     }
 }

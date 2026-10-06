@@ -339,7 +339,7 @@ private fun SheetView(state: DrawingState, drawing: Drawing, marks: List<Mark>) 
                 val m = drawing.dimensions.firstOrNull { it.id == picked.id }
                 val v = m?.let { d -> drawing.views.firstOrNull { it.id == d.view } }
                 val g = v?.let { state.geometryOf(it) }
-                if (m != null && v != null && g != null) mutableListOf<Mark>().also { Sheet.dimension(drawing, v, g, m, it) } else emptyList()
+                if (m != null && v != null && g != null) mutableListOf<Mark>().also { Sheet.dimension(drawing, v, g, m, it, state.holeLines()[m.id]) } else emptyList()
             }
             else -> emptyList()
         }
@@ -436,23 +436,27 @@ private fun DrawScope.drawMarks(
 @Composable
 private fun PickedBar(state: DrawingState, drawing: Drawing) {
     val p = state.picked ?: return
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
     Surface(color = Palette.surface, shape = RoundedCornerShape(22.dp)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             when (p) {
                 is DrawingPick.View -> {
                     val v = drawing.views.firstOrNull { it.id == p.id } ?: return@Row
-                    Text(v.side.label, Modifier.weight(1f), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Palette.text)
+                    Text(v.label?.let { "Section $it-$it" } ?: v.side.label, Modifier.weight(1f), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Palette.text)
+                    val cut = v.cut
+                    if (cut != null) Box(Modifier.width(170.dp)) {
+                        com.rm.parrotmetric.ui.design.NumberRow("Cut at", cut, "mm", true) { scope.launch { state.setCut(v.id, it) } }
+                    } else if (v.side != ViewSide.Iso) Chip("Section", false) { scope.launch { state.addSection(v) } }
                     Chip(if (v.hidden) "Hidden lines shown" else "Hidden lines off", v.hidden) {
                         state.editor.changeDrawing { d -> d.copy(views = d.views.map { if (it.id == v.id) it.copy(hidden = !it.hidden) else it }) }
                     }
                 }
                 is DrawingPick.Dimension -> {
                     val m = drawing.dimensions.firstOrNull { it.id == p.id } ?: return@Row
-                    if (m.kind == DimensionKind.Diameter || m.kind == DimensionKind.Radius) {
+                    if (m.kind == DimensionKind.Diameter || m.kind == DimensionKind.Radius || m.kind == DimensionKind.Hole) {
+                        val kinds = listOf(DimensionKind.Diameter, DimensionKind.Radius, DimensionKind.Hole)
                         Box(Modifier.weight(1f)) {
-                            Segmented(listOf("Diameter", "Radius"), if (m.kind == DimensionKind.Diameter) 0 else 1) {
-                                state.setKind(m.id, if (it == 0) DimensionKind.Diameter else DimensionKind.Radius)
-                            }
+                            Segmented(listOf("Diameter", "Radius", "Hole"), kinds.indexOf(m.kind)) { state.setKind(m.id, kinds[it]) }
                         }
                     } else {
                         val kinds = listOf(DimensionKind.Horizontal, DimensionKind.Vertical, DimensionKind.Aligned)

@@ -113,7 +113,8 @@ The box has rounded corners, a hollow, vents and a lid on a hinge joint, with it
 ### Drawings
 
 - A sheet of views of the part: front, top, side and isometric, with hidden lines dashed, third or first angle
-- Dimensions between corners, and diameters and radii, that follow the part when it changes
+- Section views, hatched, with the cutting line on the other views
+- Dimensions between corners, diameters and radii, and hole callouts, that follow the part when it changes
 - Notes and a title block, on A4, A3, A2, Letter or Tabloid at a standard scale
 - Saved as PDF to print at true size, DXF for laser cutters, or SVG
 

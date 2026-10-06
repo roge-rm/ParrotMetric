@@ -31,6 +31,10 @@ private fun unit(x: Double, y: Double, z: Double): Vec3 {
 /**
  * A view placed on the sheet: its centre at ([x], [y]) mm from the sheet's lower left. [hidden] draws
  * hidden lines dashed. [scale] overrides the drawing's for this view only.
+ *
+ * A section view has a [cut]: the model is cut by the plane square to its side's direction, that far
+ * along it from the origin (mm), and only what's behind the plane is drawn, the cut faces hatched.
+ * [label] is its letter, shown under it and where the plane crosses the other views.
  */
 data class DrawingView(
     val id: Int,
@@ -39,15 +43,24 @@ data class DrawingView(
     val y: Double,
     val hidden: Boolean = true,
     val scale: Double? = null,
-)
+    val cut: Double? = null,
+    val label: String? = null,
+) {
+    /** What its geometry is worked out from. */
+    val key get() = ViewKey(side, cut)
+}
+
+/** A view's side and where it's cut, if it's a section: views with the same key look the same. */
+data class ViewKey(val side: ViewSide, val cut: Double? = null)
 
 /** What a dimension measures. */
-enum class DimensionKind { Aligned, Horizontal, Vertical, Diameter, Radius }
+enum class DimensionKind { Aligned, Horizontal, Vertical, Diameter, Radius, Hole }
 
 /**
  * A dimension in a view. Its points are in the view's model coordinates (mm, before scaling), found
  * again on the nearest corner, end or centre each time the view is worked out, so it follows the model.
- * Diameter and radius use [a] as the circle's centre and [b] as a point on it. [offset] is how far the
+ * Diameter, radius and hole use [a] as the circle's centre and [b] as a point on it; a hole's label
+ * says what the hole is, as Sheet.marks is told. [offset] is how far the
  * dimension line stands off the points, in sheet mm; for a diameter or radius it's where the label sits
  * along the leader. [box] is the view's outline when the points were picked (left, bottom, right, top):
  * each point keeps its distance from the nearest side of it, so a dimension across the part grows with it.

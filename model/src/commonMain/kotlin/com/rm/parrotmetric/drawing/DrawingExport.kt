@@ -194,7 +194,7 @@ object DrawingExport {
             }
             is Mark.Text -> {
                 if (m.text.isEmpty()) continue
-                g(0, "TEXT"); g(8, "NOTES"); g(10, m.x); g(20, m.y); g(30, 0.0); g(40, m.height); g(1, m.text.replace("Ø", "%%c"))
+                g(0, "TEXT"); g(8, "NOTES"); g(10, m.x); g(20, m.y); g(30, 0.0); g(40, m.height); g(1, m.text.replace("Ø", "%%c").replace("°", "%%d"))
                 if (m.angle != 0.0) g(50, m.angle)
                 val just = when (m.anchor) { Anchor.Start -> 0; Anchor.Middle -> 1; Anchor.End -> 2 }
                 if (just != 0) { g(72, just); g(11, m.x); g(21, m.y); g(31, 0.0) }

@@ -18,7 +18,7 @@ internal object DrawingFile {
         "title" to d.title,
         "drawnBy" to d.drawnBy,
         "views" to d.views.map { v ->
-            mapOf("id" to v.id, "side" to v.side.name, "x" to v.x, "y" to v.y, "hidden" to v.hidden, "scale" to v.scale)
+            mapOf("id" to v.id, "side" to v.side.name, "x" to v.x, "y" to v.y, "hidden" to v.hidden, "scale" to v.scale, "cut" to v.cut, "label" to v.label)
         },
         "dimensions" to d.dimensions.map { m ->
             mapOf(
@@ -39,7 +39,7 @@ internal object DrawingFile {
         views = o.arr("views").mapNotNull { v ->
             v as Json.Obj
             val side = ViewSide.entries.firstOrNull { it.name == (v["side"] as? Json.Str)?.value } ?: return@mapNotNull null
-            DrawingView(v.int("id"), side, v.num("x"), v.num("y"), v.bool("hidden"), (v["scale"] as? Json.Num)?.value)
+            DrawingView(v.int("id"), side, v.num("x"), v.num("y"), v.bool("hidden"), (v["scale"] as? Json.Num)?.value, (v["cut"] as? Json.Num)?.value, (v["label"] as? Json.Str)?.value)
         },
         dimensions = o.arr("dimensions").mapNotNull { m ->
             m as Json.Obj

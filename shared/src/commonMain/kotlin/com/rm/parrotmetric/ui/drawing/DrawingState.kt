@@ -13,6 +13,7 @@ import com.rm.parrotmetric.drawing.DrawingView
 import com.rm.parrotmetric.drawing.Mark
 import com.rm.parrotmetric.drawing.Sheet
 import com.rm.parrotmetric.drawing.ViewGeometry
+import com.rm.parrotmetric.drawing.ViewKey
 import com.rm.parrotmetric.drawing.ViewSide
 import com.rm.parrotmetric.sketch.ProfileCurve
 import com.rm.parrotmetric.ui.design.DesignEditor
@@ -41,8 +42,11 @@ sealed class DrawingPick {
 class DrawingState(val editor: DesignEditor) {
     val drawing: Drawing get() = editor.design.drawing ?: Drawing()
 
-    /** Each side's view of the model as it is now. */
-    val geometry = mutableStateMapOf<ViewSide, ViewGeometry>()
+    /** Each side's view of the model as it is now, and each section's. */
+    val geometry = mutableStateMapOf<ViewKey, ViewGeometry>()
+
+    /** The holes the model has, for callouts; worked out with the views. */
+    var callouts by mutableStateOf<List<DesignEditor.HoleCallout>>(emptyList())
 
     var tool by mutableStateOf(DrawingTool.Select)
     var picked by mutableStateOf<DrawingPick?>(null)
@@ -57,30 +61,61 @@ class DrawingState(val editor: DesignEditor) {
     /** A note being written: where, and the note it replaces if it's being changed. */
     var noteAt by mutableStateOf<Triple<Double, Double, DrawingNote?>?>(null)
 
-    fun geometryOf(v: DrawingView) = geometry[v.side]
+    fun geometryOf(v: DrawingView) = geometry[v.key]
 
     /** Every view's geometry by view id, for [Sheet.marks]. */
-    fun byView(): Map<Int, ViewGeometry> = drawing.views.mapNotNull { v -> geometry[v.side]?.let { v.id to it } }.toMap()
+    fun byView(): Map<Int, ViewGeometry> = drawing.views.mapNotNull { v -> geometry[v.key]?.let { v.id to it } }.toMap()
 
-    fun marks(date: String): List<Mark> = Sheet.marks(drawing, byView(), date)
+    fun marks(date: String): List<Mark> = Sheet.marks(drawing, byView(), date, holeLines())
+
+    /** What each hole callout says: the hole whose axis is the view's and whose centre and size are the circle's. */
+    fun holeLines(): Map<Int, List<String>> = drawing.dimensions.filter { it.kind == DimensionKind.Hole }.mapNotNull { m ->
+        val v = drawing.views.firstOrNull { it.id == m.view } ?: return@mapNotNull null
+        val up = v.side.towards.cross(v.side.right)
+        val d = 2 * hypot(m.bx - m.ax, m.by - m.ay)
+        val found = callouts.firstOrNull { c ->
+            abs(abs(c.axis.dot(v.side.towards)) - 1) < 1e-3 && abs(c.diameter - d) < 0.05 &&
+                hypot(c.at.dot(v.side.right) - m.ax, c.at.dot(up) - m.ay) < 0.05
+        }
+        m.id to (found?.lines ?: listOf("Ø" + Sheet.number(d)))
+    }.toMap()
 
     /** Works out the views the drawing uses, and those [also] asks for, from the model as built now. */
-    suspend fun project(also: List<ViewSide> = emptyList()) {
+    suspend fun project(also: List<ViewKey> = emptyList()) {
         working = true
         try {
-            for (side in (drawing.views.map { it.side } + also).distinct()) {
-                editor.projectView(side)?.let { geometry[side] = it }
+            for (key in (drawing.views.map { it.key } + also).distinct()) {
+                editor.projectView(key.side, key.cut)?.let { geometry[key] = it }
             }
+            callouts = editor.holeCallouts()
         } finally {
             working = false
         }
     }
 
+    /** Adds a section through the middle of view [of]'s part, looking the same way, lettered A, B and so on. */
+    suspend fun addSection(of: DrawingView) {
+        val cut = editor.middleAlong(of.side.towards)
+        val used = drawing.views.mapNotNull { it.label }.toSet()
+        val label = ('A'..'Z').map { it.toString() }.firstOrNull { it !in used } ?: "Z"
+        project(listOf(ViewKey(of.side, cut)))
+        val (l, b, r, t) = Sheet.area(drawing).toList()
+        editor.changeDrawing { d -> d.copy(views = d.views + DrawingView(d.nextId(), of.side, (l + r) / 2, (b + Sheet.TITLE_H + t) / 2, hidden = false, cut = cut, label = label)) }
+        picked = DrawingPick.View(drawing.views.last().id)
+    }
+
+    /** Moves a section's plane to [cut] mm along its direction. */
+    suspend fun setCut(id: Int, cut: Double) {
+        val v = drawing.views.firstOrNull { it.id == id } ?: return
+        project(listOf(ViewKey(v.side, cut)))
+        editor.changeDrawing { d -> d.copy(views = d.views.map { if (it.id == id) it.copy(cut = cut) else it }) }
+    }
+
     /** Lays out the front, top, right and isometric views and picks a scale they fit at. */
     suspend fun layOut(title: String) {
         val sides = listOf(ViewSide.Front, ViewSide.Top, ViewSide.Right, ViewSide.Iso)
-        project(sides)
-        val sizes = sides.mapNotNull { s -> geometry[s]?.let { s to (it.width to it.height) } }.toMap()
+        project(sides.map { ViewKey(it) })
+        val sizes = sides.mapNotNull { s -> geometry[ViewKey(s)]?.let { s to (it.width to it.height) } }.toMap()
         if (sizes[ViewSide.Front]?.let { it.first > 0 || it.second > 0 } != true) {
             message = "There's nothing solid to draw"
             return
@@ -91,7 +126,7 @@ class DrawingState(val editor: DesignEditor) {
 
     /** Adds a single view in the middle of the free space. */
     suspend fun addView(side: ViewSide) {
-        project(listOf(side))
+        project(listOf(ViewKey(side)))
         val (l, b, r, t) = Sheet.area(drawing).toList()
         editor.changeDrawing { d -> d.copy(views = d.views + DrawingView(d.nextId(), side, (l + r) / 2, (b + Sheet.TITLE_H + t) / 2, hidden = side != ViewSide.Iso)) }
         picked = DrawingPick.View(drawing.views.last().id)
@@ -115,11 +150,12 @@ class DrawingState(val editor: DesignEditor) {
     fun dimensionAt(x: Double, y: Double, reach: Double): DrawingDimension? {
         var best: DrawingDimension? = null
         var bestD = reach
+        val holes = holeLines()
         for (m in drawing.dimensions) {
             val v = drawing.views.firstOrNull { it.id == m.view } ?: continue
             val g = geometryOf(v) ?: continue
             val marks = mutableListOf<Mark>()
-            Sheet.dimension(drawing, v, g, m, marks)
+            Sheet.dimension(drawing, v, g, m, marks, holes[m.id])
             for (k in marks) {
                 val d = when (k) {
                     is Mark.Line -> segment(x, y, k.x1, k.y1, k.x2, k.y2)
@@ -187,7 +223,12 @@ class DrawingState(val editor: DesignEditor) {
         }
         if (round != null) {
             val a = atan2(my - round.y1, mx - round.x1)
-            val kind = if (round.kind == ProfileCurve.Kind.Circle) DimensionKind.Diameter else DimensionKind.Radius
+            // A hole the model knows of gets its callout.
+            val up = v.side.towards.cross(v.side.right)
+            val known = callouts.any { c ->
+                abs(abs(c.axis.dot(v.side.towards)) - 1) < 1e-3 && abs(c.diameter - 2 * round.r) < 0.05 && hypot(c.at.dot(v.side.right) - round.x1, c.at.dot(up) - round.y1) < 0.05
+            }
+            val kind = if (round.kind == ProfileCurve.Kind.Circle) (if (known) DimensionKind.Hole else DimensionKind.Diameter) else DimensionKind.Radius
             val id = drawing.nextId()
             editor.changeDrawing { d ->
                 d.copy(dimensions = d.dimensions + DrawingDimension(id, v.id, kind, round.x1, round.y1, round.x1 + round.r * cos(a), round.y1 + round.r * sin(a), 8.0, box(g)))
@@ -242,7 +283,7 @@ class DrawingState(val editor: DesignEditor) {
                 val v = d0.views.firstOrNull { it.id == m.view } ?: return
                 val g = geometryOf(v) ?: return
                 val change: DrawingDimension = when (m.kind) {
-                    DimensionKind.Diameter, DimensionKind.Radius -> {
+                    DimensionKind.Diameter, DimensionKind.Radius, DimensionKind.Hole -> {
                         // The label follows the pointer round the circle.
                         val s = d0.scaleOf(v)
                         val (fx, fy) = Sheet.follow(m, g, m.ax, m.ay)

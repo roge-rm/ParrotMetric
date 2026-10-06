@@ -34,8 +34,11 @@ sealed class Mark {
     data class Head(val x: Double, val y: Double, val dx: Double, val dy: Double) : Mark()
 }
 
-/** A view worked out from the model: its seen and hidden curves in the view's own mm, and the middle of what's seen. */
-class ViewGeometry(val visible: List<ProfileCurve>, val hidden: List<ProfileCurve>) {
+/**
+ * A view worked out from the model: its seen and hidden curves in the view's own mm, and the middle of
+ * what's seen. For a section, [cut] is the outline of the cut faces, to hatch.
+ */
+class ViewGeometry(val visible: List<ProfileCurve>, val hidden: List<ProfileCurve>, val cut: List<ProfileCurve> = emptyList()) {
     val minX: Double; val minY: Double; val maxX: Double; val maxY: Double
     init {
         var x0 = Double.MAX_VALUE; var y0 = Double.MAX_VALUE; var x1 = -Double.MAX_VALUE; var y1 = -Double.MAX_VALUE
@@ -134,24 +137,33 @@ object Sheet {
         return (g.cx + (x - v.x) / s) to (g.cy + (y - v.y) / s)
     }
 
-    /** Everything on the sheet, given each view's worked-out geometry by view id. [date] goes in the title block. */
-    fun marks(d: Drawing, geometry: Map<Int, ViewGeometry>, date: String): List<Mark> {
+    /**
+     * Everything on the sheet, given each view's worked-out geometry by view id. [date] goes in the
+     * title block. [holes] is what each hole callout says, by dimension id, a line at a time.
+     */
+    fun marks(d: Drawing, geometry: Map<Int, ViewGeometry>, date: String, holes: Map<Int, List<String>> = emptyMap()): List<Mark> {
         val out = mutableListOf<Mark>()
         frame(d, date, out)
         for (v in d.views) {
             val g = geometry[v.id] ?: continue
+            if (v.cut != null) hatch(d, v, g, out)
             curves(d, v, g, g.visible, Pen.Visible, out)
             if (v.hidden) curves(d, v, g, g.hidden, Pen.Hidden, out)
-            // A view at a scale of its own says so under it; the rest go by the title block's.
-            if (v.scale != null) {
-                val s = d.scaleOf(v)
-                out += Mark.Text(v.x, v.y - g.height * s / 2 - 6, v.side.label.uppercase() + "  " + Drawing.scaleLabel(s), 3.0)
-            }
+            // A section or a view at a scale of its own says so under it; the rest go by the title block's.
+            val s = d.scaleOf(v)
+            val name = mutableListOf<String>()
+            if (v.label != null) name += "SECTION ${v.label}-${v.label}" else if (v.scale != null) name += v.side.label.uppercase()
+            if (v.scale != null) name += Drawing.scaleLabel(s)
+            if (name.isNotEmpty()) out += Mark.Text(v.x, v.y - g.height * s / 2 - 6, name.joinToString("  "), 3.0)
+        }
+        for (v in d.views) if (v.cut != null && v.label != null) for (w in d.views) {
+            if (w.id == v.id) continue
+            geometry[w.id]?.let { cutLine(d, w, it, v, out) }
         }
         for (m in d.dimensions) {
             val v = d.views.firstOrNull { it.id == m.view } ?: continue
             val g = geometry[v.id] ?: continue
-            dimension(d, v, g, m, out)
+            dimension(d, v, g, m, out, holes[m.id])
         }
         for (n in d.notes) for ((i, line) in n.text.split('\n').withIndex())
             out += Mark.Text(n.x, n.y - i * n.height * 1.5, line, n.height, Anchor.Start)
@@ -222,6 +234,81 @@ object Sheet {
         }
     }
 
+    /** 45° lines across a section's cut faces, 2 mm apart on the sheet: inside where an odd number of outlines are crossed. */
+    private fun hatch(d: Drawing, v: DrawingView, g: ViewGeometry, out: MutableList<Mark>) {
+        val segments = mutableListOf<DoubleArray>()
+        for (c in g.cut) when (c.kind) {
+            ProfileCurve.Kind.Line, ProfileCurve.Kind.Bezier -> segments += doubleArrayOf(c.x1, c.y1, c.x2, c.y2)
+            ProfileCurve.Kind.Circle, ProfileCurve.Kind.Arc -> {
+                var span = if (c.kind == ProfileCurve.Kind.Circle) 2 * PI else c.a1 - c.a0
+                while (span <= 0) span += 2 * PI
+                val a0 = if (c.kind == ProfileCurve.Kind.Circle) 0.0 else c.a0
+                val n = max(8, (span / (PI / 24)).toInt())
+                for (k in 0 until n) {
+                    val p = a0 + span * k / n; val q = a0 + span * (k + 1) / n
+                    segments += doubleArrayOf(c.x1 + c.r * cos(p), c.y1 + c.r * sin(p), c.x1 + c.r * cos(q), c.y1 + c.r * sin(q))
+                }
+            }
+        }
+        if (segments.isEmpty()) return
+        val step = 2.0 / d.scaleOf(v)
+        // Lines along (1, 1); n is square to them, so each line is where x·n is constant.
+        val r2 = kotlin.math.sqrt(0.5)
+        fun across(x: Double, y: Double) = (-x + y) * r2
+        fun along(x: Double, y: Double) = (x + y) * r2
+        val values = segments.flatMap { listOf(across(it[0], it[1]), across(it[2], it[3])) }
+        var c = kotlin.math.floor(values.min() / step) * step + step / 2
+        while (c < values.max()) {
+            val hits = mutableListOf<Double>()
+            for (sg in segments) {
+                val c0 = across(sg[0], sg[1]); val c1 = across(sg[2], sg[3])
+                if ((c0 <= c) == (c1 <= c)) continue
+                val t = (c - c0) / (c1 - c0)
+                hits += along(sg[0] + t * (sg[2] - sg[0]), sg[1] + t * (sg[3] - sg[1]))
+            }
+            hits.sort()
+            for (k in 0 until hits.size - 1 step 2) {
+                // Back from (along, across) to x, y.
+                fun point(a: Double) = ((a - c) * r2) to ((a + c) * r2)
+                val (x1, y1) = place(d, v, g, point(hits[k]).first, point(hits[k]).second)
+                val (x2, y2) = place(d, v, g, point(hits[k + 1]).first, point(hits[k + 1]).second)
+                out += Mark.Line(x1, y1, x2, y2, Pen.Thin)
+            }
+            c += step
+        }
+    }
+
+    /**
+     * Where section [cut]'s plane crosses view [w], if [w] sees it edge on: a thin chain line across the
+     * view with thick ends, arrows looking the way the section does, and its letter.
+     */
+    private fun cutLine(d: Drawing, w: DrawingView, g: ViewGeometry, cut: DrawingView, out: MutableList<Mark>) {
+        val t = cut.side.towards
+        if (abs(w.side.towards.dot(t)) > 1e-6 || w.side == ViewSide.Iso) return
+        val up = w.side.towards.cross(w.side.right)
+        // In w's own x, y, the plane is a·x + b·y = depth.
+        val a = w.side.right.dot(t); val b = up.dot(t)
+        val depth = cut.cut ?: return
+        val l = hypot(a, b).takeIf { it > 1e-9 } ?: return
+        val nx = a / l; val ny = b / l
+        // The line through the view's box and 6 mm past it on the sheet.
+        val px = g.cx + nx * (depth / l - (nx * g.cx + ny * g.cy)); val py = g.cy + ny * (depth / l - (nx * g.cx + ny * g.cy))
+        val half = max(g.width, g.height) / 2 + 6 / d.scaleOf(w)
+        val (x1, y1) = place(d, w, g, px - ny * half, py + nx * half)
+        val (x2, y2) = place(d, w, g, px + ny * half, py - nx * half)
+        out += Mark.Line(x1, y1, x2, y2, Pen.Thin)
+        val dx = x2 - x1; val dy = y2 - y1
+        val len = hypot(dx, dy).takeIf { it > 1e-9 } ?: return
+        val ux = dx / len; val uy = dy / len
+        for ((ex, ey, sign) in listOf(Triple(x1, y1, 1.0), Triple(x2, y2, -1.0))) {
+            out += Mark.Line(ex, ey, ex + ux * sign * 5, ey + uy * sign * 5, Pen.Visible)
+            // Looking along -t: the arrow points away from the side the viewer of the section stands.
+            out += Mark.Line(ex, ey, ex - nx * 6, ey - ny * 6, Pen.Thin)
+            out += Mark.Head(ex - nx * 6, ey - ny * 6, -nx, -ny)
+            out += Mark.Text(ex - nx * 9, ey - ny * 9 - 1.5, cut.label ?: "", TEXT)
+        }
+    }
+
     /** The border, and the title block in the lower right. */
     private fun frame(d: Drawing, date: String, out: MutableList<Mark>) {
         val (l, b, r, t) = area(d).toList()
@@ -264,10 +351,10 @@ object Sheet {
     }
 
     /** A dimension's lines, arrowheads and number. */
-    fun dimension(d: Drawing, v: DrawingView, g: ViewGeometry, m: DrawingDimension, out: MutableList<Mark>) {
+    fun dimension(d: Drawing, v: DrawingView, g: ViewGeometry, m: DrawingDimension, out: MutableList<Mark>, hole: List<String>? = null) {
         val s = d.scaleOf(v)
         when (m.kind) {
-            DimensionKind.Diameter, DimensionKind.Radius -> {
+            DimensionKind.Diameter, DimensionKind.Radius, DimensionKind.Hole -> {
                 // The circle as it is now, found again by its centre.
                 val (fx, fy) = follow(m, g, m.ax, m.ay)
                 val c = g.round(fx, fy, 1.0)
@@ -276,19 +363,23 @@ object Sheet {
                 val a = atan2(m.by - m.ay, m.bx - m.ax)
                 val ux = cos(a); val uy = sin(a)
                 val rs = r * s
-                val label = if (m.kind == DimensionKind.Diameter) "Ø" + number(2 * r) else "R" + number(r)
+                val label = if (m.kind == DimensionKind.Radius) "R" + number(r) else "Ø" + number(2 * r)
+                val lines = if (m.kind == DimensionKind.Hole) hole ?: listOf(label) else listOf(label)
                 // A leader from the far side (diameter) or the centre (radius), through the edge, out to the label.
                 val ex = cx + ux * rs; val ey = cy + uy * rs
                 val lx = cx + ux * (rs + m.offset); val ly = cy + uy * (rs + m.offset)
-                val sx = if (m.kind == DimensionKind.Diameter) cx - ux * rs else cx
-                val sy = if (m.kind == DimensionKind.Diameter) cy - uy * rs else cy
+                // A hole's leader points in at its edge from outside.
+                val hole = m.kind == DimensionKind.Hole
+                val sx = if (m.kind == DimensionKind.Diameter) cx - ux * rs else if (hole) ex else cx
+                val sy = if (m.kind == DimensionKind.Diameter) cy - uy * rs else if (hole) ey else cy
                 out += Mark.Line(sx, sy, lx, ly, Pen.Thin)
-                // Arrowheads from inside, pointing out to the circle.
-                out += Mark.Head(ex, ey, ux, uy)
+                // Arrowheads from inside, pointing out to the circle; a hole's from outside, pointing in.
+                if (hole) out += Mark.Head(ex, ey, -ux, -uy) else out += Mark.Head(ex, ey, ux, uy)
                 if (m.kind == DimensionKind.Diameter) out += Mark.Head(sx, sy, -ux, -uy)
                 val shelf = if (ux >= 0) 1.0 else -1.0
                 out += Mark.Line(lx, ly, lx + shelf * 3, ly, Pen.Thin)
-                out += Mark.Text(lx + shelf * 4, ly - 1.2, label, TEXT, if (shelf > 0) Anchor.Start else Anchor.End)
+                for ((i, line) in lines.withIndex())
+                    out += Mark.Text(lx + shelf * 4, ly - 1.2 - i * TEXT * 1.5, line, TEXT, if (shelf > 0) Anchor.Start else Anchor.End)
             }
             else -> {
                 val (fax, fay) = follow(m, g, m.ax, m.ay)
