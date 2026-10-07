@@ -59,6 +59,7 @@ object Tools {
         ToolDef("patch", "Patch", Icons.patch, ToolGroup.Create, cluster = "Surfaces") { it.design.startPatch() },
         ToolDef("stitch", "Stitch", Icons.patch, ToolGroup.Create, cluster = "Surfaces") { it.design.startStitch() },
         ToolDef("thicken", "Thicken", Icons.patch, ToolGroup.Create, cluster = "Surfaces") { it.design.startThicken() },
+        ToolDef("offsetsurface", "Offset surface", Icons.patch, ToolGroup.Create, cluster = "Surfaces", suggest = ::faces) { it.design.startOffsetSurface() },
         // The picked body, or with none picked a ball.
         ToolDef("sculpt", "Sculpt", Icons.sculpt, ToolGroup.Create, key = "K", cluster = "Sculpt", suggest = { it.selectedFaces == 1 && it.selectedEdges == 0 }) {
             it.actions.startSculpt(if (it.state.selectedFaces > 0) -1 else 0)

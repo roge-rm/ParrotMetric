@@ -153,6 +153,11 @@ data class MeshEraseFeature(override val id: Int, override val name: String, val
     override fun key() = this
 }
 
+/** A copy of [faces] of a body moved [distance] mm out along their normals (in when less than 0), as a new surface body. */
+data class OffsetSurfaceFeature(override val id: Int, override val name: String, val faces: List<String>, val distance: Double) : Feature() {
+    override fun key() = this
+}
+
 /** A body in separate pieces made separate bodies: the biggest keeps its label, the rest are new. */
 data class SeparateFeature(override val id: Int, override val name: String, val body: String) : Feature() {
     override fun key() = this

@@ -161,21 +161,22 @@ private fun ExtrudeSettings(editor: DesignEditor, d: DesignEditor.ExtrudeDraft) 
     if (areas > 1 && d.regions.size < areas) androidx.compose.material3.TextButton(onClick = { editor.pickAllAreas(d) }) {
         Text("Take all $areas areas", color = Palette.mint, fontSize = 14.sp)
     }
-    Segmented(listOf("Distance", "Through all", "Up to"), if (d.throughAll) 1 else if (d.upToOn) 2 else 0) {
+    if (d.sketchId != null) Toggle("As a surface", d.surfaceOn) { d.surfaceOn = it; editor.draftChanged() }
+    if (!d.surfaceOn) Segmented(listOf("Distance", "Through all", "Up to"), if (d.throughAll) 1 else if (d.upToOn) 2 else 0) {
         d.throughAll = it == 1
         d.upToOn = it == 2
         // Through all goes through bodies, so it cuts unless told otherwise.
         if (it == 1 && d.operation != Operation.Intersect && editor.allBodies().isNotEmpty()) d.operation = Operation.Cut
         editor.draftChanged()
     }
-    if (d.throughAll) {
+    if (d.throughAll && !d.surfaceOn) {
         val choice = if (d.direction != DesignEditor.Direction.OneSide) 2 else if (d.backwards) 1 else 0
         Segmented(listOf("Forward", "Back", "Both ways"), choice) {
             d.direction = if (it == 2) DesignEditor.Direction.Symmetric else DesignEditor.Direction.OneSide
             d.backwards = it == 1
             editor.draftChanged()
         }
-    } else if (d.upToOn) {
+    } else if (d.upToOn && !d.surfaceOn) {
         // A face tapped in the view is added here as "The face".
         Segmented(d.planes.map { it.first }, d.planes.indexOfFirst { it.second == d.upTo }) {
             d.upTo = d.planes[it].second
@@ -201,7 +202,7 @@ private fun ExtrudeSettings(editor: DesignEditor, d: DesignEditor.ExtrudeDraft) 
             editor.draftChanged()
         }
     }
-    Field(editor, d, "taper", "Taper", d.taperDegrees, "°", allowNegative = true) {
+    if (!d.surfaceOn) Field(editor, d, "taper", "Taper", d.taperDegrees, "°", allowNegative = true) {
         d.taperDegrees = it
         editor.draftChanged()
     }
@@ -209,6 +210,8 @@ private fun ExtrudeSettings(editor: DesignEditor, d: DesignEditor.ExtrudeDraft) 
         d.offset = it
         editor.draftChanged()
     }
+    // A surface is a new body with no thickness.
+    if (d.surfaceOn) return
     Toggle("Thin wall", d.thinOn) { d.thinOn = it; editor.draftChanged() }
     if (d.thinOn) Field(editor, d, "thin", "Wall", d.thin, "mm", allowNegative = false) {
         d.thin = it
@@ -549,6 +552,8 @@ private fun RevolveSettings(editor: DesignEditor, d: DesignEditor.RevolveDraft) 
         d.degrees = it
         editor.draftChanged()
     }
+    if (d.sketchId != null) Toggle("As a surface", d.surfaceOn) { d.surfaceOn = it; editor.draftChanged() }
+    if (d.surfaceOn) return
     OperationRow(d.operation) {
         d.operation = it
         editor.draftChanged()
@@ -802,6 +807,7 @@ internal fun FaceSettings(editor: DesignEditor, d: DesignEditor.FaceDraft) {
         DesignEditor.FaceTool.Draft -> Icons.draft
         DesignEditor.FaceTool.PressPull -> Icons.pressPull
         DesignEditor.FaceTool.Delete -> Icons.deleteFace
+        DesignEditor.FaceTool.OffsetSurface -> Icons.patch
     }
     Header(d.tool.title, icon, Palette.modify, if (d.faces.isEmpty()) null else count(d.faces.size, "face", "faces"))
     when (d.tool) {
@@ -815,6 +821,7 @@ internal fun FaceSettings(editor: DesignEditor, d: DesignEditor.FaceDraft) {
             editor.pressPullNote(d)?.let { Text(it, fontSize = 12.sp, color = Palette.muted) }
         }
         DesignEditor.FaceTool.Delete -> {}
+        DesignEditor.FaceTool.OffsetSurface -> Field(editor, d, "distance", "Distance", d.size, "mm", allowNegative = true) { d.size = it; editor.draftChanged() }
     }
 }
 

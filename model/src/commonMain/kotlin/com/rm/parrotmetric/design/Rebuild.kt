@@ -259,6 +259,10 @@ class Rebuilder(private val kernel: Kernel) {
             val sketch = sketchOf(f.sketchId, all)
             val onSketch = planes[f.sketchId] ?: throw KernelException("Its sketch couldn't be built")
             val plane = if (f.offset == 0.0) onSketch else onSketch.copy(origin = onSketch.origin + onSketch.normal * f.offset)
+            if (f.surface) {
+                val sheet = kernel.surfaceFromLines(f.id, plane, sketch.curves(), false, f.forward, f.back, listOf(0.0, 0.0, 0.0, 0.0), 0.0)
+                return applyTool(f, sheet, Operation.NewBody, bodies, planes, made)
+            }
             val target = if (f.throughAll) null else f.upTo?.let { resolvePlane(it, bodies, f, planes) }
             val tool = when {
                 target != null -> extrudeUpTo(f, plane, target, sketch)
@@ -417,8 +421,8 @@ class Rebuilder(private val kernel: Kernel) {
             val sketch = sketchOf(f.sketchId, all)
             val plane = planes[f.sketchId] ?: throw KernelException("Its sketch couldn't be built")
             val (ax, ay, dx, dy) = axisOf(f.axis, sketch)
-            val tool = kernel.revolve(f.id, plane, sketch.curves(), f.regions, ax, ay, dx, dy, f.angle)
-            applyTool(f, tool, f.operation, bodies, planes, made)
+            if (f.surface) applyTool(f, kernel.surfaceFromLines(f.id, plane, sketch.curves().filter { c -> (f.axis as? AxisRef.SketchLine)?.curveId != c.id }, true, 0.0, 0.0, listOf(ax, ay, dx, dy), f.angle), Operation.NewBody, bodies, planes, made)
+            else applyTool(f, kernel.revolve(f.id, plane, sketch.curves(), f.regions, ax, ay, dx, dy, f.angle), f.operation, bodies, planes, made)
         }
         is FilletFeature -> edgeFeature(f, f.edges, bodies, planes, made) { body, edges -> kernel.fillet(f.id, body, edges, f.radius, f.kind.ordinal, f.second) }
         is OffsetFaceFeature -> faceFeature(f, f.faces, bodies, planes, made) { body, faces -> kernel.offsetFaces(f.id, body, faces, f.distance) }
@@ -606,6 +610,11 @@ class Rebuilder(private val kernel: Kernel) {
         is MeshEditFeature -> {
             val body = bodies.firstOrNull { it.label == f.body } ?: throw KernelException("${f.body} isn't there any more")
             replace(f, bodies, planes, made, body) { kernel.meshEdit(f.id, body.handle, f.kind.ordinal, f.size, f.steps) }
+        }
+        is OffsetSurfaceFeature -> {
+            val faces = f.faces.map { ref(f, it, false, bodies) }
+            val body = bodyWithFace(faces.firstOrNull(), bodies) ?: throw KernelException("Its faces aren't there any more")
+            applyTool(f, kernel.offsetSurface(f.id, body.handle, faces, f.distance), Operation.NewBody, bodies, planes, made)
         }
         is MeshEraseFeature -> {
             val body = bodies.firstOrNull { it.label == f.body } ?: throw KernelException("${f.body} isn't there any more")

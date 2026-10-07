@@ -84,6 +84,14 @@ interface Kernel {
     fun properties(body: Long): DoubleArray? = null
     /** A mesh body with the triangles near each spot (x, y, z and radius, four numbers each) taken away and the holes filled. */
     fun meshErase(id: Int, body: Long, spots: List<Double>): Long = throw KernelException("Not here")
+    /**
+     * Open sketch lines made a surface: extruded [forward] and [back] mm, or with [revolve] turned [angle]
+     * radians round the line through (axis[0], axis[1]) along (axis[2], axis[3]). Faces are F<id>.s<curve id>.
+     */
+    fun surfaceFromLines(id: Int, plane: SketchPlane, curves: List<ProfileCurve>, revolve: Boolean, forward: Double, back: Double, axis: List<Double>, angle: Double): Long =
+        throw KernelException("Not here")
+    /** A copy of a body's faces moved [distance] mm out along their normals, as a new surface. */
+    fun offsetSurface(id: Int, body: Long, faces: List<String>, distance: Double): Long = throw KernelException("Not here")
     /** Each separate piece of a body, biggest first; throws if it's all one. */
     fun separate(id: Int, body: Long): List<Long> = throw KernelException("Not here")
     /** A body cut where another body's surface passes through it; the tool is left as it is. */

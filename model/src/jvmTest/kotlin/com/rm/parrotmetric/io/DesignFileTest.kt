@@ -122,6 +122,8 @@ class DesignFileTest {
             com.rm.parrotmetric.design.MeshEditFeature(d.newId(), "Hollow", "Body 2", com.rm.parrotmetric.design.MeshEdit.Hollow, 2.0),
             com.rm.parrotmetric.design.MeshEraseFeature(d.newId(), "Erase", "Body 2", listOf(1.0, 2.0, 3.0, 4.5)),
             com.rm.parrotmetric.design.SeparateFeature(d.newId(), "Separate", "Body 2"),
+            com.rm.parrotmetric.design.OffsetSurfaceFeature(d.newId(), "Skin", listOf("F2.side"), -1.5),
+            ExtrudeFeature(d.newId(), "Sheet", 1, emptyList(), 5.0, 0.0, Operation.NewBody, surface = true),
             com.rm.parrotmetric.design.FilletFeature(d.newId(), "Variable", listOf("F1.s1|F1.end"), 1.0, com.rm.parrotmetric.design.FilletKind.Variable, 3.0),
             com.rm.parrotmetric.design.MirrorFeature(d.newId(), "Mirror features", emptyList(), top, false, listOf(2, 5)),
             com.rm.parrotmetric.design.PatternFeature(

@@ -95,6 +95,11 @@ class CoreKernel(private val core: NativeCore) : Kernel {
     override fun fillet(id: Int, body: Long, edges: List<String>, radius: Double, kind: Int, second: Double) =
         call { core.fillet(id, body, edges.toTypedArray(), radius, kind, second) }
     override fun offsetFaces(id: Int, body: Long, faces: List<String>, distance: Double) = call { core.offsetFaces(id, body, faces.toTypedArray(), distance) }
+    override fun offsetSurface(id: Int, body: Long, faces: List<String>, distance: Double) = call { core.offsetSurface(id, body, faces.toTypedArray(), distance) }
+    override fun surfaceFromLines(id: Int, plane: SketchPlane, curves: List<ProfileCurve>, revolve: Boolean, forward: Double, back: Double, axis: List<Double>, angle: Double): Long {
+        val c = Curves(curves)
+        return call { core.surfaceFromLines(id, plane.numbers(), c.kinds, c.ids, c.nums, revolve, forward, back, axis[0], axis[1], axis[2], axis[3], angle) }
+    }
     override fun deleteFaces(id: Int, body: Long, faces: List<String>) = call { core.deleteFaces(id, body, faces.toTypedArray()) }
     override fun meshEdit(id: Int, body: Long, kind: Int, size: Double, steps: Int) = call { core.meshEdit(id, body, kind, size, steps) }
     override fun patch(id: Int, plane: SketchPlane, curves: List<ProfileCurve>, regions: List<RegionRef>): Long {

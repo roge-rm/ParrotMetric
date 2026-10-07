@@ -16,7 +16,7 @@ Pushes areas straight out of their plane. Tap the areas first, or with none tapp
 
 ## Revolve
 
-Turns areas round an axis: the sketch's **Y axis** or **X axis**, or a line in the sketch. **Angle** is how far it goes, 360 for all the way round.
+Turns areas round an axis: the sketch's **Y axis** or **X axis**, or a line in the sketch. **Angle** is how far it goes, 360 for all the way round. **As a surface**, here and in Extrude, makes the sketch's lines a surface instead (see Surfaces).
 
 ## Sweep
 

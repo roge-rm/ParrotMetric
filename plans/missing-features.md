@@ -27,7 +27,7 @@ What's left from the feature review after 0.6.0, for an agent to work through. D
 
 ## The features, in order
 
-Done so far: joint limits, Planar and Ball joints and geared joints; parameters to and from CSV; Isolate; named views; draft analysis; see-through bodies.
+Done so far: joint limits, Planar and Ball joints and geared joints; parameters to and from CSV; Isolate; named views; draft analysis; see-through bodies; surface extrude and revolve, offset surface (replace face not done).
 
 ### 1. Joint limits and more joint kinds
 
@@ -63,12 +63,9 @@ First check what's already there; some may exist. Then:
 
 Bodies have colours. Add a few looks (matte, glossy, metal) to the colour menu, drawn by the renderer like the sculpting looks (`Renderer::setSculptLook`). Saved with the body's info in the design. Keep it light: no textures.
 
-### 7. Scripting or custom features
-
-**Ask first.** This is large. A possible start is a step whose sizes come from a small expression list, building on configurations and parameters, rather than a scripting language.
-
 ## Not doing, or not without asking
 
+- **Scripting**: Dan has no use for it, and parameters, configurations, CSV, Gear and Fastener cover what print users would script. Not doing.
 - **Parasolid and DWG**: closed formats with no free reader that fits. Not doing.
 - **macOS and iOS builds**: need Apple hardware, signing and accounts. **Ask first.**
 - **Sharing links**: need a server and an account, against working offline. Not doing.

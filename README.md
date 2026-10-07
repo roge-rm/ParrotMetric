@@ -94,6 +94,7 @@ The box has rounded corners, a hollow, vents and a lid on a hinge joint, with it
 ### Surfaces
 
 - Patch sketch areas into surfaces, or fill a gap from a loop of edges
+- Extrude or revolve open lines as a surface, and offset a copy of faces
 - Stitch surfaces together, into a solid if they close up
 - Thicken a surface into a solid, and trim one with Split
 

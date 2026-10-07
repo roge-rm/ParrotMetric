@@ -254,6 +254,7 @@ object DesignFile {
                 "turns" to f.turns, "section" to f.section, "square" to f.square, "operation" to f.operation.name,
             )
             is ThreadFeature -> mapOf("type" to "thread", "face" to f.face, "pitch" to f.pitch, "clearance" to f.clearance, "symbol" to f.symbol)
+            is com.rm.parrotmetric.design.OffsetSurfaceFeature -> mapOf("type" to "offsetSurface", "faces" to f.faces, "distance" to f.distance)
             is com.rm.parrotmetric.design.MeshEraseFeature -> mapOf("type" to "meshErase", "body" to f.body, "spots" to f.spots)
             is com.rm.parrotmetric.design.SeparateFeature -> mapOf("type" to "separate", "body" to f.body)
             is com.rm.parrotmetric.design.LinkFeature -> mapOf(
@@ -306,7 +307,7 @@ object DesignFile {
                 "type" to "extrude", "sketch" to f.sketchId, "regions" to writeRegions(f.regions),
                 "forward" to f.forward, "back" to f.back, "operation" to f.operation.name,
                 "taper" to f.taper, "upTo" to f.upTo?.let { plane(it) },
-                "throughAll" to f.throughAll, "offset" to f.offset, "thin" to f.thin,
+                "throughAll" to f.throughAll, "offset" to f.offset, "thin" to f.thin, "surface" to f.surface,
             )
             is PrimitiveFeature -> mapOf(
                 "type" to "primitive", "kind" to f.kind.name, "plane" to plane(f.plane), "u" to f.u, "v" to f.v,
@@ -319,7 +320,7 @@ object DesignFile {
                     AxisRef.SketchY -> "y"
                     is AxisRef.SketchLine -> "line ${a.curveId}"
                 },
-                "angle" to f.angle, "operation" to f.operation.name,
+                "angle" to f.angle, "operation" to f.operation.name, "surface" to f.surface,
             )
             is FilletFeature -> mapOf("type" to "fillet", "edges" to f.edges, "radius" to f.radius, "kind" to f.kind.name, "second" to f.second)
             is ChamferFeature -> mapOf(
@@ -381,6 +382,7 @@ object DesignFile {
                 o.bool("square"), Operation.valueOf(o.str("operation")),
             )
             "thread" -> ThreadFeature(id, name, o.str("face"), o.num("pitch"), o.numOr("clearance", 0.0), o.bool("symbol"))
+            "offsetSurface" -> com.rm.parrotmetric.design.OffsetSurfaceFeature(id, name, strings(o.arr("faces")), o.num("distance"))
             "meshErase" -> com.rm.parrotmetric.design.MeshEraseFeature(id, name, o.str("body"), o.arr("spots").map { (it as Json.Num).value })
             "separate" -> com.rm.parrotmetric.design.SeparateFeature(id, name, o.str("body"))
             "link" -> com.rm.parrotmetric.design.LinkFeature(id, name, o.str("file"), o.str("text"), o.str("component"), o.num("dx"), o.num("dy"), o.num("dz"))
@@ -430,7 +432,7 @@ object DesignFile {
             "extrude" -> ExtrudeFeature(
                 id, name, o.int("sketch"), readRegions(o.arr("regions")), o.num("forward"), o.num("back"), Operation.valueOf(o.str("operation")),
                 o.numOr("taper", 0.0), (o["upTo"] as? Json.Obj)?.let { plane(it) },
-                o.bool("throughAll"), o.numOr("offset", 0.0), o.numOr("thin", 0.0), strings(o.arr("only")),
+                o.bool("throughAll"), o.numOr("offset", 0.0), o.numOr("thin", 0.0), strings(o.arr("only")), o.bool("surface"),
             )
             "primitive" -> PrimitiveFeature(
                 id, name, PrimitiveKind.valueOf(o.str("kind")), plane(o["plane"] as Json.Obj), o.num("u"), o.num("v"),
@@ -442,7 +444,7 @@ object DesignFile {
                     "y" -> AxisRef.SketchY
                     else -> AxisRef.SketchLine(a.removePrefix("line ").toInt())
                 }
-                RevolveFeature(id, name, o.int("sketch"), readRegions(o.arr("regions")), axis, o.num("angle"), Operation.valueOf(o.str("operation")), strings(o.arr("only")))
+                RevolveFeature(id, name, o.int("sketch"), readRegions(o.arr("regions")), axis, o.num("angle"), Operation.valueOf(o.str("operation")), strings(o.arr("only")), o.bool("surface"))
             }
             "fillet" -> FilletFeature(
                 id, name, o.arr("edges").map { (it as Json.Str).value }, o.num("radius"),

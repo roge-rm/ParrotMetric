@@ -171,6 +171,17 @@ NamedShape coil(int id, const gp_Ax3& plane, double u, double v, double diameter
 NamedShape gear(int id, const gp_Ax3& plane, double u, double v, double turn, double module, int teeth, double pressureAngle, double thickness,
                 double helix, bool herringbone, double bore, double clearance);
 
+/**
+ * Open sketch lines swept into a surface with no thickness: pushed straight out of the plane
+ * [forward] and [back] mm, or with [revolve] turned [angle] radians round the line through
+ * (ax, ay) along (dx, dy). Each face is named by the curve it came from, "s<curve id>".
+ */
+NamedShape surfaceFromLines(int id, const gp_Ax3& plane, const std::vector<SketchCurve>& curves, bool revolve, double forward, double back,
+                            double ax, double ay, double dx, double dy, double angle);
+
+/** A copy of a body's [faces] moved [distance] mm out along their normals (in when less than 0), as a surface. */
+NamedShape offsetSurface(int id, const NamedShape& body, const std::vector<std::string>& faces, double distance);
+
 enum class Fastener { SocketCap, HexBolt, Countersunk, Nut, Washer };
 
 /**

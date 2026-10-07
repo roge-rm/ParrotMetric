@@ -71,6 +71,8 @@ data class ExtrudeFeature(
     val thin: Double = 0.0,
     /** The bodies it may change, by label, or empty for any it reaches. */
     override val only: List<String> = emptyList(),
+    /** The sketch's lines pushed out as a surface with no thickness, a new body; areas, taper and the rest aren't used. */
+    val surface: Boolean = false,
 ) : Feature() {
     override fun key() = this
 }
@@ -120,6 +122,8 @@ data class RevolveFeature(
     val operation: Operation,
     /** The bodies it may change, by label, or empty for any it reaches. */
     override val only: List<String> = emptyList(),
+    /** The sketch's lines turned into a surface with no thickness, a new body; the areas aren't used. */
+    val surface: Boolean = false,
 ) : Feature() {
     override fun key() = this
 }

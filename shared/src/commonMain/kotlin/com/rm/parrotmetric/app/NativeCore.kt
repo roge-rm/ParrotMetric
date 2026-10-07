@@ -184,6 +184,10 @@ interface NativeCore {
     fun setView(view: FloatArray)
     /** The way a part is pulled from its mould, for the draft check (setAnalysis 5). */
     fun setPull(x: Double, y: Double, z: Double)
+    /** Open sketch lines made a surface, extruded or with [revolve] revolved; see pm::surfaceFromLines. */
+    fun surfaceFromLines(id: Int, plane: DoubleArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, revolve: Boolean, forward: Double, back: Double, ax: Double, ay: Double, dx: Double, dy: Double, angle: Double): Long
+    /** A copy of a body's faces moved out by a distance, as a surface. */
+    fun offsetSurface(id: Int, body: Long, faces: Array<String>, distance: Double): Long
 }
 
 /** File formats, by the numbers the core uses. */

@@ -685,6 +685,31 @@ TEST_CASE("fasteners stand on their seat with the thread's face named") {
     CHECK_THROWS(fastener(5, top, Fastener::SocketCap, 3, 0, 5.5, 3, 2.5, 0));
 }
 
+TEST_CASE("open lines make surfaces, and faces can be copied out") {
+    auto area = [](const NamedShape& s) {
+        GProp_GProps props;
+        BRepGProp::SurfaceProperties(s.shape, props);
+        return props.Mass();
+    };
+    // An L of two lines pushed 10 out: two faces, named by their lines.
+    NamedShape l = surfaceFromLines(1, top, {line(1, 0, 0, 20, 0), line(2, 20, 0, 20, 5)}, false, 10, 0, 0, 0, 0, 0, 0);
+    CHECK(area(l) == Catch::Approx(25 * 10).epsilon(1e-6));
+    CHECK(has(l.faceNames(), "F1.s1"));
+    CHECK(has(l.faceNames(), "F1.s2"));
+    // A sheet, not a solid.
+    CHECK(!TopExp_Explorer(l.shape, TopAbs_SOLID).More());
+    // A line 5 from an axis turned all the way round: a tube's side.
+    NamedShape tube = surfaceFromLines(2, top, {line(1, 5, 0, 5, 10)}, true, 0, 0, 0, 0, 0, 1, 2 * M_PI);
+    CHECK(area(tube) == Catch::Approx(2 * M_PI * 5 * 10).epsilon(1e-6));
+    CHECK_THROWS(surfaceFromLines(3, top, {line(1, 0, 0, 1, 0)}, false, 0, 0, 0, 0, 0, 0, 0));
+    // A box's top copied 3 up.
+    NamedShape box = primitive(4, top, Primitive::Box, 0, 0, 10, 20, 30);
+    NamedShape lid = offsetSurface(5, box, {"F4.end"}, 3);
+    CHECK(area(lid) == Catch::Approx(200).epsilon(1e-6));
+    CHECK(bounds(lid)[2] == Catch::Approx(33).margin(1e-6));
+    CHECK_THROWS(offsetSurface(6, box, {"F9.nope"}, 3));
+}
+
 TEST_CASE("pressing and pulling a flat face keeps its name") {
     NamedShape box = primitive(1, top, Primitive::Box, 0, 0, 10, 20, 30);
     NamedShape pulled = offsetFaces(2, box, {"F1.end"}, 5);

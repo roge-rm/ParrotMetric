@@ -949,4 +949,31 @@ object WebCore : NativeCore {
         args.double(z)
         call(109, args)
     }
+
+    override fun surfaceFromLines(id: Int, plane: DoubleArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, revolve: Boolean, forward: Double, back: Double, ax: Double, ay: Double, dx: Double, dy: Double, angle: Double): Long {
+        val args = Args()
+        args.int(id)
+        args.doubles(plane)
+        args.ints(kinds)
+        args.ints(ids)
+        args.doubles(nums)
+        args.boolean(revolve)
+        args.double(forward)
+        args.double(back)
+        args.double(ax)
+        args.double(ay)
+        args.double(dx)
+        args.double(dy)
+        args.double(angle)
+        return call(110, args).long()
+    }
+
+    override fun offsetSurface(id: Int, body: Long, faces: Array<String>, distance: Double): Long {
+        val args = Args()
+        args.int(id)
+        args.long(body)
+        args.strings(faces)
+        args.double(distance)
+        return call(111, args).long()
+    }
 }

@@ -114,6 +114,8 @@ JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_fastener(JNIEnv*, jobject,
 JNIEXPORT jfloatArray JNICALL Java_com_rm_parrotmetric_Core_currentView(JNIEnv*, jobject);
 JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_setView(JNIEnv*, jobject, jfloatArray);
 JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_setPull(JNIEnv*, jobject, jdouble, jdouble, jdouble);
+JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_surfaceFromLines(JNIEnv*, jobject, jint, jdoubleArray, jintArray, jintArray, jdoubleArray, jboolean, jdouble, jdouble, jdouble, jdouble, jdouble, jdouble, jdouble);
+JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_offsetSurface(JNIEnv*, jobject, jint, jlong, jobjectArray, jdouble);
 }
 
 namespace pmweb {
@@ -1035,6 +1037,33 @@ void dispatch(int call, Reader& in, Writer& out, JNIEnv* env) {
             auto a1 = in.f64();
             auto a2 = in.f64();
             Java_com_rm_parrotmetric_Core_setPull(env, nullptr, a0, a1, a2);
+            break;
+        }
+        case 110: {  // surfaceFromLines
+            auto a0 = in.i32();
+            auto a1 = in.doubles();
+            auto a2 = in.ints();
+            auto a3 = in.ints();
+            auto a4 = in.doubles();
+            auto a5 = in.boolean();
+            auto a6 = in.f64();
+            auto a7 = in.f64();
+            auto a8 = in.f64();
+            auto a9 = in.f64();
+            auto a10 = in.f64();
+            auto a11 = in.f64();
+            auto a12 = in.f64();
+            auto r = Java_com_rm_parrotmetric_Core_surfaceFromLines(env, nullptr, a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12);
+            if (!failed()) out.put(r);
+            break;
+        }
+        case 111: {  // offsetSurface
+            auto a0 = in.i32();
+            auto a1 = in.i64();
+            auto a2 = in.strings();
+            auto a3 = in.f64();
+            auto r = Java_com_rm_parrotmetric_Core_offsetSurface(env, nullptr, a0, a1, a2, a3);
+            if (!failed()) out.put(r);
             break;
         }
         default:

@@ -162,6 +162,7 @@ object Parametrics {
                 "v" -> f.copy(v = v)
                 else -> f
             }
+            is OffsetSurfaceFeature -> if (field == "distance") f.copy(distance = v) else f
             is LinkFeature -> when (field) {
                 "dx" -> f.copy(dx = v)
                 "dy" -> f.copy(dy = v)

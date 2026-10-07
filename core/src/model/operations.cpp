@@ -83,6 +83,7 @@
 #include <BRepGProp.hxx>
 #include <Bnd_Box.hxx>
 #include <BRepPrimAPI_MakePrism.hxx>
+#include <BRepOffsetAPI_MakeOffsetShape.hxx>
 #include <BRepPrimAPI_MakeRevol.hxx>
 #include <GProp_GProps.hxx>
 #include <Standard_Failure.hxx>
@@ -2188,6 +2189,79 @@ NamedShape fastener(int id, const gp_Ax3& seat, Fastener kind, double d, double 
         return out;
     } catch (const Standard_Failure&) {
         throw std::runtime_error("The fastener couldn't be made");
+    }
+}
+
+NamedShape surfaceFromLines(int id, const gp_Ax3& plane, const std::vector<SketchCurve>& curves, bool revolve, double forward, double back,
+                            double ax, double ay, double dx, double dy, double angle) {
+    if (curves.empty()) throw std::runtime_error("Draw a line to make the surface from");
+    if (revolve ? std::abs(angle) < 1e-9 : std::abs(forward + back) < 1e-6) throw std::runtime_error(revolve ? "The revolve has no angle" : "The extrude has no length");
+    try {
+        gp_Trsf onPlane = placeOn(plane);
+        gp_Trsf shift;
+        shift.SetTranslation(gp_Vec(plane.Direction()) * -back);
+        TopLoc_Location loc(revolve ? onPlane : shift * onPlane);
+        gp_Ax1 axis(gp_Pnt(ax, ay, 0).Transformed(onPlane), gp_Dir(revolve ? dx : 1, revolve ? dy : 0, 0).Transformed(onPlane));
+        BRepBuilderAPI_Sewing sew(1e-4);
+        std::vector<std::pair<TopoDS_Shape, int>> made;
+        for (const auto& c : curves) {
+            TopoDS_Edge e = sketchEdge(c);
+            if (e.IsNull()) continue;
+            e = TopoDS::Edge(e.Moved(loc));
+            TopoDS_Shape face;
+            if (revolve) {
+                BRepPrimAPI_MakeRevol turn(e, axis, angle);
+                if (!turn.IsDone()) throw std::runtime_error("The surface couldn't be made");
+                face = turn.Shape();
+            } else {
+                BRepPrimAPI_MakePrism prism(e, gp_Vec(plane.Direction()) * (forward + back));
+                if (!prism.IsDone()) throw std::runtime_error("The surface couldn't be made");
+                face = prism.Shape();
+            }
+            made.push_back({face, c.id});
+            sew.Add(face);
+        }
+        if (made.empty()) throw std::runtime_error("Draw a line to make the surface from");
+        sew.Perform();
+        NamedShape out;
+        out.shape = sew.SewedShape();
+        // Each face by the curve it came from, found through sewing.
+        for (const auto& [face, curve] : made)
+            for (TopExp_Explorer f(face, TopAbs_FACE); f.More(); f.Next()) {
+                TopoDS_Shape now = sew.IsModified(f.Current()) ? sew.Modified(f.Current()) : f.Current();
+                for (TopExp_Explorer g(now, TopAbs_FACE); g.More(); g.Next())
+                    if (!out.names.IsBound(g.Current())) out.names.Bind(g.Current(), prefix(id) + ".s" + std::to_string(curve));
+            }
+        int k = 0;
+        for (TopExp_Explorer f(out.shape, TopAbs_FACE); f.More(); f.Next())
+            if (!out.names.IsBound(f.Current())) out.names.Bind(f.Current(), prefix(id) + ".u" + std::to_string(k++));
+        return out;
+    } catch (const Standard_Failure&) {
+        throw std::runtime_error("The surface couldn't be made");
+    }
+}
+
+NamedShape offsetSurface(int id, const NamedShape& body, const std::vector<std::string>& faces, double distance) {
+    if (faces.empty()) throw std::runtime_error("Pick the faces to copy");
+    if (std::abs(distance) < 1e-9) throw std::runtime_error("Move it by more than 0");
+    try {
+        BRepBuilderAPI_Sewing sew(1e-4);
+        int n = 0;
+        for (const auto& name : faces)
+            for (const auto& f : body.findFaces(name)) {
+                sew.Add(f);
+                ++n;
+            }
+        if (n == 0) throw std::runtime_error("Its faces aren't there any more");
+        sew.Perform();
+        TopoDS_Shape picked = sew.SewedShape();
+        BRepOffsetAPI_MakeOffsetShape offset;
+        offset.PerformBySimple(picked, distance);
+        if (!offset.IsDone()) throw std::runtime_error("It can't be moved that far: try less");
+        NamedShape out = nameAll(id, offset.Shape(), TopoDS_Shape(), TopoDS_Shape(), "o");
+        return out;
+    } catch (const Standard_Failure&) {
+        throw std::runtime_error("It can't be moved that far: try less");
     }
 }
 

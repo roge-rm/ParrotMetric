@@ -144,7 +144,7 @@ object Manual {
             ManualBlock(ManualKind.Bullet, "**Start at** starts it a distance away from the sketch's plane."),
             ManualBlock(ManualKind.Bullet, "**Thin wall** makes a wall of a set thickness round the outline instead of a solid. A sketch of just an open line, like the shape of a clip, extrudes as a wall that thick along the line, with round ends."),
             ManualBlock(ManualKind.Heading, "Revolve"),
-            ManualBlock(ManualKind.Para, "Turns areas round an axis: the sketch's **Y axis** or **X axis**, or a line in the sketch. **Angle** is how far it goes, 360 for all the way round."),
+            ManualBlock(ManualKind.Para, "Turns areas round an axis: the sketch's **Y axis** or **X axis**, or a line in the sketch. **Angle** is how far it goes, 360 for all the way round. **As a surface**, here and in Extrude, makes the sketch's lines a surface instead (see Surfaces)."),
             ManualBlock(ManualKind.Heading, "Sweep"),
             ManualBlock(ManualKind.Para, "Moves areas along a path: a sketch's curves, or edges you pick. Pick the areas, start **Sweep**, then choose the path under **Along**."),
             ManualBlock(ManualKind.Heading, "Loft"),
@@ -282,6 +282,8 @@ object Manual {
         )),
         ManualSection("Surfaces", "Thin sheets with no thickness, and making solids from them.", listOf(
             ManualBlock(ManualKind.Para, "A surface is a face on its own, not closed into a solid. They're useful for shapes that are easier to make face by face. These tools are under **Create**."),
+            ManualBlock(ManualKind.Bullet, "**Extrude** and **Revolve** with **As a surface** push or turn a sketch's lines into a surface, instead of filling areas. A revolve of just open lines is always a surface."),
+            ManualBlock(ManualKind.Bullet, "**Offset surface** copies the faces you tap and moves the copy out by the **Distance**, or in when it's below 0, as a new surface. It's handy for a skin over a curved part."),
             ManualBlock(ManualKind.Bullet, "**Patch** makes a surface from **Sketch areas**, or with **Fill edges** fills a gap inside a loop of edges you pick, with a smooth face that meets them."),
             ManualBlock(ManualKind.Bullet, "**Stitch** joins surfaces you tap into one. If they close up all the way round, it makes a solid."),
             ManualBlock(ManualKind.Bullet, "**Thicken** gives a surface a thickness to make it a solid, to one side or **Both sides**."),

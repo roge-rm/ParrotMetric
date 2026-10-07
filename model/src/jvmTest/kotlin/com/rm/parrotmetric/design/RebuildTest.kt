@@ -157,6 +157,14 @@ private class FakeKernel : Kernel {
         val b = bodies.getValue(body)
         return listOf(make(b.copy(to = b.from + 1)), make(b.copy(from = b.to - 1)))
     }
+    override fun surfaceFromLines(id: Int, plane: SketchPlane, curves: List<ProfileCurve>, revolve: Boolean, forward: Double, back: Double, axis: List<Double>, angle: Double): Long {
+        calls += "surface $id ${if (revolve) "revolve" else "extrude"} ${curves.size}"
+        return make(Box(0.0, 1.0, curves.map { "F$id.s${it.id}" }))
+    }
+    override fun offsetSurface(id: Int, body: Long, faces: List<String>, distance: Double): Long {
+        calls += "offsetSurface $id $faces $distance"
+        return make(Box(0.0, 1.0, listOf("F$id.o0")))
+    }
     override fun coil(id: Int, plane: SketchPlane, u: Double, v: Double, diameter: Double, pitch: Double, turns: Double, section: Double, square: Boolean): Long {
         calls += "coil $id"
         return make(Box(u - diameter / 2, u + diameter / 2, listOf("F$id.c0")))
@@ -632,6 +640,24 @@ class RebuildTest {
         val flat = PlaneFeature(d.newId(), "Flat", PlaneFeature.Kind.ThreePoints, PlaneRef.Fixed(SketchPlane.Top), 0.0, 0.0, false, null, refs).also { d.add(it) }
         val built = Rebuilder(k).rebuild(d.active)
         assertEquals("The points are in a line", built.errors[flat.id])
+    }
+
+    @Test
+    fun linesMakeSurfacesAndFacesCopyOut() {
+        val k = FakeKernel()
+        val d = Design()
+        val sketch = sketchAt(d, 0.0, 10.0)
+        val box = extrude(d, sketch, Operation.NewBody)
+        val sheet = ExtrudeFeature(d.newId(), "Sheet", sketch.id, emptyList(), 5.0, 0.0, Operation.Cut, surface = true).also { d.add(it) }
+        val turned = RevolveFeature(d.newId(), "Turned", sketch.id, emptyList(), AxisRef.SketchY, PI, Operation.Join, surface = true).also { d.add(it) }
+        val copy = OffsetSurfaceFeature(d.newId(), "Copy", listOf("F${box.id}.end"), 2.0).also { d.add(it) }
+        val built = Rebuilder(k).rebuild(d.active)
+        assertTrue(built.errors.isEmpty(), built.errors.toString())
+        // Each is a new body whatever the operation says.
+        assertEquals(4, built.bodies.size)
+        assertTrue("surface ${sheet.id} extrude 4" in k.calls)
+        assertTrue("surface ${turned.id} revolve 4" in k.calls)
+        assertTrue("offsetSurface ${copy.id} [F${box.id}.end] 2.0" in k.calls)
     }
 
     @Test

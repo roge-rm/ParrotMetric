@@ -2581,6 +2581,35 @@ JNIEXPORT jlongArray JNICALL Java_com_rm_parrotmetric_Core_separate(JNIEnv* env,
     }
 }
 
+/** Open sketch lines made a surface by extruding or revolving them; see pm::surfaceFromLines. */
+JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_surfaceFromLines(JNIEnv* env, jobject, jint id, jdoubleArray plane, jintArray kinds, jintArray ids,
+                                                                      jdoubleArray nums, jboolean revolve, jdouble forward, jdouble back, jdouble ax,
+                                                                      jdouble ay, jdouble dx, jdouble dy, jdouble angle) {
+    try {
+        auto p = doubles(env, plane);
+        auto k = ints(env, kinds), i = ints(env, ids);
+        auto n = doubles(env, nums);
+        auto curves = curvesOf(k.data(), i.data(), n.data(), k.size());
+        return keep(pm::surfaceFromLines(id, planeOf(p.data()), curves, revolve, forward, back, ax, ay, dx, dy, angle));
+    } catch (const std::exception& e) {
+        fail(env, e.what());
+        return 0;
+    }
+}
+
+/** A copy of a body's faces moved out by a distance, as a surface; see pm::offsetSurface. */
+JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_offsetSurface(JNIEnv* env, jobject, jint id, jlong body, jobjectArray faces, jdouble distance) {
+    try {
+        std::unique_lock<std::mutex> g(lock);
+        pm::NamedShape s = solidOf(body);
+        g.unlock();
+        return keep(pm::offsetSurface(id, s, strings(env, faces), distance));
+    } catch (const std::exception& e) {
+        fail(env, e.what());
+        return 0;
+    }
+}
+
 /** Draws these bodies moved by these offsets (x, y, z each) from the next show(), for an exploded view; others where they are. */
 JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_bodyOffsets(JNIEnv* env, jobject, jlongArray bodies, jdoubleArray offsets) {
     auto h = longs(env, bodies);

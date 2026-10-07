@@ -201,6 +201,7 @@ class DesignEditor(
         is ChamferFeature -> "chamfer"
         is com.rm.parrotmetric.design.ShellFeature -> "shell"
         is com.rm.parrotmetric.design.OffsetFaceFeature -> "presspull"
+        is com.rm.parrotmetric.design.OffsetSurfaceFeature -> "offsetsurface"
         is com.rm.parrotmetric.design.DeleteFaceFeature -> "deleteface"
         is com.rm.parrotmetric.design.DraftFeature -> "draft"
         is com.rm.parrotmetric.design.RibFeature -> if (f.web) "web" else "rib"
@@ -1059,10 +1060,11 @@ class DesignEditor(
         val active = design.built
         val draft = panel ?: return active
         // Fillets and chamfers pick edges on the body before them, so they're left out while being picked.
+        // An offset surface leaves its body as it is, so it shows.
         val f = draft.feature() ?: return active
         val i = active.indexOfFirst { it.id == f.id }
         return when {
-            draft is EdgeDraft || draft is FaceDraft -> if (i >= 0) active.subList(0, i) else active
+            draft is EdgeDraft || (draft is FaceDraft && draft.tool != FaceTool.OffsetSurface) -> if (i >= 0) active.subList(0, i) else active
             i >= 0 -> active.toMutableList().also { it[i] = f }
             else -> active + f
         }
@@ -1329,6 +1331,12 @@ class DesignEditor(
                 d.thinOn = true
                 return@let
             }
+            // A revolve of open lines can only be a surface.
+            if (areas.isEmpty() && d is RevolveDraft && f.sketch.curves.any { !it.construction }) {
+                d.sketchId = f.id
+                d.surfaceOn = true
+                return@let
+            }
             // Several areas: none taken yet, but Extrude offers to take them all.
             if (areas.size > 1 && d is ExtrudeDraft) {
                 d.sketchId = f.id
@@ -1356,6 +1364,7 @@ class DesignEditor(
     fun startDraft() = openFaces(FaceDraft(null, FaceTool.Draft))
     fun startPressPull() = openFaces(FaceDraft(null, FaceTool.PressPull))
     fun startDeleteFace() = openFaces(FaceDraft(null, FaceTool.Delete))
+    fun startOffsetSurface() = openFaces(FaceDraft(null, FaceTool.OffsetSurface))
 
     private fun openFaces(d: FaceDraft) {
         d.faces = viewport.selectedFaces().map { it.second }.filter { it.isNotEmpty() }
@@ -1663,6 +1672,7 @@ class DesignEditor(
             is ShellFeature -> FaceDraft(f, FaceTool.Shell)
             is DraftFeature -> FaceDraft(f, FaceTool.Draft)
             is com.rm.parrotmetric.design.OffsetFaceFeature -> FaceDraft(f, FaceTool.PressPull)
+            is com.rm.parrotmetric.design.OffsetSurfaceFeature -> FaceDraft(f, FaceTool.OffsetSurface)
             is com.rm.parrotmetric.design.DeleteFaceFeature -> FaceDraft(f, FaceTool.Delete)
             is HoleFeature -> HoleDraft(f)
             is com.rm.parrotmetric.design.SnapFitFeature -> SnapFitDraft(f).also { snapBase(it) }
@@ -1996,6 +2006,8 @@ class DesignEditor(
         var offset by mutableStateOf(editing?.offset ?: 0.0)
         var thinOn by mutableStateOf((editing?.thin ?: 0.0) > 0)
         var thin by mutableStateOf(editing?.thin?.takeIf { it > 0 } ?: 1.0)
+        /** The sketch's lines made a surface, not a solid. */
+        var surfaceOn by mutableStateOf(editing?.surface ?: false)
 
         init {
             if (editing != null) {
@@ -2012,6 +2024,14 @@ class DesignEditor(
 
         override fun feature(): Feature? {
             val s = sketchId ?: return null
+            if (surfaceOn) {
+                val (fwd, back) = when (direction) {
+                    Direction.OneSide -> distance to 0.0
+                    Direction.Symmetric -> distance / 2 to distance / 2
+                    Direction.TwoSides -> distance to other
+                }
+                return ExtrudeFeature(id, name, s, emptyList(), fwd, back, Operation.NewBody, offset = offset, surface = true)
+            }
             // With no areas, a thin wall goes along the sketch's open line.
             if (regions.isEmpty() && !thinOn) return null
             val taper = taperDegrees * PI / 180
@@ -2240,6 +2260,8 @@ class DesignEditor(
         private val name = editing?.name ?: "Revolve ${design.features.count { it is RevolveFeature } + 1}"
         var axis by mutableStateOf<AxisRef>(AxisRef.SketchY)
         var degrees by mutableStateOf(360.0)
+        /** The sketch's lines made a surface, not a solid. */
+        var surfaceOn by mutableStateOf(editing?.surface ?: false)
 
         init {
             if (editing != null) {
@@ -2253,6 +2275,7 @@ class DesignEditor(
 
         override fun feature(): Feature? {
             val s = sketchId ?: return null
+            if (surfaceOn) return RevolveFeature(id, name, s, emptyList(), axis, degrees * PI / 180, Operation.NewBody, surface = true)
             if (regions.isEmpty()) return null
             return RevolveFeature(id, name, s, regions, axis, degrees * PI / 180, operation, only)
         }
@@ -2260,7 +2283,7 @@ class DesignEditor(
 
     private fun nextName(prefix: String, count: Int) = "$prefix ${count + 1}"
 
-    enum class FaceTool(val title: String) { Shell("Shell"), Draft("Draft"), PressPull("Press pull"), Delete("Delete face") }
+    enum class FaceTool(val title: String) { Shell("Shell"), Draft("Draft"), PressPull("Press pull"), Delete("Delete face"), OffsetSurface("Offset surface") }
 
     /**
      * Features on picked faces: Shell (faces left open), Draft (faces tilted,
@@ -2275,6 +2298,7 @@ class DesignEditor(
                 FaceTool.Draft -> it is DraftFeature
                 FaceTool.PressPull -> it is com.rm.parrotmetric.design.OffsetFaceFeature
                 FaceTool.Delete -> it is com.rm.parrotmetric.design.DeleteFaceFeature
+                FaceTool.OffsetSurface -> it is com.rm.parrotmetric.design.OffsetSurfaceFeature
             }
         })
         var faces by mutableStateOf<List<String>>(emptyList())
@@ -2289,6 +2313,7 @@ class DesignEditor(
                 is DraftFeature -> { faces = editing.faces; neutral = editing.neutral; size = editing.angle * 180 / PI }
                 is com.rm.parrotmetric.design.OffsetFaceFeature -> { faces = editing.faces; size = editing.distance }
                 is com.rm.parrotmetric.design.DeleteFaceFeature -> faces = editing.faces
+                is com.rm.parrotmetric.design.OffsetSurfaceFeature -> { faces = editing.faces; size = editing.distance }
                 else -> {}
             }
         }
@@ -2301,6 +2326,7 @@ class DesignEditor(
             FaceTool.Shell -> if (faces.isEmpty()) null else ShellFeature(id, name, faces, size)
             FaceTool.PressPull -> if (faces.isEmpty()) null else com.rm.parrotmetric.design.OffsetFaceFeature(id, name, faces, size)
             FaceTool.Delete -> if (faces.isEmpty()) null else com.rm.parrotmetric.design.DeleteFaceFeature(id, name, faces)
+            FaceTool.OffsetSurface -> if (faces.isEmpty()) null else com.rm.parrotmetric.design.OffsetSurfaceFeature(id, name, faces, size)
         }
 
         override fun missing() = if (tilt && neutral == null) "Pick the face they pivot on" else "Tap the faces"
