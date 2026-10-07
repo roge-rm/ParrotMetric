@@ -420,14 +420,16 @@ class DesignEditor(
 
     /**
      * A body's colour for the view as the core takes it: 0xRRGGBB, or -1 for the usual grey.
-     * See-through adds bit 30, with bit 29 for keeping the usual grey.
+     * See-through adds bit 30, bit 29 keeps the usual grey, and the finish goes in bits 24 and 25.
      */
     private fun tintOf(label: String): Int {
         val info = design.info(label)
         val c = info.colour
-        if (!info.seeThrough) return c ?: -1
-        return 0x40000000 or (c ?: 0x20000000)
+        if (!info.seeThrough && info.finish == com.rm.parrotmetric.design.Finish.Plain) return c ?: -1
+        return (if (info.seeThrough) 0x40000000 else 0) or (info.finish.ordinal shl 24) or (c ?: 0x20000000)
     }
+
+    fun setFinish(labels: List<String>, finish: com.rm.parrotmetric.design.Finish) = labels.forEach { l -> setInfo(l) { it.copy(finish = finish) } }
     fun setComponent(label: String, component: String?) = setInfo(label) { it.copy(component = component) }
 
     /** Components in use, in the order their first body comes. */

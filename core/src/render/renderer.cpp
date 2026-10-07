@@ -61,6 +61,8 @@ uniform int analysis;
 uniform float limit;
 uniform float bedZ;
 uniform vec4 pull;  // xyz used
+// 0 plain, 1 matte, 2 glossy, 3 metal.
+uniform int finish;
 uniform bool analysed;
 // A sculpted mesh: the shade is how masked it is, shown darker.
 uniform bool masking;
@@ -108,6 +110,18 @@ void main() {
     vec3 base = mix(own, vec3(1.0, 0.48, 0.24), chosen * 0.55);
     float alpha = faceColour.a < 1.0 ? mix(faceColour.a, 0.55, chosen) : 1.0;
     colour = vec4(base * (ambient + 0.72 * key) + rim * (1.0 - chosen), alpha);
+    if (!(analysed && analysis > 0)) {
+        // The light's reflection off the face, and what the room round it would show in it.
+        vec3 r = reflect(-normalize(vec3(-0.45, 0.65, 0.62)), n);
+        float shine = max(r.z, 0.0);
+        vec3 seen = reflect(vec3(0.0, 0.0, -1.0), n);
+        // A room with a bright top and a dark floor, a horizon between, as polished metal shows it.
+        vec3 room = mix(vec3(0.32, 0.30, 0.28), vec3(1.0, 1.0, 0.97), smoothstep(-0.5, 0.3, seen.y));
+        float facing = max(n.z, 0.0);
+        if (finish == 1) colour.rgb = base * (ambient * 1.1 + 0.62 * key);
+        else if (finish == 2) colour.rgb += vec3(0.40) * pow(shine, 12.0) + vec3(0.10) * pow(facing, 6.0);
+        else if (finish == 3) colour.rgb = base * (room * 0.9 + 0.15) + mix(vec3(1.0), base, 0.4) * pow(shine, 16.0) * 0.6;
+    }
     // Clay being sculpted catches the light a little, which shows the shape's small turns.
     if (masking) colour.rgb += vec3(0.16, 0.15, 0.13) * pow(max(reflect(-normalize(vec3(-0.45, 0.65, 0.62)), n).z, 0.0), 16.0) * (1.0 - thick * 0.8);
     if (analysed && analysis == 3) {
@@ -415,6 +429,7 @@ void Renderer::upload() {
         g.faceCount = b.faceCount;
         std::copy(b.edgeColour, b.edgeColour + 4, g.edgeColour);
         std::copy(b.faceColour, b.faceColour + 4, g.faceColour);
+        g.finish = b.finish;
         g.behind = b.behind;
         g.body = b.body;
         g.edgeCount = uint32_t(b.edges.size());
@@ -721,6 +736,7 @@ void Renderer::drawScene(bool ids, const float* vp, const float* normal) {
             if (ids) glUniform1ui(glGetUniformLocation(faceProgram, "base"), i << 20);
             else {
                 glUniform4fv(glGetUniformLocation(faceProgram, "faceColour"), 1, g.faceColour);
+                glUniform1i(glGetUniformLocation(faceProgram, "finish"), g.finish);
                 glUniform1i(glGetUniformLocation(faceProgram, "analysed"), g.body ? 1 : 0);
             }
             glActiveTexture(GL_TEXTURE0);
@@ -912,6 +928,7 @@ void Renderer::drawSculpt(const float* vp, const float* normal) {
     // Clay, grey stone, white porcelain or terracotta.
     static const float looks[4][4] = {{0.82f, 0.74f, 0.66f, 1}, {0.66f, 0.68f, 0.70f, 1}, {0.93f, 0.92f, 0.90f, 1}, {0.80f, 0.48f, 0.36f, 1}};
     glUniform4fv(glGetUniformLocation(faceProgram_, "faceColour"), 1, looks[std::clamp(sculptLook_, 0, 3)]);
+    glUniform1i(glGetUniformLocation(faceProgram_, "finish"), 0);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, blankTexture_);
     glBindVertexArray(sculptVao_);

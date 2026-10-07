@@ -6,6 +6,9 @@ import com.rm.parrotmetric.sketch.Sketch
  * The history: features in order, and the rollback marker. Features after
  * the marker are kept but not built, and new ones go in at the marker.
  */
+/** How a body catches the light, in the order the core takes (DisplayMesh::finish). */
+enum class Finish(val label: String) { Plain("Plain"), Matte("Matte"), Glossy("Glossy"), Metal("Metal") }
+
 class Design {
     private val list = mutableListOf<Feature>()
 
@@ -17,7 +20,7 @@ class Design {
     val bodies = mutableMapOf<String, BodyInfo>()
 
     /** [colour] is 0xRRGGBB, or null for the usual grey. */
-    data class BodyInfo(val name: String? = null, val component: String? = null, val hidden: Boolean = false, val colour: Int? = null, val seeThrough: Boolean = false)
+    data class BodyInfo(val name: String? = null, val component: String? = null, val hidden: Boolean = false, val colour: Int? = null, val seeThrough: Boolean = false, val finish: Finish = Finish.Plain)
 
     fun info(label: String) = bodies[label] ?: BodyInfo()
 

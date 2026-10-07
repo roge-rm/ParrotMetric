@@ -60,9 +60,9 @@ class VersionsTest {
     @Test
     fun aSeeThroughBodyStaysSo() {
         val d = Design()
-        d.bodies["Body 1"] = Design.BodyInfo(colour = 0x336699, seeThrough = true)
+        d.bodies["Body 1"] = Design.BodyInfo(colour = 0x336699, seeThrough = true, finish = com.rm.parrotmetric.design.Finish.Metal)
         val back = Design()
         DesignFile.read(DesignFile.write(d, "x"), back)
-        assertEquals(Design.BodyInfo(colour = 0x336699, seeThrough = true), back.info("Body 1"))
+        assertEquals(Design.BodyInfo(colour = 0x336699, seeThrough = true, finish = com.rm.parrotmetric.design.Finish.Metal), back.info("Body 1"))
     }
 }

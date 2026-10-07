@@ -1442,7 +1442,8 @@ JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_show(JNIEnv* env, jobject, 
                 for (auto& e : m.edges) shift(e.points);
             }
         }
-        // 0xRRGGBB, or -1 for the usual grey; bit 30 draws it see-through, bit 29 with the usual grey.
+        // 0xRRGGBB, or -1 for the usual grey; bit 30 draws it see-through, bit 29 keeps the usual grey,
+        // and bits 24 and 25 are its finish.
         if (i < tints.size() && tints[i] >= 0) {
             int t = tints[i];
             if (!(t & 0x20000000)) {
@@ -1451,6 +1452,7 @@ JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_show(JNIEnv* env, jobject, 
                 meshes.back().faceColour[2] = float(t & 255) / 255;
             }
             if (t & 0x40000000) meshes.back().faceColour[3] = 0.35f;
+            meshes.back().finish = (t >> 24) & 3;
         }
         if (b.mesh) s.mesh = std::const_pointer_cast<pm::DisplayMesh>(c.mesh);
         nextShown.push_back(std::move(s));

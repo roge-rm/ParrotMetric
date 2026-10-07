@@ -157,6 +157,7 @@ private:
         int faceIndices = 0, edgeIndices = 0;
         float edgeColour[4];
         float faceColour[4];
+        int finish = 0;
         bool behind = false;
         bool body = false;
         uint32_t faceCount = 0, edgeCount = 0;

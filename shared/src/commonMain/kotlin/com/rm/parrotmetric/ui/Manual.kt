@@ -60,7 +60,7 @@ object Manual {
             ManualBlock(ManualKind.Bullet, "Under each body is its size along x, y and z."),
             ManualBlock(ManualKind.Bullet, "The eye shows or hides a body."),
             ManualBlock(ManualKind.Bullet, "With a tool open that works on whole bodies, such as Mirror, tap a body's name to pick it."),
-            ManualBlock(ManualKind.Bullet, "The dot sets its colour, which also goes into 3MF files."),
+            ManualBlock(ManualKind.Bullet, "The dot sets its colour, which also goes into 3MF files, and how it looks: **Plain**, **Matte**, **Glossy** or **Metal**. The look is only for the view."),
             ManualBlock(ManualKind.Bullet, "The menu beside it has **Rename…**, **Isolate**, **See-through**, and puts the body into a component or takes it out (see Components and joints). A component's menu has **Isolate** and **See-through** too. A see-through body shows what's inside it, such as a board in its case; **Solid** turns it back."),
             ManualBlock(ManualKind.Para, "**Isolate** shows only those bodies, or the bodies of the faces picked when chosen from the right-click menu, and leaves the rest out of view until you tap **Show all** on the note at the top of the view. It only changes what's shown: exports, drawings and the bill of materials still have every body that isn't hidden."),
             ManualBlock(ManualKind.Para, "Under **Planes** are the construction planes, each with an eye to hide it once you've drawn on it."),

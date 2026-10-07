@@ -100,7 +100,7 @@ The box has rounded corners, a hollow, vents and a lid on a hinge joint, with it
 
 ### Components and joints
 
-- Group bodies into components in the parts list, and name, colour and hide them
+- Group bodies into components in the parts list, and name, colour, hide, isolate or see through them, with a plain, matte, glossy or metal look
 - Joints that turn, slide or do both, with a slider to move them, and rigid joints that keep components together
 
 ### Checking a part

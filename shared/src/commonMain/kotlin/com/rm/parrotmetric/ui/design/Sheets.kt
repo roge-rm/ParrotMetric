@@ -195,7 +195,7 @@ fun PartsSheet(editor: DesignEditor, close: () -> Unit) {
                             )
                             size?.let { (x, y, z) -> Text("${sizeText(x)} × ${sizeText(y)} × ${sizeText(z)} mm", fontSize = 11.sp, color = Palette.muted) }
                         }
-                        ColourPick(info.colour) { editor.setColour(b.label, it) }
+                        ColourPick(info.colour, info.finish, { editor.setColour(b.label, it) }) { editor.setFinish(listOf(b.label), it) }
                         Box {
                             IconButton(onClick = { menu = true }) { Icon(Icons.more, "Options", tint = Palette.muted) }
                             DropdownMenu(menu, onDismissRequest = { menu = false }, containerColor = Palette.raised) {
@@ -414,10 +414,10 @@ private val BodyColours = listOf(
 
 private fun swatch(c: Int?) = if (c == null) androidx.compose.ui.graphics.Color(0xFFCCD1CC) else androidx.compose.ui.graphics.Color(0xFF000000 or c.toLong())
 
-/** A body's colour as a dot; tapping it offers the others. */
+/** A body's colour as a dot; tapping it offers the others, and its finish. */
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-private fun ColourPick(colour: Int?, onPick: (Int?) -> Unit) {
+private fun ColourPick(colour: Int?, finish: com.rm.parrotmetric.design.Finish, onPick: (Int?) -> Unit, onFinish: (com.rm.parrotmetric.design.Finish) -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box {
         IconButton(onClick = { open = true }) {
@@ -433,6 +433,10 @@ private fun ColourPick(colour: Int?, onPick: (Int?) -> Unit) {
                             .clickable { open = false; onPick(c) },
                     )
                 }
+            }
+            val finishes = com.rm.parrotmetric.design.Finish.entries
+            Box(Modifier.width(216.dp).padding(horizontal = 8.dp, vertical = 4.dp)) {
+                Segmented(finishes.map { it.label }, finish.ordinal) { onFinish(finishes[it]) }
             }
         }
     }
