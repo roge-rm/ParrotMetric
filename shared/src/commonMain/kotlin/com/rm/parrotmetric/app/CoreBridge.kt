@@ -235,6 +235,7 @@ class CoreViewport(private val core: NativeCore, private val gl: (() -> Unit) ->
     override fun selectedPlanes() = core.selectedPlanes().toList()
     override fun measure() = core.measure().toList()
     override fun setAnalysis(mode: Int, limit: Double) = core.setAnalysis(mode, limit)
+    override fun setPull(pull: Vec3) = core.setPull(pull.x, pull.y, pull.z)
     override fun setAreasFirst(on: Boolean) = core.setAreasFirst(on)
 
     override fun setSection(on: Boolean, origin: Vec3, normal: Vec3) {

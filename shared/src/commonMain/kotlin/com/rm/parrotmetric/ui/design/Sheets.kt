@@ -166,6 +166,10 @@ fun PartsSheet(editor: DesignEditor, close: () -> Unit) {
                                     onClick = { menu = false; editor.activeComponent = if (taking) null else component },
                                 )
                                 if (list.isNotEmpty()) DropdownMenuItem({ Text("Isolate") }, onClick = { menu = false; editor.isolate(list.map { it.label }) })
+                                if (list.isNotEmpty()) {
+                                    val through = list.all { editor.design.info(it.label).seeThrough }
+                                    DropdownMenuItem({ Text(if (through) "Solid" else "See-through") }, onClick = { menu = false; editor.setSeeThrough(list.map { it.label }, !through) })
+                                }
                             }
                         }
                     }
@@ -197,6 +201,8 @@ fun PartsSheet(editor: DesignEditor, close: () -> Unit) {
                             DropdownMenu(menu, onDismissRequest = { menu = false }, containerColor = Palette.raised) {
                                 DropdownMenuItem({ Text("Rename…") }, onClick = { menu = false; renaming = b.label })
                                 DropdownMenuItem({ Text("Isolate") }, onClick = { menu = false; editor.isolate(listOf(b.label)) })
+                                val through = editor.design.info(b.label).seeThrough
+                                DropdownMenuItem({ Text(if (through) "Solid" else "See-through") }, onClick = { menu = false; editor.setSeeThrough(listOf(b.label), !through) })
                                 for (c in editor.components().filter { it != info.component }) {
                                     DropdownMenuItem({ Text("Into $c") }, onClick = { menu = false; editor.setComponent(b.label, c) })
                                 }
@@ -453,11 +459,22 @@ fun PrintCheckSheet(editor: DesignEditor, close: () -> Unit) {
 @Composable
 fun SurfaceCheckSheet(editor: DesignEditor, close: () -> Unit) {
     SheetFrame("Surface check", close) {
-        Segmented(listOf("Zebra", "Curvature"), if (editor.printCheck == 4) 1 else 0) {
-            editor.printCheck = it + 3
+        Segmented(listOf("Zebra", "Curvature", "Draft"), when (editor.printCheck) { 4 -> 1; 5 -> 2; else -> 0 }) {
+            editor.printCheck = listOf(3, 4, 5)[it]
             editor.updatePrintCheck()
         }
-        if (editor.printCheck == 4) NumberRow("Radius", editor.curvatureRadius, "mm", allowNegative = false) {
+        if (editor.printCheck == 5) {
+            Text("Pulled out square to", fontSize = 13.sp, color = Palette.muted)
+            Segmented(listOf("Top", "Front", "Right", "Picked face"), editor.pullFrom) {
+                if (it == 3) { if (!editor.pullFromPicked()) editor.message = "Pick a flat face first" }
+                else { editor.pullFrom = it; editor.updatePrintCheck() }
+            }
+            com.rm.parrotmetric.ui.design.Toggle("The other way", editor.pullFlipped) { editor.pullFlipped = it; editor.updatePrintCheck() }
+            NumberRow("Least draft", editor.draftAngle, "°", allowNegative = false) {
+                editor.draftAngle = it.coerceIn(0.0, 45.0)
+                editor.updatePrintCheck()
+            }
+        } else if (editor.printCheck == 4) NumberRow("Radius", editor.curvatureRadius, "mm", allowNegative = false) {
             editor.curvatureRadius = it.coerceAtLeast(0.01)
             editor.updatePrintCheck()
         } else NumberRow("Stripes", editor.zebraStripes, "", allowNegative = false) {

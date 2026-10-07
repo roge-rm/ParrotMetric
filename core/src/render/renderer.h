@@ -60,11 +60,18 @@ public:
      * facing down more steeply than limit radians from straight down, above
      * the lowest point; 2 walls thinner than limit mm (needs
      * DisplayMesh::shade); 3 zebra stripes, limit of them; 4 curvature
-     * (needs DisplayMesh::shade), full colour at radius limit mm.
+     * (needs DisplayMesh::shade), full colour at radius limit mm; 5 draft
+     * against the pull direction, too little under limit radians.
      */
     void setAnalysis(int mode, float limit) {
         analysis_ = mode;
         limit_ = limit;
+    }
+    /** The way a part is pulled out of its mould, for the draft check: a unit vector. */
+    void setPull(float x, float y, float z) {
+        pull_[0] = x;
+        pull_[1] = y;
+        pull_[2] = z;
     }
 
     /**
@@ -207,6 +214,7 @@ private:
     float covered_[4] = {0, 0, 0, 0};      // Left, top, right, bottom, pixels, as drawn now.
     float coveredGoal_[4] = {0, 0, 0, 0};  // Where they're heading.
     float limit_ = 0;
+    float pull_[3] = {0, 0, 1};
     float bedZ_ = 0;  // The lowest point of the bodies, where the bed is.
     float density_ = 1;
 

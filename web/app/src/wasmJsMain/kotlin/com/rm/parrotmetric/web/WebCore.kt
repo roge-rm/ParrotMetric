@@ -941,4 +941,12 @@ object WebCore : NativeCore {
         args.floats(view)
         call(108, args)
     }
+
+    override fun setPull(x: Double, y: Double, z: Double) {
+        val args = Args()
+        args.double(x)
+        args.double(y)
+        args.double(z)
+        call(109, args)
+    }
 }

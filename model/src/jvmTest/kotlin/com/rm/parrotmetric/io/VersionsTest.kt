@@ -56,4 +56,13 @@ class VersionsTest {
         DesignFile.read(DesignFile.write(d, "x"), back)
         assertEquals(d.views, back.views)
     }
+
+    @Test
+    fun aSeeThroughBodyStaysSo() {
+        val d = Design()
+        d.bodies["Body 1"] = Design.BodyInfo(colour = 0x336699, seeThrough = true)
+        val back = Design()
+        DesignFile.read(DesignFile.write(d, "x"), back)
+        assertEquals(Design.BodyInfo(colour = 0x336699, seeThrough = true), back.info("Body 1"))
+    }
 }

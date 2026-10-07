@@ -60,6 +60,7 @@ uniform bool clipping;
 uniform int analysis;
 uniform float limit;
 uniform float bedZ;
+uniform vec4 pull;  // xyz used
 uniform bool analysed;
 // A sculpted mesh: the shade is how masked it is, shown darker.
 uniform bool masking;
@@ -89,6 +90,15 @@ void main() {
         // Bulging out warm, hollow cool, flat between; limit is the radius that shows fully.
         float t = clamp(thick * limit, -1.0, 1.0);
         own = t >= 0.0 ? mix(vec3(0.62, 0.78, 0.70), vec3(0.90, 0.36, 0.22), t) : mix(vec3(0.62, 0.78, 0.70), vec3(0.30, 0.50, 0.90), -t);
+    } else if (analysed && analysis == 5) {
+        // Draft: sloping out towards the pull green, back from it blue, too near the pull's line red;
+        // faces across the pull, which come straight off, grey.
+        float d = dot(normalize(worldNormal), pull.xyz);
+        float s = sin(limit);
+        if (abs(d) > 0.996) own = vec3(0.70, 0.72, 0.72);
+        else if (abs(d) < s - 1e-4) own = vec3(0.86, 0.22, 0.20);
+        else if (d > 0.0) own = vec3(0.45, 0.78, 0.50);
+        else own = vec3(0.35, 0.58, 0.88);
     } else if (analysed && analysis == 2) {
         if (thick < limit) own = vec3(0.86, 0.22, 0.20);
         else if (thick < limit * 2.0) own = mix(vec3(0.95, 0.70, 0.25), vec3(0.62, 0.78, 0.70), (thick - limit) / limit);
@@ -671,6 +681,8 @@ void Renderer::drawScene(bool ids, const float* vp, const float* normal) {
         glUniform1i(glGetUniformLocation(faceProgram, "analysis"), analysis_);
         glUniform1f(glGetUniformLocation(faceProgram, "limit"), limit_);
         glUniform1f(glGetUniformLocation(faceProgram, "bedZ"), bedZ_);
+        const float pull[4] = {pull_[0], pull_[1], pull_[2], 0};
+        glUniform4fv(glGetUniformLocation(faceProgram, "pull"), 1, pull);
     }
     // For picking, what's drawn behind (construction planes) goes first and
     // leaves no depth, so bodies and sketch areas anywhere in front of or

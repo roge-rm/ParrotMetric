@@ -113,6 +113,7 @@ JNIEXPORT jlongArray JNICALL Java_com_rm_parrotmetric_Core_separate(JNIEnv*, job
 JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_fastener(JNIEnv*, jobject, jint, jdoubleArray, jint, jdouble, jdouble, jdouble, jdouble, jdouble, jdouble);
 JNIEXPORT jfloatArray JNICALL Java_com_rm_parrotmetric_Core_currentView(JNIEnv*, jobject);
 JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_setView(JNIEnv*, jobject, jfloatArray);
+JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_setPull(JNIEnv*, jobject, jdouble, jdouble, jdouble);
 }
 
 namespace pmweb {
@@ -1027,6 +1028,13 @@ void dispatch(int call, Reader& in, Writer& out, JNIEnv* env) {
         case 108: {  // setView
             auto a0 = in.floats();
             Java_com_rm_parrotmetric_Core_setView(env, nullptr, a0);
+            break;
+        }
+        case 109: {  // setPull
+            auto a0 = in.f64();
+            auto a1 = in.f64();
+            auto a2 = in.f64();
+            Java_com_rm_parrotmetric_Core_setPull(env, nullptr, a0, a1, a2);
             break;
         }
         default:

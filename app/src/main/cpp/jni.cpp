@@ -1442,11 +1442,15 @@ JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_show(JNIEnv* env, jobject, 
                 for (auto& e : m.edges) shift(e.points);
             }
         }
+        // 0xRRGGBB, or -1 for the usual grey; bit 30 draws it see-through, bit 29 with the usual grey.
         if (i < tints.size() && tints[i] >= 0) {
             int t = tints[i];
-            meshes.back().faceColour[0] = float((t >> 16) & 255) / 255;
-            meshes.back().faceColour[1] = float((t >> 8) & 255) / 255;
-            meshes.back().faceColour[2] = float(t & 255) / 255;
+            if (!(t & 0x20000000)) {
+                meshes.back().faceColour[0] = float((t >> 16) & 255) / 255;
+                meshes.back().faceColour[1] = float((t >> 8) & 255) / 255;
+                meshes.back().faceColour[2] = float(t & 255) / 255;
+            }
+            if (t & 0x40000000) meshes.back().faceColour[3] = 0.35f;
         }
         if (b.mesh) s.mesh = std::const_pointer_cast<pm::DisplayMesh>(c.mesh);
         nextShown.push_back(std::move(s));
@@ -1667,6 +1671,14 @@ JNIEXPORT jobjectArray JNICALL Java_com_rm_parrotmetric_Core_selectedFaces(JNIEn
 }
 
 /** Colours bodies to check them for printing; see Renderer::setAnalysis. Thickness shows from the next show(). */
+/** The way a part is pulled from its mould, for the draft check; made unit length here. */
+JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_setPull(JNIEnv*, jobject, jdouble x, jdouble y, jdouble z) {
+    double l = std::sqrt(x * x + y * y + z * z);
+    if (l < 1e-12) return;
+    std::lock_guard<std::mutex> g(lock);
+    renderer.setPull(float(x / l), float(y / l), float(z / l));
+}
+
 JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_setAnalysis(JNIEnv*, jobject, jint mode, jdouble limit) {
     std::lock_guard<std::mutex> g(lock);
     analysisMode = mode;

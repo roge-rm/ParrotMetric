@@ -17,7 +17,7 @@ class Design {
     val bodies = mutableMapOf<String, BodyInfo>()
 
     /** [colour] is 0xRRGGBB, or null for the usual grey. */
-    data class BodyInfo(val name: String? = null, val component: String? = null, val hidden: Boolean = false, val colour: Int? = null)
+    data class BodyInfo(val name: String? = null, val component: String? = null, val hidden: Boolean = false, val colour: Int? = null, val seeThrough: Boolean = false)
 
     fun info(label: String) = bodies[label] ?: BodyInfo()
 

@@ -79,6 +79,8 @@ interface Viewport {
     fun setSection(on: Boolean, origin: Vec3, normal: Vec3)
     /** Colours bodies to check them for printing: 0 off, 1 overhangs past limit radians, 2 walls thinner than limit mm. */
     fun setAnalysis(mode: Int, limit: Double) {}
+    /** The way a part is pulled from its mould, for the draft check. */
+    fun setPull(pull: Vec3) {}
     /** Sketch areas are picked over bodies in front of them. */
     fun setAreasFirst(on: Boolean) {}
     /** A face's edges as curves on a plane, for projecting into a sketch. Throws if the face is gone. */
@@ -247,7 +249,7 @@ class DesignEditor(
         measuring = false
     }
 
-    /** Colouring bodies to check them: 0 off, 1 overhangs, 2 thin walls, 3 zebra stripes, 4 curvature. */
+    /** Colouring bodies to check them: 0 off, 1 overhangs, 2 thin walls, 3 zebra stripes, 4 curvature, 5 draft. */
     var printCheck by mutableStateOf(0)
     var zebraStripes by mutableStateOf(8.0)
     /** Curves this tight or tighter show in full colour, mm. */
@@ -255,13 +257,35 @@ class DesignEditor(
     /** Overhangs steeper than this from straight up need support, degrees. */
     var overhangAngle by mutableStateOf(45.0)
     var thinWall by mutableStateOf(1.2)
+    /** Faces sloping less than this from the pull's line can't come out of a mould, degrees. */
+    var draftAngle by mutableStateOf(1.0)
+    /** Which way the part is pulled: square to Top, Front or Right, or to the flat face picked (3). */
+    var pullFrom by mutableStateOf(0)
+    var pullFlipped by mutableStateOf(false)
+    /** The picked flat face's normal, kept when pulling from it. */
+    private var pickedPull: Vec3? = null
+
+    /** Pulls square to the flat face picked; false if none is. */
+    fun pullFromPicked(): Boolean {
+        val (_, face) = viewport.selectedFaces().firstOrNull { it.second.isNotEmpty() } ?: return false
+        val n = shownBodies.firstNotNullOfOrNull { kernel.facePlane(it.handle, face) } ?: return false
+        pickedPull = Vec3(n[3], n[4], n[5])
+        pullFrom = 3
+        updatePrintCheck()
+        return true
+    }
 
     fun updatePrintCheck() {
         val limit = when (printCheck) {
             1 -> (90 - overhangAngle) * kotlin.math.PI / 180
             2 -> thinWall
             3 -> zebraStripes
+            5 -> draftAngle * kotlin.math.PI / 180
             else -> curvatureRadius
+        }
+        if (printCheck == 5) {
+            val pull = (if (pullFrom == 3) pickedPull else null) ?: listOf(SketchPlane.Top, SketchPlane.Front, SketchPlane.Right)[pullFrom.coerceIn(0, 2)].normal
+            viewport.setPull(if (pullFlipped) pull * -1.0 else pull)
         }
         viewport.setAnalysis(printCheck, limit)
         rebuild()
@@ -390,6 +414,19 @@ class DesignEditor(
     }
 
     fun rename(label: String, name: String) = setInfo(label) { it.copy(name = name.trim().ifEmpty { null }) }
+
+    fun setSeeThrough(labels: List<String>, on: Boolean) = labels.forEach { l -> setInfo(l) { it.copy(seeThrough = on) } }
+
+    /**
+     * A body's colour for the view as the core takes it: 0xRRGGBB, or -1 for the usual grey.
+     * See-through adds bit 30, with bit 29 for keeping the usual grey.
+     */
+    private fun tintOf(label: String): Int {
+        val info = design.info(label)
+        val c = info.colour
+        if (!info.seeThrough) return c ?: -1
+        return 0x40000000 or (c ?: 0x20000000)
+    }
     fun setComponent(label: String, component: String?) = setInfo(label) { it.copy(component = component) }
 
     /** Components in use, in the order their first body comes. */
@@ -903,7 +940,7 @@ class DesignEditor(
                         viewport.threadMarks(b.threads.mapNotNull { t -> visible.firstOrNull { t.face in kernel.faceNames(it.handle) }?.let { it.handle to t } })
                         viewport.show(
                             visible.map { it.handle }, shown.map { it.second to it.first.sketch.profileCurves() },
-                            planeFeatures.map { b.sketchPlanes.getValue(it.id) }, b.axes.values.toList(), b.points.values.toList(), visible.map { design.info(it.label).colour ?: -1 }, canvasesToShow(b), refit,
+                            planeFeatures.map { b.sketchPlanes.getValue(it.id) }, b.axes.values.toList(), b.points.values.toList(), visible.map { tintOf(it.label) }, canvasesToShow(b), refit,
                         )
                         shownPlanes = planeFeatures
                         Triple(b, shown.map { it.first }, draft)

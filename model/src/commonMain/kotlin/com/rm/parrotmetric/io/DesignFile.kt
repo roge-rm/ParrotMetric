@@ -90,7 +90,7 @@ object DesignFile {
         "title" to title,
         "marker" to design.marker,
         "features" to design.features.map { feature(it) },
-        "bodies" to design.bodies.mapValues { (_, b) -> mapOf("name" to b.name, "component" to b.component, "hidden" to b.hidden, "colour" to b.colour) },
+        "bodies" to design.bodies.mapValues { (_, b) -> mapOf("name" to b.name, "component" to b.component, "hidden" to b.hidden, "colour" to b.colour, "seeThrough" to b.seeThrough) },
         "parameters" to design.parameters.map { mapOf("name" to it.name, "expression" to it.expression) },
         "expressions" to design.expressions.mapKeys { it.key.toString() },
         "suppressed" to design.suppressed.sorted(),
@@ -128,7 +128,7 @@ object DesignFile {
         val features = root.arr("features").map { feature(it as Json.Obj) }
         val bodies = (root["bodies"] as? Json.Obj)?.fields?.mapValues { (_, v) ->
             v as Json.Obj
-            Design.BodyInfo((v["name"] as? Json.Str)?.value, (v["component"] as? Json.Str)?.value, v.bool("hidden"), (v["colour"] as? Json.Num)?.value?.toInt())
+            Design.BodyInfo((v["name"] as? Json.Str)?.value, (v["component"] as? Json.Str)?.value, v.bool("hidden"), (v["colour"] as? Json.Num)?.value?.toInt(), v.bool("seeThrough"))
         } ?: emptyMap()
         val parameters = root.arr("parameters").map { p -> p as Json.Obj; Parameter(p.str("name"), p.str("expression")) }
         val expressions = (root["expressions"] as? Json.Obj)?.fields?.map { (k, v) ->

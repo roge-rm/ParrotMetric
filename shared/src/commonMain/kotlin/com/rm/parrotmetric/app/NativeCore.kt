@@ -182,6 +182,8 @@ interface NativeCore {
     fun currentView(): FloatArray
     /** Moves the camera smoothly to a view as currentView gives it. */
     fun setView(view: FloatArray)
+    /** The way a part is pulled from its mould, for the draft check (setAnalysis 5). */
+    fun setPull(x: Double, y: Double, z: Double)
 }
 
 /** File formats, by the numbers the core uses. */

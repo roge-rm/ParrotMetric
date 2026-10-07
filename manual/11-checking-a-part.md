@@ -20,6 +20,7 @@ Cuts the view through on a plane, to see inside. Pick the plane and slide it thr
 
 - **Zebra** lays stripes over the part, as many as **Stripes**. Where two faces meet smoothly the stripes run on without a break.
 - **Curvature** colours how tightly each part of a face curves, against the **Radius** you set.
+- **Draft** shows whether a part comes out of a mould, pulled out square to **Top**, **Front**, **Right** or a **Picked face**, or **The other way**. Faces sloping out by at least the **Least draft** show green, or blue on the side it's pulled away from. Red faces slope less than that and would drag. Grey faces lie across the pull and come straight off.
 
 ## Interference
 
