@@ -125,6 +125,8 @@ class DesignFileTest {
             com.rm.parrotmetric.design.OffsetSurfaceFeature(d.newId(), "Skin", listOf("F2.side"), -1.5),
             ExtrudeFeature(d.newId(), "Sheet", 1, emptyList(), 5.0, 0.0, Operation.NewBody, surface = true),
             ExtrudeFeature(d.newId(), "From a face", -1, emptyList(), 4.0, 0.0, Operation.Join, face = "F1.end"),
+            com.rm.parrotmetric.design.ReplaceFaceFeature(d.newId(), "Replace face", listOf("F1.end", "F1.s2"), "F2.side"),
+            com.rm.parrotmetric.design.JointFeature(d.newId(), "Slot", com.rm.parrotmetric.design.JointKind.Slot, "Lid", "Base", value = 0.5, value2 = 3.0, value3 = 0.25, slideMax = 8.0),
             com.rm.parrotmetric.design.FilletFeature(d.newId(), "Variable", listOf("F1.s1|F1.end"), 1.0, com.rm.parrotmetric.design.FilletKind.Variable, 3.0),
             com.rm.parrotmetric.design.MirrorFeature(d.newId(), "Mirror features", emptyList(), top, false, listOf(2, 5)),
             com.rm.parrotmetric.design.PatternFeature(

@@ -54,6 +54,10 @@ private class FakeKernel : Kernel {
     /** What faceOutline gives for any face. */
     var outline: List<ProfileCurve>? = null
     override fun faceOutline(body: Long, face: String, plane: SketchPlane) = outline
+    override fun replaceFaces(id: Int, body: Long, faces: List<String>, target: Long, targetFace: String): Long {
+        calls += "replaceFaces $id $faces ${bodies.getValue(target).faces.contains(targetFace)} $targetFace"
+        return make(bodies.getValue(body))
+    }
 
     /** A box's place along x, for faces and edges it has. */
     override fun signature(body: Long, name: String, edge: Boolean) = bodies.getValue(body).let { b ->
@@ -815,6 +819,22 @@ class RebuildTest {
         assertEquals(Vec3(0.0, 0.0, 1.0), k.lastPlane!!.normal)
         assertEquals(10.0, k.lastPlane!!.origin.z)
         assertEquals(1, built.bodies.size)
+    }
+
+    @Test
+    fun aFaceIsReplacedByAFaceOfAnotherBody() {
+        val k = FakeKernel()
+        val d = Design()
+        val base = extrude(d, sketchAt(d, 0.0, 10.0), Operation.NewBody)
+        val roof = extrude(d, sketchAt(d, 30.0, 10.0), Operation.NewBody)
+        val swap = ReplaceFaceFeature(d.newId(), "Replace face", listOf("F${base.id}.end"), "F${roof.id}.s1")
+        d.add(swap)
+        val built = Rebuilder(k).rebuild(d.active)
+        assertTrue(built.errors.isEmpty(), built.errors.toString())
+        assertTrue("replaceFaces ${swap.id} [F${base.id}.end] true F${roof.id}.s1" in k.calls, k.calls.toString())
+        // The surface gone: a reason, not a crash.
+        d.add(ReplaceFaceFeature(d.newId(), "Replace face 2", listOf("F${base.id}.end"), "F99.s1"))
+        assertEquals(1, Rebuilder(FakeKernel()).rebuild(d.active).errors.size)
     }
 
     @Test

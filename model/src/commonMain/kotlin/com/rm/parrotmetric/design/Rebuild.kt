@@ -432,6 +432,11 @@ class Rebuilder(private val kernel: Kernel) {
         is FilletFeature -> edgeFeature(f, f.edges, bodies, planes, made) { body, edges -> kernel.fillet(f.id, body, edges, f.radius, f.kind.ordinal, f.second) }
         is OffsetFaceFeature -> faceFeature(f, f.faces, bodies, planes, made) { body, faces -> kernel.offsetFaces(f.id, body, faces, f.distance) }
         is DeleteFaceFeature -> faceFeature(f, f.faces, bodies, planes, made) { body, faces -> kernel.deleteFaces(f.id, body, faces) }
+        is ReplaceFaceFeature -> {
+            val target = ref(f, f.target, false, bodies)
+            val holder = bodyWithFace(target, bodies) ?: throw KernelException("The surface to go up to isn't there any more")
+            faceFeature(f, f.faces - f.target, bodies, planes, made) { body, faces -> kernel.replaceFaces(f.id, body, faces, holder.handle, target) }
+        }
         is ChamferFeature -> edgeFeature(f, f.edges, bodies, planes, made) { body, edges ->
             kernel.chamfer(f.id, body, edges, f.distance, f.kind.ordinal, f.second, f.flip)
         }

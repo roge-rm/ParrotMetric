@@ -92,6 +92,8 @@ interface Kernel {
         throw KernelException("Not here")
     /** A copy of a body's faces moved [distance] mm out along their normals, as a new surface. */
     fun offsetSurface(id: Int, body: Long, faces: List<String>, distance: Double): Long = throw KernelException("Not here")
+    /** The body with [faces] moved onto [targetFace] of the body [target], grown or cut back to meet it; see ReplaceFaceFeature. */
+    fun replaceFaces(id: Int, body: Long, faces: List<String>, target: Long, targetFace: String): Long = throw KernelException("Not here")
     /** Each separate piece of a body, biggest first; throws if it's all one. */
     fun separate(id: Int, body: Long): List<Long> = throw KernelException("Not here")
     /** A body cut where another body's surface passes through it; the tool is left as it is. */

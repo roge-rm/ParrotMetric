@@ -806,6 +806,7 @@ internal fun FaceSettings(editor: DesignEditor, d: DesignEditor.FaceDraft) {
         DesignEditor.FaceTool.PressPull -> Icons.pressPull
         DesignEditor.FaceTool.Delete -> Icons.deleteFace
         DesignEditor.FaceTool.OffsetSurface -> Icons.patch
+        DesignEditor.FaceTool.Replace -> Icons.pressPull
     }
     Header(d.tool.title, icon, Palette.modify, if (d.faces.isEmpty()) null else count(d.faces.size, "face", "faces"))
     when (d.tool) {
@@ -820,6 +821,8 @@ internal fun FaceSettings(editor: DesignEditor, d: DesignEditor.FaceDraft) {
         }
         DesignEditor.FaceTool.Delete -> {}
         DesignEditor.FaceTool.OffsetSurface -> Field(editor, d, "distance", "Distance", d.size, "mm", allowNegative = true) { d.size = it; editor.draftChanged() }
+        DesignEditor.FaceTool.Replace ->
+            Segmented(listOf("Faces to replace", "Surface to meet"), if (d.pickingPivot) 1 else 0) { d.pickingPivot = it == 1 }
     }
 }
 

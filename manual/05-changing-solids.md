@@ -17,6 +17,7 @@ Edges that join smoothly are taken together, so one tap can pick the whole way r
 - **Snap fit** puts a clip at each point in a sketch on a face, such as points along the inside of the walls on a lid's underside. Each is a beam standing out of the face with a hook at its end, pointing away from the middle of the part, so it catches the wall. Set its **Length**, **Width** and **Thickness**, how far the hook sticks out (**Overhang**) and how long it is (**Hook**). Under **Catch in**, pick the other part and it gets a recess for each hook, with the **Gap** you give.
 - **Press pull** moves a face in or out, and the faces next to it follow. A distance above 0 adds to the body, which makes a hole smaller. The panel says which way it goes.
 - **Delete face** takes faces away and closes the gap, for getting rid of a round or a small feature.
+- **Replace face** moves faces onto another face or a surface, growing the body out to it or cutting it back, for a top that follows a curve. Tap the faces, then **Surface to meet** and the surface. It goes straight out from each face, so the surface has to be over all of it.
 - **Draft** tilts faces by an angle, for parts that need to come out of a mould. Pick the faces to tilt, then switch to **Pivot face** and pick the face they turn about.
 
 ## Holes and threads

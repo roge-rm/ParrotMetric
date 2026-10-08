@@ -182,6 +182,13 @@ NamedShape surfaceFromLines(int id, const gp_Ax3& plane, const std::vector<Sketc
 /** A copy of a body's [faces] moved [distance] mm out along their normals (in when less than 0), as a surface. */
 NamedShape offsetSurface(int id, const NamedShape& body, const std::vector<std::string>& faces, double distance);
 
+/**
+ * The body with each of [faces] moved to lie on [target], a face of [targetBody] made as big as it
+ * needs to be: the body grows out to it or is cut back to it, straight along each face's normal.
+ * The new faces are F<id>.r.
+ */
+NamedShape replaceFaces(int id, const NamedShape& body, const std::vector<std::string>& faces, const NamedShape& targetBody, const std::string& target);
+
 enum class Fastener { SocketCap, HexBolt, Countersunk, Nut, Washer };
 
 /**

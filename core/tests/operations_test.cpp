@@ -897,3 +897,38 @@ TEST_CASE("a loft along a guide is round where its areas are, and light to draw"
     }
     CHECK(triangles < 10000);
 }
+
+TEST_CASE("a face replaced by another grows or cuts the body to meet it") {
+    NamedShape box = primitive(1, top, Primitive::Box, 0, 0, 10, 20, 30);
+    // A flat face higher up, off to one side: the box grows up to it.
+    NamedShape high = primitive(2, top, Primitive::Box, 50, 0, 5, 5, 40);
+    NamedShape grown = replaceFaces(3, box, {"F1.end"}, high, "F2.end");
+    CHECK(volume(grown) == Catch::Approx(10 * 20 * 40).epsilon(1e-6));
+    CHECK(bounds(grown)[5] == Catch::Approx(40).margin(1e-6));
+    // Lower down: it's cut back.
+    NamedShape low = primitive(4, top, Primitive::Box, 50, 0, 5, 5, 12);
+    NamedShape cut = replaceFaces(5, box, {"F1.end"}, low, "F4.end");
+    CHECK(volume(cut) == Catch::Approx(10 * 20 * 12).epsilon(1e-6));
+    auto names = cut.faceNames();
+    CHECK(std::count(names.begin(), names.end(), "F5.r") == 1);
+    // A tilted face crossing the top: grown on one side and cut on the other, the same volume on average.
+    gp_Ax3 tilted(gp_Pnt(0, 0, 30), gp_Dir(0.2, 0, 1), gp_Dir(1, 0, -0.2));
+    NamedShape slope = primitive(6, tilted, Primitive::Box, 60, 0, 5, 5, 5);
+    NamedShape sloped = replaceFaces(7, box, {"F1.end"}, slope, "F6.start");
+    CHECK(volume(sloped) == Catch::Approx(10 * 20 * 30).epsilon(1e-4));
+    CHECK(bounds(sloped)[5] == Catch::Approx(31).margin(1e-3));
+    // The inside of a round bar lying across above it: the top becomes a curve, without the bar's middle.
+    gp_Ax3 front(gp::Origin(), gp_Dir(0, -1, 0), gp::DX());
+    NamedShape bar = primitive(8, front, Primitive::Cylinder, 0, 80, 80, 5, 0);
+    NamedShape curved = replaceFaces(9, box, {"F1.end"}, bar, "F8.side");
+    // Highest at the corners, 5 out from the middle, under a bar of radius 40 whose middle is 80 up.
+    CHECK(bounds(curved)[5] == Catch::Approx(80 - std::sqrt(1600.0 - 25)).margin(0.01));
+    CHECK(volume(curved) < 10 * 20 * 41);
+    CHECK(volume(curved) > 10 * 20 * 40);
+    // A bar low enough that its far side passes under the box too: only the near side counts, the bottom stays.
+    NamedShape low_bar = primitive(12, front, Primitive::Cylinder, 0, -20, 120, 5, 0);
+    NamedShape arched = replaceFaces(13, box, {"F1.end"}, low_bar, "F12.side");
+    CHECK(bounds(arched)[2] == Catch::Approx(0).margin(1e-6));
+    CHECK(bounds(arched)[5] == Catch::Approx(40).margin(0.01));
+    CHECK_THROWS(replaceFaces(11, box, {"F1.end"}, high, "F9.nope"));
+}

@@ -78,6 +78,7 @@ object Tools {
         ToolDef("shell", "Shell", Icons.shell, ToolGroup.Modify, key = "W", suggest = ::faces, cluster = "Faces") { it.design.startShell() },
         ToolDef("presspull", "Press pull", Icons.pressPull, ToolGroup.Modify, key = "Q", suggest = ::faces) { it.design.startPressPull() },
         ToolDef("deleteface", "Delete face", Icons.deleteFace, ToolGroup.Modify, suggest = ::faces, cluster = "Faces") { it.design.startDeleteFace() },
+        ToolDef("replaceface", "Replace face", Icons.pressPull, ToolGroup.Modify, suggest = ::faces, cluster = "Faces") { it.design.startReplaceFace() },
         ToolDef("rib", "Rib", Icons.rib, ToolGroup.Modify, cluster = "Ribs") { it.design.startRib(web = false) },
         ToolDef("web", "Web", Icons.rib, ToolGroup.Modify, cluster = "Ribs") { it.design.startRib(web = true) },
         ToolDef("emboss", "Emboss", Icons.emboss, ToolGroup.Modify, suggest = { it.selectedAreas > 0 && it.selectedFaces > 0 }) { it.design.startEmboss() },

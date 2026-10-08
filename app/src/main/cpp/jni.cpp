@@ -2612,6 +2612,23 @@ JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_offsetSurface(JNIEnv* env,
     }
 }
 
+JNIEXPORT jlong JNICALL Java_com_rm_parrotmetric_Core_replaceFaces(JNIEnv* env, jobject, jint id, jlong body, jobjectArray faces, jlong target,
+                                                                  jstring targetFace) {
+    try {
+        const char* c = env->GetStringUTFChars(targetFace, nullptr);
+        std::string name(c);
+        env->ReleaseStringUTFChars(targetFace, c);
+        std::unique_lock<std::mutex> g(lock);
+        pm::NamedShape s = solidOf(body);
+        pm::NamedShape t = solidOf(target);
+        g.unlock();
+        return keep(pm::replaceFaces(id, s, strings(env, faces), t, name));
+    } catch (const std::exception& e) {
+        fail(env, e.what());
+        return 0;
+    }
+}
+
 /** Draws these bodies moved by these offsets (x, y, z each) from the next show(), for an exploded view; others where they are. */
 JNIEXPORT void JNICALL Java_com_rm_parrotmetric_Core_bodyOffsets(JNIEnv* env, jobject, jlongArray bodies, jdoubleArray offsets) {
     auto h = longs(env, bodies);

@@ -217,6 +217,7 @@ object DesignFile {
             is MirrorFeature -> mapOf("type" to "mirror", "bodies" to f.bodies, "plane" to plane(f.plane), "join" to f.join, "features" to f.features)
             is OffsetFaceFeature -> mapOf("type" to "offsetFace", "faces" to f.faces, "distance" to f.distance)
             is DeleteFaceFeature -> mapOf("type" to "deleteFace", "faces" to f.faces)
+            is com.rm.parrotmetric.design.ReplaceFaceFeature -> mapOf("type" to "replaceFace", "faces" to f.faces, "target" to f.target)
             is JointFeature -> mapOf(
                 "type" to "joint", "kind" to f.kind.name, "moving" to f.moving, "fixed" to f.fixed, "edge" to f.edge, "face" to f.face,
                 "axisFeature" to f.axisFeature, "axis" to f.axis.name, "value" to f.value, "value2" to f.value2, "value3" to f.value3,
@@ -350,6 +351,7 @@ object DesignFile {
             "mirror" -> MirrorFeature(id, name, strings(o.arr("bodies")), plane(o.obj("plane")), o.bool("join"), ints(o["features"]))
             "offsetFace" -> OffsetFaceFeature(id, name, strings(o.arr("faces")), o.num("distance"))
             "deleteFace" -> DeleteFaceFeature(id, name, strings(o.arr("faces")))
+            "replaceFace" -> com.rm.parrotmetric.design.ReplaceFaceFeature(id, name, strings(o.arr("faces")), o.str("target"))
             "joint" -> JointFeature(
                 id, name, JointKind.valueOf(o.str("kind")), o.str("moving"), (o["fixed"] as? Json.Str)?.value, (o["edge"] as? Json.Str)?.value,
                 (o["face"] as? Json.Str)?.value, (o["axisFeature"] as? Json.Num)?.value?.toInt(), Axis3.valueOf(o.str("axis")), o.num("value"), o.num("value2"),

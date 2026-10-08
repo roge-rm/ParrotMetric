@@ -104,6 +104,7 @@ object Core : NativeCore {
     override external fun separate(id: Int, body: Long): LongArray
     override external fun surfaceFromLines(id: Int, plane: DoubleArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, revolve: Boolean, forward: Double, back: Double, ax: Double, ay: Double, dx: Double, dy: Double, angle: Double): Long
     override external fun offsetSurface(id: Int, body: Long, faces: Array<String>, distance: Double): Long
+    override external fun replaceFaces(id: Int, body: Long, faces: Array<String>, target: Long, targetFace: String): Long
     override external fun setPull(x: Double, y: Double, z: Double)
     override external fun currentView(): FloatArray
     override external fun setView(view: FloatArray)

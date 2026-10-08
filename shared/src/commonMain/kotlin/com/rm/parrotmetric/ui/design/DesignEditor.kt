@@ -203,6 +203,7 @@ class DesignEditor(
         is com.rm.parrotmetric.design.OffsetFaceFeature -> "presspull"
         is com.rm.parrotmetric.design.OffsetSurfaceFeature -> "offsetsurface"
         is com.rm.parrotmetric.design.DeleteFaceFeature -> "deleteface"
+        is com.rm.parrotmetric.design.ReplaceFaceFeature -> "replaceface"
         is com.rm.parrotmetric.design.DraftFeature -> "draft"
         is com.rm.parrotmetric.design.RibFeature -> if (f.web) "web" else "rib"
         is com.rm.parrotmetric.design.EmbossFeature -> "emboss"
@@ -1375,6 +1376,7 @@ class DesignEditor(
     fun startDraft() = openFaces(FaceDraft(null, FaceTool.Draft))
     fun startPressPull() = openFaces(FaceDraft(null, FaceTool.PressPull))
     fun startDeleteFace() = openFaces(FaceDraft(null, FaceTool.Delete))
+    fun startReplaceFace() = openFaces(FaceDraft(null, FaceTool.Replace))
     fun startOffsetSurface() = openFaces(FaceDraft(null, FaceTool.OffsetSurface))
 
     private fun openFaces(d: FaceDraft) {
@@ -1685,6 +1687,7 @@ class DesignEditor(
             is com.rm.parrotmetric.design.OffsetFaceFeature -> FaceDraft(f, FaceTool.PressPull)
             is com.rm.parrotmetric.design.OffsetSurfaceFeature -> FaceDraft(f, FaceTool.OffsetSurface)
             is com.rm.parrotmetric.design.DeleteFaceFeature -> FaceDraft(f, FaceTool.Delete)
+            is com.rm.parrotmetric.design.ReplaceFaceFeature -> FaceDraft(f, FaceTool.Replace)
             is HoleFeature -> HoleDraft(f)
             is com.rm.parrotmetric.design.SnapFitFeature -> SnapFitDraft(f).also { snapBase(it) }
             is MirrorFeature -> MirrorDraft(f)
@@ -1843,7 +1846,7 @@ class DesignEditor(
             is EdgeDraft -> d.edges = viewport.selectedEdges()
             is FaceDraft -> {
                 val faces = viewport.selectedFaces().map { it.second }.filter { it.isNotEmpty() }
-                if (d.tilt && d.pickingPivot) {
+                if (d.second && d.pickingPivot) {
                     faces.lastOrNull()?.let { d.neutral = it }
                     d.pickingPivot = false
                     viewport.select(emptyList(), emptyList())
@@ -2318,7 +2321,7 @@ class DesignEditor(
 
     private fun nextName(prefix: String, count: Int) = "$prefix ${count + 1}"
 
-    enum class FaceTool(val title: String) { Shell("Shell"), Draft("Draft"), PressPull("Press pull"), Delete("Delete face"), OffsetSurface("Offset surface") }
+    enum class FaceTool(val title: String) { Shell("Shell"), Draft("Draft"), PressPull("Press pull"), Delete("Delete face"), OffsetSurface("Offset surface"), Replace("Replace face") }
 
     /**
      * Features on picked faces: Shell (faces left open), Draft (faces tilted,
@@ -2326,6 +2329,8 @@ class DesignEditor(
      */
     inner class FaceDraft(editing: Feature?, val tool: FaceTool) : FeatureDraft() {
         val tilt get() = tool == FaceTool.Draft
+        /** A second pick after the faces: Draft's pivot face, or the surface Replace face goes up to. */
+        val second get() = tool == FaceTool.Draft || tool == FaceTool.Replace
         val id = editing?.id ?: newId()
         private val name = editing?.name ?: nextName(tool.title, design.features.count {
             when (tool) {
@@ -2334,6 +2339,7 @@ class DesignEditor(
                 FaceTool.PressPull -> it is com.rm.parrotmetric.design.OffsetFaceFeature
                 FaceTool.Delete -> it is com.rm.parrotmetric.design.DeleteFaceFeature
                 FaceTool.OffsetSurface -> it is com.rm.parrotmetric.design.OffsetSurfaceFeature
+                FaceTool.Replace -> it is com.rm.parrotmetric.design.ReplaceFaceFeature
             }
         })
         var faces by mutableStateOf<List<String>>(emptyList())
@@ -2348,6 +2354,7 @@ class DesignEditor(
                 is DraftFeature -> { faces = editing.faces; neutral = editing.neutral; size = editing.angle * 180 / PI }
                 is com.rm.parrotmetric.design.OffsetFaceFeature -> { faces = editing.faces; size = editing.distance }
                 is com.rm.parrotmetric.design.DeleteFaceFeature -> faces = editing.faces
+                is com.rm.parrotmetric.design.ReplaceFaceFeature -> { faces = editing.faces; neutral = editing.target }
                 is com.rm.parrotmetric.design.OffsetSurfaceFeature -> { faces = editing.faces; size = editing.distance }
                 else -> {}
             }
@@ -2361,10 +2368,19 @@ class DesignEditor(
             FaceTool.Shell -> if (faces.isEmpty()) null else ShellFeature(id, name, faces, size)
             FaceTool.PressPull -> if (faces.isEmpty()) null else com.rm.parrotmetric.design.OffsetFaceFeature(id, name, faces, size)
             FaceTool.Delete -> if (faces.isEmpty()) null else com.rm.parrotmetric.design.DeleteFaceFeature(id, name, faces)
+            FaceTool.Replace -> {
+                val n = neutral
+                if (faces.isEmpty() || n == null) null else com.rm.parrotmetric.design.ReplaceFaceFeature(id, name, faces - n, n)
+            }
             FaceTool.OffsetSurface -> if (faces.isEmpty()) null else com.rm.parrotmetric.design.OffsetSurfaceFeature(id, name, faces, size)
         }
 
-        override fun missing() = if (tilt && neutral == null) "Pick the face they pivot on" else "Tap the faces"
+        override fun missing() = when {
+            faces.isEmpty() -> "Tap the faces"
+            tilt && neutral == null -> "Pick the face they pivot on"
+            tool == FaceTool.Replace && neutral == null -> "Pick the surface they go up to"
+            else -> "Tap the faces"
+        }
     }
 
     inner class HoleDraft(editing: HoleFeature?) : FeatureDraft() {

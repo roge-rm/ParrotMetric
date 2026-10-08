@@ -188,6 +188,7 @@ interface NativeCore {
     fun surfaceFromLines(id: Int, plane: DoubleArray, kinds: IntArray, ids: IntArray, nums: DoubleArray, revolve: Boolean, forward: Double, back: Double, ax: Double, ay: Double, dx: Double, dy: Double, angle: Double): Long
     /** A copy of a body's faces moved out by a distance, as a surface. */
     fun offsetSurface(id: Int, body: Long, faces: Array<String>, distance: Double): Long
+    fun replaceFaces(id: Int, body: Long, faces: Array<String>, target: Long, targetFace: String): Long
 }
 
 /** File formats, by the numbers the core uses. */

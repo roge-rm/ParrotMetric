@@ -18,6 +18,14 @@ data class OffsetFaceFeature(override val id: Int, override val name: String, va
     override fun key() = this
 }
 
+/**
+ * Moves [faces] onto [target], a face of any body (often a surface), made as big as it needs to be: the
+ * body grows out to it or is cut back to it, straight along each face's normal.
+ */
+data class ReplaceFaceFeature(override val id: Int, override val name: String, val faces: List<String>, val target: String) : Feature() {
+    override fun key() = this
+}
+
 /** Takes faces away and closes the gap, as removing a fillet, hole or boss. */
 data class DeleteFaceFeature(override val id: Int, override val name: String, val faces: List<String>) : Feature() {
     override fun key() = this

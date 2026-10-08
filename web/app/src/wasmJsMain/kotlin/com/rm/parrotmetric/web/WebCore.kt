@@ -976,4 +976,14 @@ object WebCore : NativeCore {
         args.double(distance)
         return call(111, args).long()
     }
+
+    override fun replaceFaces(id: Int, body: Long, faces: Array<String>, target: Long, targetFace: String): Long {
+        val args = Args()
+        args.int(id)
+        args.long(body)
+        args.strings(faces)
+        args.long(target)
+        args.string(targetFace)
+        return call(112, args).long()
+    }
 }

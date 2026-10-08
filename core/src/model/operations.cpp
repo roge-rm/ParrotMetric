@@ -60,6 +60,10 @@
 #include <Geom_BSplineSurface.hxx>
 #include <Geom_Line.hxx>
 #include <Geom_Plane.hxx>
+#include <BRepGProp_Face.hxx>
+#include <Geom_BoundedSurface.hxx>
+#include <Geom_RectangularTrimmedSurface.hxx>
+#include <GeomLib.hxx>
 #include <Geom_TrimmedCurve.hxx>
 #include <BRepBuilderAPI_NurbsConvert.hxx>
 #include <ShapeFix_Shape.hxx>
@@ -2282,6 +2286,116 @@ NamedShape surfaceFromLines(int id, const gp_Ax3& plane, const std::vector<Sketc
         return out;
     } catch (const Standard_Failure&) {
         throw std::runtime_error("The surface couldn't be made");
+    }
+}
+
+namespace {
+
+/** The surface under [face], untrimmed and made at least [size] mm bigger each way where it isn't endless. */
+TopoDS_Face enlarged(const TopoDS_Face& face, double size) {
+    Handle(Geom_Surface) s = BRep_Tool::Surface(face);
+    while (auto trimmed = Handle(Geom_RectangularTrimmedSurface)::DownCast(s)) s = trimmed->BasisSurface();
+    if (auto bounded = Handle(Geom_BoundedSurface)::DownCast(s)) {
+        Handle(Geom_BoundedSurface) grown = Handle(Geom_BoundedSurface)::DownCast(bounded->Copy());
+        for (bool inU : {true, false})
+            for (bool after : {true, false}) GeomLib::ExtendSurfByLength(grown, size, 1, inU, after);
+        s = grown;
+    }
+    double u0, u1, v0, v1;
+    s->Bounds(u0, u1, v0, v1);
+    // Endless ways, a plane's or a cylinder's length, cut off well past everything.
+    auto clamp = [size](double& a, double& b) {
+        if (Precision::IsInfinite(a)) a = -size;
+        if (Precision::IsInfinite(b)) b = size;
+    };
+    clamp(u0, u1);
+    clamp(v0, v1);
+    BRepBuilderAPI_MakeFace make(s, u0, u1, v0, v1, Precision::Confusion());
+    if (!make.IsDone()) throw std::runtime_error("That surface can't be used");
+    return make.Face();
+}
+
+}  // namespace
+
+NamedShape replaceFaces(int id, const NamedShape& body, const std::vector<std::string>& faces, const NamedShape& targetBody, const std::string& target) {
+    auto targets = targetBody.findFaces(target);
+    if (targets.empty()) throw std::runtime_error("The surface to go up to isn't there any more");
+    try {
+        NamedShape current = body;
+        for (const auto& name : faces) {
+            auto found = current.findFaces(name);
+            if (found.empty()) throw std::runtime_error("A face to replace isn't there any more");
+            const TopoDS_Face face = found[0];
+            if (face.IsSame(targets[0])) throw std::runtime_error("A face can't be replaced by itself");
+            Bnd_Box box;
+            BRepBndLib::Add(current.shape, box);
+            BRepBndLib::Add(targets[0], box);
+            double size = std::sqrt(box.SquareExtent()) * 2 + 10;
+            NamedShape sheet;
+            sheet.shape = enlarged(targets[0], size);
+            sheet.names.Bind(sheet.shape, prefix(id) + ".r");
+            // Out from the middle of the face, which way its outside is.
+            BRepGProp_Face props(face);
+            double fu0, fu1, fv0, fv1;
+            props.Bounds(fu0, fu1, fv0, fv1);
+            gp_Pnt middle;
+            gp_Vec normal;
+            props.Normal((fu0 + fu1) / 2, (fv0 + fv1) / 2, middle, normal);
+            if (normal.Magnitude() < 1e-12) throw std::runtime_error("That face can't be replaced");
+            gp_Dir out(normal);
+            if (face.Orientation() == TopAbs_REVERSED) out.Reverse();
+            // A surface through the face moves it both ways; else it goes to where the surface is nearest,
+            // out or in, as an enlarged curved surface can be on both sides.
+            int only = 0;
+            BRepExtrema_DistShapeShape touch(face, sheet.shape);
+            if (!touch.IsDone() || touch.Value() > 1e-6) {
+                Handle(Geom_Line) line = new Geom_Line(middle, out);
+                GeomAPI_IntCS hits(line, BRep_Tool::Surface(TopoDS::Face(sheet.shape)));
+                double nearest = 0;
+                if (hits.IsDone())
+                    for (int i = 1; i <= hits.NbPoints(); ++i) {
+                        double t = gp_Vec(middle, hits.Point(i)).Dot(gp_Vec(out));
+                        if (nearest == 0 || std::abs(t) < std::abs(nearest)) nearest = t;
+                    }
+                if (nearest == 0) throw std::runtime_error("The surface isn't in front of the face or behind it");
+                only = nearest > 0 ? 1 : -1;
+            }
+            bool changed = false;
+            // The face pushed well out or in: what's between the face and the surface is joined on or cut
+            // away. The piece that holds the far end is past the surface, so it's left.
+            for (int way : {1, -1}) {
+                if (only != 0 && way != only) continue;
+                gp_Vec along = gp_Vec(out) * (way * size);
+                BRepPrimAPI_MakePrism push(face, along);
+                if (!push.IsDone()) throw std::runtime_error("That face can't be replaced");
+                NamedShape tool;
+                tool.shape = push.Shape();
+                int k = 0;
+                for (TopExp_Explorer f(tool.shape, TopAbs_FACE); f.More(); f.Next())
+                    if (!tool.names.IsBound(f.Current())) tool.names.Bind(f.Current(), prefix(id) + ".e" + std::to_string(k++));
+                std::vector<NamedShape> pieces;
+                try {
+                    pieces = splitBy(id, tool, sheet);
+                } catch (const std::runtime_error&) {
+                    continue;  // The surface doesn't cross it this way.
+                }
+                gp_Pnt far = middle.Translated(along * 0.999);
+                for (auto& piece : pieces) {
+                    BRepClass3d_SolidClassifier where(piece.shape, far, 1e-6);
+                    if (where.State() == TopAbs_IN) continue;
+                    // Only what rests on the face: a curved surface can cross twice, leaving a piece between.
+                    BRepExtrema_DistShapeShape gap(piece.shape, face);
+                    if (!gap.IsDone() || gap.Value() > 1e-6) continue;
+                    current = combine(id, current, piece, way > 0 ? Combine::Join : Combine::Cut);
+                    changed = true;
+                }
+            }
+            if (!changed) throw std::runtime_error("The surface doesn't reach right across the face");
+        }
+        check(current.shape, "The face can't be replaced by that surface");
+        return current;
+    } catch (const Standard_Failure&) {
+        throw std::runtime_error("The face can't be replaced by that surface");
     }
 }
 
