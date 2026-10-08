@@ -830,8 +830,12 @@ private fun ToolSheet(group: ToolGroup, state: ModelState, design: DesignEditor,
                             Box {
                                 Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                                     Icon(t.icon, null, Modifier.size(24.dp), tint = if (enabled) group.colour else Palette.faint)
-                                    Spacer(Modifier.height(6.dp))
-                                    Text(t.label, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                                    Spacer(Modifier.height(5.dp))
+                                    // A long name goes onto a second line.
+                                    Text(
+                                        t.label, Modifier.padding(horizontal = 4.dp), fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 2,
+                                        lineHeight = 13.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                    )
                                 }
                                 if (LocalKeyboard.current) t.key?.let { KeyBadge(it, Modifier.align(Alignment.TopEnd).padding(5.dp)) }
                             }
