@@ -8,6 +8,7 @@ import android.provider.OpenableColumns
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -183,6 +184,10 @@ class MainActivity : ComponentActivity() {
         val starting = savedInstanceState == null
         if (starting) openFrom(intent)
         setContent {
+            // Whether the system keyboard is up, for a number field to go back to its pad when it's put away.
+            @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+            val imeShowing = androidx.compose.foundation.layout.WindowInsets.isImeVisible
+            androidx.compose.runtime.CompositionLocalProvider(com.rm.parrotmetric.ui.LocalImeShowing provides imeShowing) {
             Box(Modifier.fillMaxSize()) {
             ModelScreen(
                 viewport = {
@@ -204,6 +209,7 @@ class MainActivity : ComponentActivity() {
                 backHandler = { enabled, onBack -> androidx.activity.compose.BackHandler(enabled, onBack) },
             )
             LaunchSplash(painterResource(R.drawable.logo_full), starting)
+            }
             }
         }
     }

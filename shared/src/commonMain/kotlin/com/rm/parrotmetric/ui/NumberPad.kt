@@ -15,6 +15,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -26,6 +27,8 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.InterceptPlatformTextInput
@@ -49,6 +52,9 @@ import kotlinx.coroutines.flow.first
 
 /** Number fields show the pad in place of the system keyboard: a touch screen with no keyboard. */
 val LocalNumberPad = compositionLocalOf { false }
+
+/** Whether the system's on-screen keyboard is up, where the platform says. */
+val LocalImeShowing = compositionLocalOf { false }
 
 /** What a pad key does to a field's text: types at the selection, replacing it, or with ⌫ takes away. */
 fun padKey(v: TextFieldValue, key: Char): TextFieldValue {
@@ -91,6 +97,21 @@ fun NumberField(
     var letters by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
     val current = androidx.compose.runtime.rememberUpdatedState(value)
+    val own = remember { FocusRequester() }
+    // The keyboard abc brought up, put away with Back: the pad again, with input started afresh so the pad holds it.
+    val imeShowing = LocalImeShowing.current
+    var imeWasUp by remember { mutableStateOf(false) }
+    LaunchedEffect(letters, imeShowing) {
+        when {
+            !letters -> imeWasUp = false
+            imeShowing -> imeWasUp = true
+            imeWasUp -> {
+                letters = false
+                focusManager.clearFocus()
+                own.requestFocus()
+            }
+        }
+    }
     Box(modifier) {
         // The system keyboard waits until abc is pressed.
         InterceptPlatformTextInput({ request, nextHandler ->
@@ -100,7 +121,7 @@ fun NumberField(
             BasicTextField(
                 value,
                 onValueChange = onValueChange,
-                modifier = Modifier.fillMaxWidth().then(fieldModifier).onFocusChanged {
+                modifier = Modifier.fillMaxWidth().then(fieldModifier).focusRequester(own).onFocusChanged {
                     focused = it.isFocused
                     if (!it.isFocused) letters = false
                 },
