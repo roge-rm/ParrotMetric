@@ -59,6 +59,8 @@ A tool's panel has its choices along the top and its sizes below, with **Done** 
 
 Any size can be a sum, like `20+5` or `wall*2`, using your parameters (see Parameters and configurations). Sizes are in millimetres and angles in degrees.
 
+On a touch screen with no keyboard, tapping a size brings up a number pad beside it. **abc** swaps it for the keyboard, for parameter names and units, and ✓ sets the size or moves on to the next one.
+
 Most tools that make or change a shape ask what to do with it:
 
 - **New body** keeps it as a body of its own.

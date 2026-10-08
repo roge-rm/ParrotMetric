@@ -74,6 +74,7 @@ object Manual {
             ManualBlock(ManualKind.Heading, "Tool panels"),
             ManualBlock(ManualKind.Para, "A tool's panel has its choices along the top and its sizes below, with **Done** and **Cancel**. Most tools show a preview that updates as you change things. Fillet, Chamfer and the tools for faces show the body without the change while their panel is open, so you can keep picking edges and faces on it. If the step can't be made, the reason shows above **Done**."),
             ManualBlock(ManualKind.Para, "Any size can be a sum, like `20+5` or `wall*2`, using your parameters (see Parameters and configurations). Sizes are in millimetres and angles in degrees."),
+            ManualBlock(ManualKind.Para, "On a touch screen with no keyboard, tapping a size brings up a number pad beside it. **abc** swaps it for the keyboard, for parameter names and units, and ✓ sets the size or moves on to the next one."),
             ManualBlock(ManualKind.Para, "Most tools that make or change a shape ask what to do with it:"),
             ManualBlock(ManualKind.Bullet, "**New body** keeps it as a body of its own."),
             ManualBlock(ManualKind.Bullet, "**Join** adds it to the bodies it touches."),

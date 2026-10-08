@@ -424,7 +424,7 @@ fun ModelScreen(
                 com.rm.parrotmetric.ui.drawing.DrawingScreen(design, state.title, actions)
                 return@BoxWithConstraints
             }
-            androidx.compose.runtime.CompositionLocalProvider(LocalFieldChain provides chain, LocalKeyboard provides keyboard) {
+            androidx.compose.runtime.CompositionLocalProvider(LocalFieldChain provides chain, LocalKeyboard provides keyboard, LocalNumberPad provides !keyboard) {
             state.menu?.let { at -> SelectionMenu(at, context, actions::closeMenu) }
             if (sculpt != null) {
                 Box(Modifier.fillMaxSize().then(refocus)) { com.rm.parrotmetric.ui.sculpt.SculptOverlay(sculpt, actions) }

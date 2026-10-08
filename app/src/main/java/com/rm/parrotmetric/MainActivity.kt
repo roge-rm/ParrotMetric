@@ -198,7 +198,9 @@ class MainActivity : ComponentActivity() {
                 design = app.design,
                 actions = app.actions,
                 startIcon = painterResource(R.drawable.logo_full),
-                hasKeyboard = resources.configuration.keyboard == android.content.res.Configuration.KEYBOARD_QWERTY,
+                // A keyboard that's there and not folded away or detached.
+                hasKeyboard = resources.configuration.keyboard == android.content.res.Configuration.KEYBOARD_QWERTY &&
+                    resources.configuration.hardKeyboardHidden == android.content.res.Configuration.HARDKEYBOARDHIDDEN_NO,
                 backHandler = { enabled, onBack -> androidx.activity.compose.BackHandler(enabled, onBack) },
             )
             LaunchSplash(painterResource(R.drawable.logo_full), starting)

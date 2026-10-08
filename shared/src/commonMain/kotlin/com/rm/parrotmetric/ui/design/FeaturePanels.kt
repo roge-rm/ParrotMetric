@@ -720,10 +720,11 @@ fun NumberRow(
                 .background(if (bad) Color(0xFF3A2C24) else Palette.ground).padding(horizontal = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            BasicTextField(
+            com.rm.parrotmetric.ui.NumberField(
                 field,
                 onValueChange = { field = it },
-                modifier = Modifier.typing().weight(1f).focusRequester(focus)
+                modifier = Modifier.weight(1f),
+                fieldModifier = Modifier.typing().focusRequester(focus)
                     .onGloballyPositioned { val at = it.positionInRoot(); link.x = at.x; link.y = at.y }
                     .onFocusChanged {
                         if (focused && !it.isFocused) apply()
@@ -731,10 +732,7 @@ fun NumberRow(
                         link.focused = it.isFocused
                     },
                 textStyle = TextStyle(color = Palette.text, fontSize = 19.sp, fontFamily = FontFamily.Monospace),
-                cursorBrush = SolidColor(Palette.mint),
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, imeAction = ImeAction.Done, autoCorrectEnabled = false),
-                keyboardActions = KeyboardActions(onDone = { apply(); if (!bad) onDone?.invoke() }),
+                onDone = { apply(); if (!bad) onDone?.invoke() },
             )
             Text(unit, fontSize = 14.sp, color = Palette.muted)
         }

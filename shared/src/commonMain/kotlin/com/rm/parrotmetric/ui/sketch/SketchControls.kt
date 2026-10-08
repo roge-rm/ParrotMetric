@@ -481,19 +481,15 @@ private fun PlacedSizes(editor: SketchEditor, sizes: List<PlacedSize>) {
                     Modifier.weight(1f).height(40.dp).clip(RoundedCornerShape(12.dp)).background(Palette.ground).padding(horizontal = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    BasicTextField(
+                    com.rm.parrotmetric.ui.NumberField(
                         values[i].value,
                         onValueChange = { values[i].value = it },
-                        modifier = Modifier.typing().weight(1f).then(if (i == 0) Modifier.focusRequester(first) else Modifier)
+                        modifier = Modifier.weight(1f),
+                        fieldModifier = Modifier.typing().then(if (i == 0) Modifier.focusRequester(first) else Modifier)
                             .onFocusChanged { f -> if (f.isFocused) focused = i else if (focused == i) focused = -1 },
                         textStyle = TextStyle(color = Palette.text, fontSize = 17.sp, fontFamily = FontFamily.Monospace),
-                        cursorBrush = SolidColor(Palette.mint),
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(
-                            keyboardType = KeyboardType.Ascii, autoCorrectEnabled = false,
-                            imeAction = if (i == sizes.lastIndex) ImeAction.Done else ImeAction.Next,
-                        ),
-                        keyboardActions = KeyboardActions(onDone = { set() }),
+                        next = i != sizes.lastIndex,
+                        onDone = { set() },
                     )
                 }
                 Spacer(Modifier.width(10.dp))
@@ -529,15 +525,13 @@ private fun DimensionEntry(editor: SketchEditor, edit: DimensionEdit) {
                     Modifier.weight(1f).height(50.dp).clip(RoundedCornerShape(14.dp)).background(Palette.ground).padding(horizontal = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    BasicTextField(
+                    com.rm.parrotmetric.ui.NumberField(
                         value,
                         onValueChange = { value = it },
-                        modifier = Modifier.typing().weight(1f).focusRequester(focus),
+                        modifier = Modifier.weight(1f),
+                        fieldModifier = Modifier.typing().focusRequester(focus),
                         textStyle = TextStyle(color = Palette.text, fontSize = 20.sp, fontFamily = FontFamily.Monospace),
-                        cursorBrush = SolidColor(Palette.mint),
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, imeAction = ImeAction.Done, autoCorrectEnabled = false),
-                        keyboardActions = KeyboardActions(onDone = { editor.commitDimension(value.text) }),
+                        onDone = { editor.commitDimension(value.text) },
                     )
                     Text(if (edit.isAngle) "°" else "mm", fontSize = 14.sp, color = Palette.muted)
                 }
