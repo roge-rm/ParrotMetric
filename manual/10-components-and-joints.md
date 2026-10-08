@@ -27,13 +27,13 @@ A joint says how one component sits on another and how it can move.
 
 1. Start **Joint** under **Modify**.
 2. Under **Moving**, pick the component that moves, and under **Joined to** the one it's held to, or **In place** to hold it where it is.
-3. Pick the kind: **Rigid** holds it fixed, **Turn** turns about an axis, **Slide** slides along one, **Both** does both, **Planar** slides across a flat face and turns on it, and **Ball** turns any way about a point.
+3. Pick the kind: **Rigid** holds it fixed, **Turn** turns about an axis, **Slide** slides along one, **Both** does both, **Planar** slides across a flat face and turns on it, **Ball** turns any way about a point, and **Slot** is a pin in a slot: it turns about the pin and slides along the slot.
 4. For turning and sliding, pick an edge or round face for the axis, or **Use an axis** for an axis you made. For **Planar**, pick the flat face it slides on. For **Ball**, pick a ball, a round edge or a flat face for its centre; with nothing picked it turns about the origin.
-5. The slider and the number at the top move it. **Planar** has two slides, and **Ball** a turn round x, y and z. Tap **Done**.
+5. The slider and the number at the top move it. **Planar** has two slides, **Ball** a turn round x, y and z, and **Slot** a slide and the **Slot angle**, the way the slot runs across the pin. Tap **Done**.
 
 To move it again later, open the joint's step and use the slider. Rigid joints keep components together when you move the one they're held to.
 
-For a pin in a slot, use **Planar** on the face the slot is in, with a slide limit to the slot's length and the other slide left at 0.
+For a pin in a slot, use **Slot** round the pin, set the **Slot angle** to the way the slot runs, and give it a slide limit to the slot's length.
 
 ### Limits
 

@@ -1457,6 +1457,11 @@ internal fun jointMatrix(f: JointFeature, p: Vec3, d: Vec3, turn: Double): Doubl
             val (u, v) = across(d)
             Transforms.then(about(d, turn), Transforms.translate(u * f.slideWithin(f.value2) + v * f.slideWithin(f.value3)))
         }
+        JointKind.Slot -> {
+            val (u, v) = across(d)
+            val along = u * kotlin.math.cos(f.value3) + v * kotlin.math.sin(f.value3)
+            Transforms.then(about(d, turn), Transforms.translate(along * f.slideWithin(f.value2)))
+        }
         JointKind.Ball -> Transforms.then(
             Transforms.then(about(Transforms.unit(Axis3.X), f.turnWithin(f.value)), about(Transforms.unit(Axis3.Y), f.turnWithin(f.value2))),
             about(Transforms.unit(Axis3.Z), f.turnWithin(f.value3)),

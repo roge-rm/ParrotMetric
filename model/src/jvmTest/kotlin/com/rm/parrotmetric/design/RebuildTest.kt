@@ -912,6 +912,9 @@ class RebuildTest {
         // Then round z: the three angles go x, y, z in turn.
         assertNear(Vec3(10.0, 0.0, -1.0), jointMatrix(joint(JointKind.Ball, 0.0, PI / 2, PI / 2), p, z, 0.0).at(pt))
         assertNear(Vec3(10.0, 1.0, 0.0), jointMatrix(joint(JointKind.Ball, PI / 2, 0.0, PI / 2), p, z, 0.0).at(pt))
+        // Slot: a quarter turn round the pin, then 2 along a slot a quarter turn round from x, so along y; and held to 1.
+        assertNear(Vec3(10.0, 3.0, 0.0), jointMatrix(joint(JointKind.Slot, PI / 2, 2.0, PI / 2), p, z, PI / 2).at(pt))
+        assertNear(Vec3(10.0, 2.0, 0.0), jointMatrix(joint(JointKind.Slot, PI / 2, 2.0, PI / 2).copy(slideMax = 1.0), p, z, PI / 2).at(pt))
         // Planar's directions across a face facing x are y and z.
         assertEquals(Vec3(0.0, 1.0, 0.0) to Vec3(0.0, 0.0, 1.0), across(Vec3(1.0, 0.0, 0.0)))
     }

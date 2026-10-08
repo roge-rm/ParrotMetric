@@ -76,7 +76,7 @@ data class ThickenFeature(override val id: Int, override val name: String, val b
     override fun key() = this
 }
 
-enum class JointKind { Rigid, Turn, Slide, TurnSlide, Planar, Ball }
+enum class JointKind { Rigid, Turn, Slide, TurnSlide, Planar, Ball, Slot }
 
 /**
  * Joins component [moving] to [fixed] (or to the origin when null) where
@@ -84,7 +84,9 @@ enum class JointKind { Rigid, Turn, Slide, TurnSlide, Planar, Ball }
  * the axis, slid [value] mm along it, or turned [value] and slid [value2].
  * Planar turns [value] round the face's normal and slides [value2] and
  * [value3] mm across it. Ball turns [value], [value2] and [value3] radians
- * round x, y and z, about its centre. Rigid moves nothing, but from then on
+ * round x, y and z, about its centre. Slot, a pin in a slot, turns [value]
+ * round the axis and slides [value2] mm along a slot square to it, [value3]
+ * radians round from the first direction a Planar joint slides in. Rigid moves nothing, but from then on
  * the two move together.
  *
  * The axis is a straight or round edge or a cylinder's face ([edge] or

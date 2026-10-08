@@ -2541,7 +2541,7 @@ class DesignEditor(
         /** Degrees for a turn, mm for a slide. */
         var value by mutableStateOf(editing?.let { if (it.kind == com.rm.parrotmetric.design.JointKind.Slide) it.value else it.value * 180 / PI } ?: 0.0)
         var value2 by mutableStateOf(editing?.let { if (it.kind == com.rm.parrotmetric.design.JointKind.Ball) it.value2 * 180 / PI else it.value2 } ?: 0.0)
-        var value3 by mutableStateOf(editing?.let { if (it.kind == com.rm.parrotmetric.design.JointKind.Ball) it.value3 * 180 / PI else it.value3 } ?: 0.0)
+        var value3 by mutableStateOf(editing?.let { if (it.kind == com.rm.parrotmetric.design.JointKind.Ball || it.kind == com.rm.parrotmetric.design.JointKind.Slot) it.value3 * 180 / PI else it.value3 } ?: 0.0)
         var turnLimits by mutableStateOf(editing?.turnMin != null || editing?.turnMax != null)
         var turnMin by mutableStateOf(editing?.turnMin?.let { it * 180 / PI } ?: -90.0)
         var turnMax by mutableStateOf(editing?.turnMax?.let { it * 180 / PI } ?: 90.0)
@@ -2553,7 +2553,7 @@ class DesignEditor(
         var ratio by mutableStateOf(editing?.ratio)
         val turns get() = kind != com.rm.parrotmetric.design.JointKind.Rigid && kind != com.rm.parrotmetric.design.JointKind.Slide
         val slides get() = kind == com.rm.parrotmetric.design.JointKind.Slide || kind == com.rm.parrotmetric.design.JointKind.TurnSlide ||
-            kind == com.rm.parrotmetric.design.JointKind.Planar
+            kind == com.rm.parrotmetric.design.JointKind.Planar || kind == com.rm.parrotmetric.design.JointKind.Slot
 
         /** Earlier Turn joints this one can be geared to: name and id. */
         fun leaders(): List<Pair<String, Int>> {
@@ -2568,7 +2568,8 @@ class DesignEditor(
             fun second(v: Double) = if (ball) v * PI / 180 else v
             return com.rm.parrotmetric.design.JointFeature(
                 id, name, kind, moving, fixed, edge, face, null, axis,
-                if (kind == com.rm.parrotmetric.design.JointKind.Slide) value else value * PI / 180, second(value2), second(value3),
+                if (kind == com.rm.parrotmetric.design.JointKind.Slide) value else value * PI / 180, second(value2),
+                if (kind == com.rm.parrotmetric.design.JointKind.Slot) value3 * PI / 180 else second(value3),
                 if (turns && turnLimits) minOf(turnMin, turnMax) * PI / 180 else null,
                 if (turns && turnLimits) maxOf(turnMin, turnMax) * PI / 180 else null,
                 if (slides && slideLimits) minOf(slideMin, slideMax) else null,

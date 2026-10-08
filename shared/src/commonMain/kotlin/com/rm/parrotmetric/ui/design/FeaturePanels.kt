@@ -826,7 +826,7 @@ internal fun FaceSettings(editor: DesignEditor, d: DesignEditor.FaceDraft) {
 @Composable
 private fun JointSettings(editor: DesignEditor, d: DesignEditor.JointDraft) {
     Header("Joint", Icons.joint, Palette.modify, d.moving)
-    Segmented(listOf("Rigid", "Turn", "Slide", "Both", "Planar", "Ball"), d.kind.ordinal) {
+    Segmented(listOf("Rigid", "Turn", "Slide", "Both", "Planar", "Ball", "Slot"), d.kind.ordinal) {
         d.kind = com.rm.parrotmetric.design.JointKind.entries[it]
         d.value = 0.0
         d.value2 = 0.0
@@ -863,6 +863,10 @@ private fun JointSettings(editor: DesignEditor, d: DesignEditor.JointDraft) {
             com.rm.parrotmetric.design.JointKind.Planar -> {
                 Field(editor, d, "value2", "Slid one way", d.value2, "mm", allowNegative = true) { d.value2 = it; editor.draftChanged() }
                 Field(editor, d, "value3", "Slid the other way", d.value3, "mm", allowNegative = true) { d.value3 = it; editor.draftChanged() }
+            }
+            com.rm.parrotmetric.design.JointKind.Slot -> {
+                Field(editor, d, "value2", "Slid", d.value2, "mm", allowNegative = true) { d.value2 = it; editor.draftChanged() }
+                Field(editor, d, "value3", "Slot angle", d.value3, "°", allowNegative = true) { d.value3 = it; editor.draftChanged() }
             }
             com.rm.parrotmetric.design.JointKind.Ball -> {
                 Field(editor, d, "value2", "Turned round y", d.value2, "°", allowNegative = true) { d.value2 = it; editor.draftChanged() }
