@@ -308,7 +308,7 @@ object DesignFile {
                 "type" to "extrude", "sketch" to f.sketchId, "regions" to writeRegions(f.regions),
                 "forward" to f.forward, "back" to f.back, "operation" to f.operation.name,
                 "taper" to f.taper, "upTo" to f.upTo?.let { plane(it) },
-                "throughAll" to f.throughAll, "offset" to f.offset, "thin" to f.thin, "surface" to f.surface,
+                "throughAll" to f.throughAll, "offset" to f.offset, "thin" to f.thin, "surface" to f.surface, "face" to f.face,
             )
             is PrimitiveFeature -> mapOf(
                 "type" to "primitive", "kind" to f.kind.name, "plane" to plane(f.plane), "u" to f.u, "v" to f.v,
@@ -434,6 +434,7 @@ object DesignFile {
                 id, name, o.int("sketch"), readRegions(o.arr("regions")), o.num("forward"), o.num("back"), Operation.valueOf(o.str("operation")),
                 o.numOr("taper", 0.0), (o["upTo"] as? Json.Obj)?.let { plane(it) },
                 o.bool("throughAll"), o.numOr("offset", 0.0), o.numOr("thin", 0.0), strings(o.arr("only")), o.bool("surface"),
+                (o["face"] as? Json.Str)?.value,
             )
             "primitive" -> PrimitiveFeature(
                 id, name, PrimitiveKind.valueOf(o.str("kind")), plane(o["plane"] as Json.Obj), o.num("u"), o.num("v"),

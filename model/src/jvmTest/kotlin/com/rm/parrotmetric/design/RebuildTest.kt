@@ -37,6 +37,8 @@ private class FakeKernel : Kernel {
 
     override fun extrude(id: Int, plane: SketchPlane, curves: List<ProfileCurve>, regions: List<RegionRef>, forward: Double, back: Double, taper: Double, thin: Double): Long {
         calls += "extrude $id"
+        lastRegions = regions
+        lastPlane = plane
         lastForward = forward
         lastBack = back
         lastThin = thin
@@ -47,6 +49,11 @@ private class FakeKernel : Kernel {
         return make(Box(x, x + w, listOf("F$id.$side", "F$id.end")))
     }
     var facingBack: Double? = null
+    var lastRegions: List<RegionRef> = emptyList()
+    var lastPlane: SketchPlane? = null
+    /** What faceOutline gives for any face. */
+    var outline: List<ProfileCurve>? = null
+    override fun faceOutline(body: Long, face: String, plane: SketchPlane) = outline
 
     /** A box's place along x, for faces and edges it has. */
     override fun signature(body: Long, name: String, edge: Boolean) = bodies.getValue(body).let { b ->
@@ -788,6 +795,24 @@ class RebuildTest {
         val thread = ThreadFeature(d.newId(), "Thread", "F${box.id}.end", 1.5, 0.3).also { d.add(it) }
         assertTrue(Rebuilder(k).rebuild(d.active).errors.isEmpty())
         assertTrue("thread ${thread.id} F${box.id}.end 1.5 0.3" in k.calls, k.calls.toString())
+    }
+
+    @Test
+    fun aFlatFaceIsExtrudedWithItsOutline() {
+        val k = FakeKernel()
+        k.outline = listOf(ProfileCurve(ProfileCurve.Kind.Line, 0, 2.0, 0.0, 8.0, 0.0), ProfileCurve(ProfileCurve.Kind.Line, 0, 8.0, 0.0, 2.0, 0.0))
+        val d = Design()
+        val base = extrude(d, sketchAt(d, 0.0, 10.0), Operation.NewBody)
+        val up = ExtrudeFeature(d.newId(), "Extrude 2", -1, emptyList(), 5.0, 0.0, Operation.Join, face = "F${base.id}.end")
+        d.add(up)
+        val built = Rebuilder(k).rebuild(d.active)
+        assertTrue(built.errors.isEmpty(), built.errors.toString())
+        assertTrue("extrude ${up.id}" in k.calls)
+        // The face is the area round all its edges, on a plane on the face.
+        assertEquals(listOf(RegionRef(listOf(1, 2), 0.0, 0.0)), k.lastRegions)
+        assertEquals(Vec3(0.0, 0.0, 1.0), k.lastPlane!!.normal)
+        assertEquals(10.0, k.lastPlane!!.origin.z)
+        assertEquals(1, built.bodies.size)
     }
 
     @Test

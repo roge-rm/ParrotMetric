@@ -7,6 +7,8 @@ These are under **Create**. Most start from sketch areas: pick the areas, then t
 
 Pushes areas straight out of their plane. Tap the areas first, or with none tapped it takes the newest sketch when it has only one. When that sketch has more, **Take all** takes every one of its areas.
 
+A flat face of a body extrudes too, with no sketch: tap it, then Extrude. It goes out from the face and joins the body, holes and all, or with **Cut** it sinks into the body.
+
 - **Distance** goes a set distance, **Through all** goes through everything in the way, and **Up to** stops at a face or plane you pick.
 - With a distance, it goes **One side**, **Both ways** (the same each way) or **Two sides** (a different distance each way). **The other way** turns a one-sided extrude round, the same as a distance below 0. With the other two, pick **Forward**, **Back** or **Both ways**.
 - **Through all** starts as **Cut**, since it goes through bodies.

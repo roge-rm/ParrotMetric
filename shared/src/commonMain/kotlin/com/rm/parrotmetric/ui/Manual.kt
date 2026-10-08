@@ -137,6 +137,7 @@ object Manual {
             ManualBlock(ManualKind.Para, "These are under **Create**. Most start from sketch areas: pick the areas, then the tool. You can also start the tool and tap areas while its panel is open."),
             ManualBlock(ManualKind.Heading, "Extrude"),
             ManualBlock(ManualKind.Para, "Pushes areas straight out of their plane. Tap the areas first, or with none tapped it takes the newest sketch when it has only one. When that sketch has more, **Take all** takes every one of its areas."),
+            ManualBlock(ManualKind.Para, "A flat face of a body extrudes too, with no sketch: tap it, then Extrude. It goes out from the face and joins the body, holes and all, or with **Cut** it sinks into the body."),
             ManualBlock(ManualKind.Bullet, "**Distance** goes a set distance, **Through all** goes through everything in the way, and **Up to** stops at a face or plane you pick."),
             ManualBlock(ManualKind.Bullet, "With a distance, it goes **One side**, **Both ways** (the same each way) or **Two sides** (a different distance each way). **The other way** turns a one-sided extrude round, the same as a distance below 0. With the other two, pick **Forward**, **Back** or **Both ways**."),
             ManualBlock(ManualKind.Bullet, "**Through all** starts as **Cut**, since it goes through bodies."),

@@ -52,6 +52,7 @@ enum class Operation { NewBody, Join, Cut, Intersect }
  * Sweeps sketch areas straight out of the sketch plane, [forward] in front and
  * [back] behind (mm), or in front as far as [upTo] when that's set. A [taper]
  * (radians) leans the sides in going forward, pivoting at the sketch plane.
+ * With [face] set, the face's outline is the area and the face is the sketch plane.
  */
 data class ExtrudeFeature(
     override val id: Int,
@@ -73,6 +74,8 @@ data class ExtrudeFeature(
     override val only: List<String> = emptyList(),
     /** The sketch's lines pushed out as a surface with no thickness, a new body; areas, taper and the rest aren't used. */
     val surface: Boolean = false,
+    /** A flat face of a body extruded in place of sketch areas; [sketchId] and [regions] aren't used. */
+    val face: String? = null,
 ) : Feature() {
     override fun key() = this
 }

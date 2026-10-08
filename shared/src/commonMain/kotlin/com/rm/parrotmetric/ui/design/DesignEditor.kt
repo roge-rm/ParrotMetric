@@ -1318,14 +1318,23 @@ class DesignEditor(
     private fun joinOnFace(d: AreaDraft) {
         if (!d.fresh) return
         d.fresh = false
-        if ((design.feature(d.sketchId ?: return) as? SketchFeature)?.plane is PlaneRef.OnFace) d.operation = Operation.Join
+        val onFace = (d as? ExtrudeDraft)?.face != null || d.sketchId?.let { (design.feature(it) as? SketchFeature)?.plane is PlaneRef.OnFace } == true
+        if (onFace) d.operation = Operation.Join
+    }
+
+    /** The one flat face selected, not one the step [id] made, or null. */
+    private fun selectedFlatFace(id: Int): String? {
+        val face = viewport.selectedFaces().map { it.second }.filter { it.isNotEmpty() }.singleOrNull() ?: return null
+        if (face.startsWith("F$id.")) return null
+        val body = shownBodies.firstOrNull { face in kernel.faceNames(it.handle) } ?: return null
+        return face.takeIf { kernel.facePlane(body.handle, face) != null }
     }
 
     private fun openArea(d: AreaDraft) {
         panel = d
         selectionChanged()
         // Nothing picked: the newest sketch's area, when it has just the one and nothing uses it yet.
-        if (d.regions.isEmpty()) design.active.lastOrNull { it is SketchFeature }?.takeIf { f -> design.active.none { usesSketch(it, f.id) } }?.let { f ->
+        if (d.regions.isEmpty() && (d as? ExtrudeDraft)?.face == null) design.active.lastOrNull { it is SketchFeature }?.takeIf { f -> design.active.none { usesSketch(it, f.id) } }?.let { f ->
             val areas = finder.find((f as SketchFeature).sketch.profileCurves())
             // Only open lines: an extrude makes them a thin wall.
             if (areas.isEmpty() && d is ExtrudeDraft && f.sketch.curves.any { !it.construction }) {
@@ -1801,6 +1810,22 @@ class DesignEditor(
                     d.upTo = ref
                 }
                 val picked = viewport.selectedRegions()
+                if (d is ExtrudeDraft && !d.upToOn) {
+                    // A flat face on its own is pushed out as it is; a tap on what it's making leaves it be.
+                    val tapped = viewport.selectedFaces().map { it.second }.filter { it.isNotEmpty() }
+                    if (d.face != null && picked.isEmpty() && tapped.singleOrNull()?.startsWith("F${d.id}.") == true) return
+                    val face = if (picked.isEmpty()) selectedFlatFace(d.id) else null
+                    if (face != d.face) {
+                        d.face = face
+                        if (face != null) {
+                            d.sketchId = null
+                            d.regions = emptyList()
+                            joinOnFace(d)
+                        }
+                        rebuild()
+                    }
+                    if (face != null) return
+                }
                 if (picked.isEmpty()) {
                     d.regions = emptyList()
                     return
@@ -1862,6 +1887,10 @@ class DesignEditor(
             is ThreadDraft -> viewport.select(emptyList(), emptyList(), listOfNotNull(d.face))
             is LipDraft -> viewport.select(emptyList(), emptyList(), listOfNotNull(d.face))
             is AreaDraft -> {
+                if (d is ExtrudeDraft && d.face != null) {
+                    viewport.select(emptyList(), emptyList(), listOfNotNull(d.face, (d.upTo as? PlaneRef.OnFace)?.face))
+                    return
+                }
                 val s = shownSketches.indexOfFirst { it.id == d.sketchId }
                 if (s < 0) return
                 val regions = finder.find(shownSketches[s].sketch.profileCurves())
@@ -2010,10 +2039,12 @@ class DesignEditor(
         var thin by mutableStateOf(editing?.thin?.takeIf { it > 0 } ?: 1.0)
         /** The sketch's lines made a surface, not a solid. */
         var surfaceOn by mutableStateOf(editing?.surface ?: false)
+        /** A flat face extruded in place of sketch areas. */
+        var face by mutableStateOf(editing?.face)
 
         init {
             if (editing != null) {
-                sketchId = editing.sketchId
+                if (editing.face == null) sketchId = editing.sketchId
                 regions = editing.regions
                 operation = editing.operation
                 when {
@@ -2024,9 +2055,11 @@ class DesignEditor(
             }
         }
 
-        override fun feature(): Feature? {
-            val s = sketchId ?: return null
-            if (surfaceOn) {
+        override fun feature(): Feature? = made()?.let { if (face != null) it.copy(face = face, regions = emptyList()) else it }
+
+        private fun made(): ExtrudeFeature? {
+            val s = sketchId ?: if (face != null) -1 else return null
+            if (surfaceOn && face == null) {
                 val (fwd, back) = when (direction) {
                     Direction.OneSide -> distance to 0.0
                     Direction.Symmetric -> distance / 2 to distance / 2
@@ -2035,7 +2068,7 @@ class DesignEditor(
                 return ExtrudeFeature(id, name, s, emptyList(), fwd, back, Operation.NewBody, offset = offset, surface = true)
             }
             // With no areas, a thin wall goes along the sketch's open line.
-            if (regions.isEmpty() && !thinOn) return null
+            if (regions.isEmpty() && !thinOn && face == null) return null
             val taper = taperDegrees * PI / 180
             val wall = if (thinOn) thin else 0.0
             if (throughAll) {
@@ -2059,7 +2092,7 @@ class DesignEditor(
             return ExtrudeFeature(id, name, s, regions, fwd, back, operation, taper, null, false, offset, wall, only)
         }
 
-        override fun missing() = if (regions.isEmpty()) "Tap an area of a sketch" else "Tap the face to go up to"
+        override fun missing() = if (regions.isEmpty() && face == null) "Tap an area of a sketch or a flat face" else "Tap the face to go up to"
     }
 
     /** Areas swept along a path: another sketch, or picked edges. */

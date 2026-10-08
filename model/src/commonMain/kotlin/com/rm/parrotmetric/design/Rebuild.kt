@@ -1,6 +1,7 @@
 package com.rm.parrotmetric.design
 
 import com.rm.parrotmetric.sketch.Line
+import com.rm.parrotmetric.sketch.ProfileCurve
 import com.rm.parrotmetric.sketch.SketchPlane
 import com.rm.parrotmetric.sketch.Vec3
 import kotlin.math.abs
@@ -256,33 +257,37 @@ class Rebuilder(private val kernel: Kernel) {
             Step(f.key(), bodies, planes, null, made, mapOf(f.id to axis))
         }
         is ExtrudeFeature -> {
-            val sketch = sketchOf(f.sketchId, all)
-            val onSketch = planes[f.sketchId] ?: throw KernelException("Its sketch couldn't be built")
+            val profile = f.face?.let { faceProfile(f, it, bodies, planes) } ?: run {
+                val sketch = sketchOf(f.sketchId, all)
+                val onSketch = planes[f.sketchId] ?: throw KernelException("Its sketch couldn't be built")
+                Profile(onSketch, sketch.curves(), f.regions, (sketch.plane as? PlaneRef.OnFace)?.face)
+            }
+            val (onSketch, curves, regions) = profile
             val plane = if (f.offset == 0.0) onSketch else onSketch.copy(origin = onSketch.origin + onSketch.normal * f.offset)
-            if (f.surface) {
-                val sheet = kernel.surfaceFromLines(f.id, plane, sketch.curves(), false, f.forward, f.back, listOf(0.0, 0.0, 0.0, 0.0), 0.0)
+            if (f.surface && f.face == null) {
+                val sheet = kernel.surfaceFromLines(f.id, plane, curves, false, f.forward, f.back, listOf(0.0, 0.0, 0.0, 0.0), 0.0)
                 return applyTool(f, sheet, Operation.NewBody, bodies, planes, made)
             }
             val target = if (f.throughAll) null else f.upTo?.let { resolvePlane(it, bodies, f, planes) }
             val tool = when {
-                target != null -> extrudeUpTo(f, plane, target, sketch)
+                target != null -> extrudeUpTo(f, plane, target, curves, regions)
                 f.throughAll -> {
                     val (forward, back) = throughAll(f, plane, bodies)
-                    kernel.extrude(f.id, plane, sketch.curves(), f.regions, forward, back, f.taper, f.thin)
+                    kernel.extrude(f.id, plane, curves, regions, forward, back, f.taper, f.thin)
                 }
                 else -> {
-                    val out = kernel.extrude(f.id, plane, sketch.curves(), f.regions, f.forward, f.back, f.taper, f.thin)
+                    val out = kernel.extrude(f.id, plane, curves, regions, f.forward, f.back, f.taper, f.thin)
                     // A one-sided cut from a sketch on a face goes into the body, whichever way the face looks;
                     // only the bodies it may change count.
                     val oneSide = f.back == 0.0 && f.forward > 0
                     val mayChange = if (f.only.isEmpty()) bodies else bodies.filter { it.label in f.only }
                     if (oneSide && f.operation != Operation.NewBody && f.operation != Operation.Join && mayChange.none { shares(it.handle, out) }) {
                         kernel.release(out)
-                        kernel.extrude(f.id, plane, sketch.curves(), f.regions, 0.0, f.forward, f.taper, f.thin)
+                        kernel.extrude(f.id, plane, curves, regions, 0.0, f.forward, f.taper, f.thin)
                     } else out
                 }
             }
-            applyTool(f, tool, f.operation, bodies, planes, made, (sketch.plane as? PlaneRef.OnFace)?.face)
+            applyTool(f, tool, f.operation, bodies, planes, made, profile.home)
         }
         is SweepFeature -> {
             val sketch = sketchOf(f.sketchId, all)
@@ -1030,7 +1035,7 @@ class Rebuilder(private val kernel: Kernel) {
      * a distance. Slanted, it goes well past and is cut off where it crosses,
      * keeping the part on the sketch's side.
      */
-    private fun extrudeUpTo(f: ExtrudeFeature, plane: SketchPlane, target: SketchPlane, sketch: SketchFeature): Long {
+    private fun extrudeUpTo(f: ExtrudeFeature, plane: SketchPlane, target: SketchPlane, curves: List<ProfileCurve>, regions: List<RegionRef>): Long {
         val n = plane.normal
         val m = target.normal
         val facing = n.dot(m)
@@ -1038,10 +1043,9 @@ class Rebuilder(private val kernel: Kernel) {
         // How far along the sketch's normal its origin is from the target.
         val reach = (target.origin - plane.origin).dot(m) / facing
         if (abs(reach) < 1e-6) throw KernelException("That face or plane goes through the sketch")
-        val curves = sketch.curves()
         fun extrude(length: Double) =
-            if (length > 0) kernel.extrude(f.id, plane, curves, f.regions, length, 0.0, f.taper, f.thin)
-            else kernel.extrude(f.id, plane, curves, f.regions, 0.0, -length, f.taper, f.thin)
+            if (length > 0) kernel.extrude(f.id, plane, curves, regions, length, 0.0, f.taper, f.thin)
+            else kernel.extrude(f.id, plane, curves, regions, 0.0, -length, f.taper, f.thin)
         if (abs(facing) > 1 - 1e-9) return extrude(reach)
         // Far enough for any part of the sketch to reach the slanted target.
         val spread = curves.maxOfOrNull { c -> maxOf(hypot(c.x1, c.y1), hypot(c.x2, c.y2), hypot(c.cx1, c.cy1), hypot(c.cx2, c.cy2)) + c.r } ?: 0.0
@@ -1064,6 +1068,21 @@ class Rebuilder(private val kernel: Kernel) {
             joined = next
         }
         return joined
+    }
+
+    /** What an extrude pushes out: the plane, its curves and areas, and the face the plane is on if any. */
+    private data class Profile(val plane: SketchPlane, val curves: List<ProfileCurve>, val regions: List<RegionRef>, val home: String?)
+
+    /** A flat face's outline as curves on a plane on the face, numbered from 1, with the face as the area. */
+    private fun faceProfile(f: ExtrudeFeature, face: String, bodies: List<BodyState>, planes: Map<Int, SketchPlane>): Profile {
+        val name = ref(f, face, false, bodies)
+        val body = bodyWithFace(name, bodies) ?: throw KernelException("The face it's on isn't there any more")
+        if (kernel.facePlane(body.handle, name) == null) throw KernelException("Only a flat face can be extruded")
+        val plane = resolvePlane(PlaneRef.OnFace(name, Vec3(1.0, 0.0, 0.0)), bodies, f, planes)
+        val curves = kernel.faceOutline(body.handle, name, plane)?.mapIndexed { i, c -> c.copy(id = i + 1) }
+            ?: throw KernelException("The face couldn't be extruded")
+        // The face is the one area bounded by all its edges, holes and all; inside a hole is an area of its own.
+        return Profile(plane, curves, listOf(RegionRef(curves.map { it.id }, 0.0, 0.0)), name)
     }
 
     /**

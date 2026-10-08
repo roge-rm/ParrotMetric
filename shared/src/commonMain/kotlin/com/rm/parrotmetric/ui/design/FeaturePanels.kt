@@ -155,7 +155,7 @@ internal fun count(n: Int, one: String, many: String) = if (n == 1) "1 $one" els
 
 @Composable
 private fun ExtrudeSettings(editor: DesignEditor, d: DesignEditor.ExtrudeDraft) {
-    Header("Extrude", Icons.extrude, Palette.create, when { d.regions.isNotEmpty() -> count(d.regions.size, "area", "areas"); d.sketchId != null && d.thinOn -> "Open line"; else -> null })
+    Header("Extrude", Icons.extrude, Palette.create, when { d.face != null -> "A face"; d.regions.isNotEmpty() -> count(d.regions.size, "area", "areas"); d.sketchId != null && d.thinOn -> "Open line"; else -> null })
     // A sketch of many areas: one tap takes them all.
     val areas = editor.areaCount(d)
     if (areas > 1 && d.regions.size < areas) androidx.compose.material3.TextButton(onClick = { editor.pickAllAreas(d) }) {
