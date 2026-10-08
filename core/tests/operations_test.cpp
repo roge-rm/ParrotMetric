@@ -1,3 +1,5 @@
+#include <BRep_Tool.hxx>
+#include <BRepMesh_IncrementalMesh.hxx>
 #include <BRepBuilderAPI_MakeWire.hxx>
 #include <TColgp_HArray1OfPnt.hxx>
 #include <GeomAPI_Interpolate.hxx>
@@ -857,4 +859,41 @@ TEST_CASE("an open line with a thin wall extrudes as a wall along it") {
     double length = r * (a1 - a0) + 16;
     // Less a little where the feet meet the arc at an angle.
     CHECK(volume(clip) == Catch::Approx((length * 1.5 + M_PI * 0.75 * 0.75) * 10).epsilon(0.03));
+}
+
+TEST_CASE("a loft along a guide is round where its areas are, and light to draw") {
+    // Two circles 40 apart and a guide bulging from 10 out to 18 between them, as a sketch's spline gives it: a vase.
+    gp_Ax3 up(gp_Pnt(0, 0, 40), gp::DZ(), gp::DX());
+    LoftProfile low{top, {circle(1, 0, 0, 10)}, {{1}, 0, 0}};
+    LoftProfile high{up, {circle(1, 0, 0, 10)}, {{1}, 0, 0}};
+    // On the Front plane, x across and z up.
+    gp_Ax3 front(gp::Origin(), gp_Dir(0, -1, 0), gp::DX());
+    auto bezier = [](double x1, double y1, double cx1, double cy1, double cx2, double cy2, double x2, double y2) {
+        SketchCurve c;
+        c.kind = SketchCurve::Bezier;
+        c.id = 1;
+        c.x1 = x1; c.y1 = y1; c.cx1 = cx1; c.cy1 = cy1; c.cx2 = cx2; c.cy2 = cy2; c.x2 = x2; c.y2 = y2;
+        return c;
+    };
+    TopoDS_Wire g = pathFromSketch(front, {bezier(10, 0, 10 + 4.0 / 3, 10.0 / 3, 18, 40.0 / 3, 18, 20),
+                                           bezier(18, 20, 18, 80.0 / 3, 10 + 4.0 / 3, 110.0 / 3, 10, 40)});
+    NamedShape vase = loft(1, {low, high}, false, 0, &g);
+    // The volume of the solid of revolution of the guide.
+    CHECK(volume(vase) == Catch::Approx(28067).epsilon(0.003));
+    Bnd_Box box;
+    BRepBndLib::AddOptimal(vase.shape, box, false, false);
+    double x0, y0, z0, x1, y1, z1;
+    box.Get(x0, y0, z0, x1, y1, z1);
+    CHECK(x1 == Catch::Approx(18).margin(0.1));
+    CHECK(y0 == Catch::Approx(-18).margin(0.1));
+    CHECK(z1 == Catch::Approx(40).margin(0.01));
+    // As finely as the display draws it, a few thousand triangles.
+    BRepMesh_IncrementalMesh(vase.shape, 0.05, false, 0.3, true);
+    int triangles = 0;
+    for (TopExp_Explorer f(vase.shape, TopAbs_FACE); f.More(); f.Next()) {
+        TopLoc_Location loc;
+        auto t = BRep_Tool::Triangulation(TopoDS::Face(f.Current()), loc);
+        if (!t.IsNull()) triangles += t->NbTriangles();
+    }
+    CHECK(triangles < 10000);
 }

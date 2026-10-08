@@ -21,6 +21,8 @@
 #include <BRepOffsetAPI_ThruSections.hxx>
 #include <BRepOffsetAPI_MakePipeShell.hxx>
 #include <GeomAPI_Interpolate.hxx>
+#include <GeomAPI_IntCS.hxx>
+#include <GeomAPI_ProjectPointOnCurve.hxx>
 #include <GC_MakeArcOfCircle.hxx>
 #include <BRepBuilderAPI_MakeVertex.hxx>
 #include <BRepTools_WireExplorer.hxx>
@@ -1926,60 +1928,102 @@ NamedShape loft(int id, const std::vector<LoftProfile>& profiles, bool ruled, do
         }
         NamedShape out;
         if (guide) {
-            // Along a path through the middles: straight between two, a smooth curve through more.
-            BRepBuilderAPI_MakeWire spine;
+            // The plain loft first, then its outline at stations along it, each scaled about its middle
+            // until it reaches the guide, lofted again. OCCT's own sweep along a guide gives heavy
+            // surfaces, a little off, that take seconds to draw.
+            BRepOffsetAPI_ThruSections plain(true, ruled);
+            for (const auto& w : wires) plain.AddWire(w);
+            plain.CheckCompatibility(true);
+            plain.Build();
+            if (!plain.IsDone()) throw std::runtime_error("The loft couldn't be made");
+            // A path through the middles, for which way each station faces: straight between two, a smooth curve through more.
+            Handle(Geom_Curve) spine;
             if (middles.size() == 2) {
-                spine.Add(BRepBuilderAPI_MakeEdge(middles[0], middles[1]).Edge());
+                spine = new Geom_Line(middles[0], gp_Dir(gp_Vec(middles[0], middles[1])));
             } else {
                 Handle(TColgp_HArray1OfPnt) pts = new TColgp_HArray1OfPnt(1, int(middles.size()));
                 for (size_t i = 0; i < middles.size(); ++i) pts->SetValue(int(i) + 1, middles[i]);
                 GeomAPI_Interpolate through(pts, false, Precision::Confusion());
                 through.Perform();
                 if (!through.IsDone()) throw std::runtime_error("The loft couldn't be made");
-                spine.Add(BRepBuilderAPI_MakeEdge(through.Curve()).Edge());
+                spine = through.Curve();
             }
-            GProp_GProps along;
-            BRepGProp::LinearProperties(spine.Wire(), along);
-            double spineLength = along.Mass();
-            auto middleOf = [](const TopoDS_Wire& w) {
-                BRepAdaptor_CompCurve c(w);
-                return c.Value((c.FirstParameter() + c.LastParameter()) / 2);
-            };
-            // Each outline's edges in order, with curves in space, not only on their sketch's plane.
-            std::vector<std::vector<TopoDS_Edge>> edges;
-            size_t most = 1;
-            for (const auto& w : wires) {
-                TopoDS_Wire copy = TopoDS::Wire(BRepBuilderAPI_Copy(w).Shape());
-                BRepLib::BuildCurves3d(copy);
-                std::vector<TopoDS_Edge> list;
-                for (BRepTools_WireExplorer e(copy); e.More(); e.Next()) list.push_back(e.Current());
-                most = std::max(most, list.size());
-                edges.push_back(list);
+            // Each side's surface round the first outline, and which of its parameters runs from the first area to the last.
+            struct Side { Handle(Geom_Surface) s; bool acrossV; bool fromEnd; double u0, u1, v0, v1; };
+            std::vector<Side> sides;
+            gp_Pln first(profiles[0].plane);
+            for (BRepTools_WireExplorer e(wires[0]); e.More(); e.Next()) {
+                TopoDS_Shape f = plain.GeneratedFace(e.Current());
+                if (f.IsNull()) throw std::runtime_error("The loft couldn't follow the guide");
+                Side side;
+                side.s = BRep_Tool::Surface(TopoDS::Face(f));
+                // The face's own limits: a flat side's plane has none.
+                BRepTools::UVBounds(TopoDS::Face(f), side.u0, side.u1, side.v0, side.v1);
+                auto onFirst = [&](double u, double v) { return first.Distance(side.s->Value(u, v)) < 1e-4; };
+                double um = (side.u0 + side.u1) / 2, vm = (side.v0 + side.v1) / 2;
+                if (onFirst(um, side.v0) || onFirst(um, side.v1)) { side.acrossV = true; side.fromEnd = !onFirst(um, side.v0); }
+                else if (onFirst(side.u0, vm) || onFirst(side.u1, vm)) { side.acrossV = false; side.fromEnd = !onFirst(side.u0, vm); }
+                else throw std::runtime_error("The loft couldn't follow the guide");
+                sides.push_back(side);
             }
-            // OCCT's sweep along a guide builds from some starting points round the outlines and not
-            // others, so each is tried, both ways round, until one works.
-            std::unique_ptr<BRepOffsetAPI_MakePipeShell> shell;
-            for (int way = 0; way < 2 && !shell; ++way)
-                for (size_t k = 0; k < most && !shell; ++k) {
-                    try {
-                        auto attempt = std::make_unique<BRepOffsetAPI_MakePipeShell>(spine.Wire());
-                        attempt->SetMode(*guide, true, BRepFill_ContactOnBorder);
-                        for (const auto& list : edges) {
-                            BRepBuilderAPI_MakeWire w;
-                            for (size_t j = 0; j < list.size(); ++j) w.Add(list[(j + k) % list.size()]);
-                            TopoDS_Wire outline = w.Wire();
-                            attempt->Add(way ? TopoDS::Wire(outline.Reversed()) : outline, false, false);
-                        }
-                        attempt->Build();
-                        if (!attempt->IsDone() || !attempt->MakeSolid()) continue;
-                        // Some build without following the guide; the right one has the guide's middle on its surface.
-                        BRepExtrema_DistShapeShape gap(BRepBuilderAPI_MakeVertex(middleOf(*guide)).Vertex(), attempt->Shape());
-                        if (gap.IsDone() && gap.Value() < 0.01 * std::max(1.0, spineLength)) shell = std::move(attempt);
-                    } catch (const Standard_Failure&) {
-                    }
+            // The guide's curves in space; a sketch's may only have them on its plane.
+            TopoDS_Shape guideCopy = BRepBuilderAPI_Copy(*guide).Shape();
+            BRepLib::BuildCurves3d(guideCopy);
+            std::vector<Handle(Geom_Curve)> guideCurves;
+            for (TopExp_Explorer e(guideCopy, TopAbs_EDGE); e.More(); e.Next()) {
+                double a, b;
+                Handle(Geom_Curve) c = BRep_Tool::Curve(TopoDS::Edge(e.Current()), a, b);
+                if (!c.IsNull()) guideCurves.push_back(new Geom_TrimmedCurve(c, a, b));
+            }
+            const int stations = std::max(12, 6 * int(profiles.size() - 1));
+            BRepOffsetAPI_ThruSections thru(true, false);
+            thru.AddWire(wires.front());
+            for (int k = 1; k < stations; ++k) {
+                double t = double(k) / stations;
+                // The plain loft's outline here, from each side's curve across it.
+                Handle(TopTools_HSequenceOfShape) pieces = new TopTools_HSequenceOfShape;
+                for (const auto& side : sides) {
+                    double at = side.acrossV ? side.v0 + (side.v1 - side.v0) * (side.fromEnd ? 1 - t : t)
+                                             : side.u0 + (side.u1 - side.u0) * (side.fromEnd ? 1 - t : t);
+                    Handle(Geom_Curve) c = side.acrossV ? side.s->VIso(at) : side.s->UIso(at);
+                    pieces->Append(BRepBuilderAPI_MakeEdge(c, side.acrossV ? side.u0 : side.v0, side.acrossV ? side.u1 : side.v1).Edge());
                 }
-            if (!shell) throw std::runtime_error("The loft couldn't follow the guide; it has to run beside the areas from the first to the last");
-            NamedShape all = nameAll(id, shell->Shape(), shell->FirstShape(), shell->LastShape(), "n");
+                Handle(TopTools_HSequenceOfShape) joined;
+                ShapeAnalysis_FreeBounds::ConnectEdgesToWires(pieces, 1e-4, false, joined);
+                if (joined.IsNull() || joined->Length() != 1) throw std::runtime_error("The loft couldn't follow the guide");
+                TopoDS_Wire outline = TopoDS::Wire(joined->Value(1));
+                GProp_GProps lp;
+                BRepGProp::LinearProperties(outline, lp);
+                gp_Pnt middle = lp.CentreOfMass();
+                // Facing along the path where it passes the middle.
+                GeomAPI_ProjectPointOnCurve near(middle, spine);
+                gp_Pnt on;
+                gp_Vec along;
+                spine->D1(near.NbPoints() > 0 ? near.LowerDistanceParameter() : spine->FirstParameter(), on, along);
+                Handle(Geom_Plane) station = new Geom_Plane(middle, gp_Dir(along));
+                // Where the guide crosses there, nearest the middle.
+                bool found = false;
+                gp_Pnt touch;
+                for (const auto& c : guideCurves) {
+                    GeomAPI_IntCS cross(c, station);
+                    if (!cross.IsDone()) continue;
+                    for (int i = 1; i <= cross.NbPoints(); ++i)
+                        if (!found || cross.Point(i).Distance(middle) < touch.Distance(middle)) { touch = cross.Point(i); found = true; }
+                }
+                if (!found) throw std::runtime_error("The loft couldn't follow the guide; it has to run beside the areas from the first to the last");
+                BRepExtrema_DistShapeShape gap(BRepBuilderAPI_MakeVertex(touch).Vertex(), outline);
+                if (!gap.IsDone() || gap.NbSolution() < 1) throw std::runtime_error("The loft couldn't follow the guide");
+                double reach = middle.Distance(gap.PointOnShape2(1));
+                if (reach < 1e-9) throw std::runtime_error("The loft couldn't follow the guide");
+                gp_Trsf grow;
+                grow.SetScale(middle, middle.Distance(touch) / reach);
+                thru.AddWire(TopoDS::Wire(BRepBuilderAPI_Transform(outline, grow, true).Shape()));
+            }
+            thru.AddWire(wires.back());
+            thru.CheckCompatibility(true);
+            thru.Build();
+            if (!thru.IsDone()) throw std::runtime_error("The loft couldn't follow the guide");
+            NamedShape all = nameAll(id, thru.Shape(), thru.FirstShape(), thru.LastShape(), "n");
             check(all.shape, "The loft crosses itself");
             return all;
         }
