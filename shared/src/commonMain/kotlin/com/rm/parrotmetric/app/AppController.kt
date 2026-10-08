@@ -358,7 +358,10 @@ class AppController(
         }
         if (name.endsWith(".pmet", ignoreCase = true)) {
             try {
-                state = state.copy(title = design.openFile(bytes.decodeToString()))
+                // A design never named takes its file's name.
+                val saved = design.openFile(bytes.decodeToString())
+                val title = if (saved.isBlank() || saved == "Untitled") name.dropLast(5).ifBlank { saved } else saved
+                state = state.copy(title = title)
                 document = null
                 folderFile = null
                 opening()
