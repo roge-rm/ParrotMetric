@@ -842,13 +842,17 @@ private fun JointSettings(editor: DesignEditor, d: DesignEditor.JointDraft) {
     // How far it's moved first, as that's what's changed most.
     if (d.kind != com.rm.parrotmetric.design.JointKind.Rigid) {
         val turnLabel = if (ball) "Turned round x" else if (d.turns) "Turned" else "Slid"
-        Field(editor, d, "value", turnLabel, d.value, if (d.turns) "°" else "mm", allowNegative = true) { d.value = it; editor.draftChanged() }
-        // Drag to move it, as far as its limits let it.
-        val range = if (d.turns) {
-            if (d.turnLimits) minOf(d.turnMin, d.turnMax).toFloat()..maxOf(d.turnMin, d.turnMax).toFloat() else -180f..180f
-        } else {
-            if (d.slideLimits) minOf(d.slideMin, d.slideMax).toFloat()..maxOf(d.slideMin, d.slideMax).toFloat() else -100f..100f
+        // As far as its limits let it go, typed or dragged.
+        val limits = when {
+            d.turns && d.turnLimits -> minOf(d.turnMin, d.turnMax)..maxOf(d.turnMin, d.turnMax)
+            !d.turns && d.slideLimits -> minOf(d.slideMin, d.slideMax)..maxOf(d.slideMin, d.slideMax)
+            else -> null
         }
+        Field(editor, d, "value", turnLabel, d.value, if (d.turns) "°" else "mm", allowNegative = true) {
+            d.value = limits?.let { l -> it.coerceIn(l) } ?: it
+            editor.draftChanged()
+        }
+        val range = limits?.let { it.start.toFloat()..it.endInclusive.toFloat() } ?: if (d.turns) -180f..180f else -100f..100f
         androidx.compose.material3.Slider(
             value = d.value.toFloat().coerceIn(range),
             onValueChange = { d.value = kotlin.math.round(it).toDouble(); d.exprs.remove("value"); editor.draftChanged() },

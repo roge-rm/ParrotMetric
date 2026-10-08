@@ -720,7 +720,11 @@ class Rebuilder(private val kernel: Kernel) {
     /** The gear made by the Gear tool whose body is in [component], if any. */
     private fun gearIn(component: String, bodies: List<BodyState>, before: List<Feature>): GearFeature? {
         val faces = bodies.filter { components[it.label] == component }.flatMap { kernel.faceNames(it.handle) }
-        return before.filterIsInstance<GearFeature>().firstOrNull { g -> faces.any { it.startsWith("F${g.id}.") } }
+        // A joint that moved it wraps its names, as F<joint>.j(F<gear>.…).
+        return before.filterIsInstance<GearFeature>().firstOrNull { g ->
+            val mine = Regex("(^|[(|])F${g.id}\\.")
+            faces.any { mine.containsMatchIn(it) }
+        }
     }
 
     /** [name] with each "[open]...)" around a part of it taken off, keeping what was inside. */

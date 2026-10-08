@@ -127,7 +127,9 @@ private class FakeKernel : Kernel {
     override fun transform(id: Int, body: Long, m: DoubleArray, tag: String): Long {
         calls += "transform $id $tag"
         matrices += m
-        val b = bodies.getValue(body)
+        val b0 = bodies.getValue(body)
+        // A joint wraps the names, as the core does.
+        val b = if (tag == "j") b0.copy(faces = b0.faces.map { "F$id.j($it)" }) else b0
         return if (m[0] < 0) make(Box(m[3] - b.to, m[3] - b.from, b.faces)) else make(Box(b.from + m[3], b.to + m[3], b.faces))
     }
 
