@@ -73,6 +73,24 @@ private fun onWheel(then: (Int, Double, Double) -> Unit): Unit = js("""{
     }, { capture: true, passive: false });
 }""")
 
+/** Handle F11 before Compose, including while a text field has focus. */
+private fun onFullscreenKey(): Unit = js("""{
+    let pending = false;
+    window.addEventListener('keydown', (event) => {
+        if (event.key !== 'F11' || event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) return;
+        // Leave the browser's own F11 behavior available when the API is unavailable.
+        if (!document.fullscreenEnabled) return;
+        event.preventDefault();
+        if (event.repeat || pending) return;
+        pending = true;
+        const change = document.fullscreenElement
+            ? document.exitFullscreen()
+            : document.documentElement.requestFullscreen();
+        change.catch((error) => console.warn('Could not change full screen mode:', error))
+            .finally(() => { pending = false; });
+    }, { capture: true });
+}""")
+
 /** Asks for a file; calls back with an object holding its name and bytes. */
 private fun pickFile(then: (JsAny) -> Unit): Unit = js(
     """(() => {
@@ -272,6 +290,7 @@ private fun WebApp() {
 
 @OptIn(ExperimentalComposeUiApi::class)
 fun main() {
+    onFullscreenKey()
     onWheel { kind, dx, dy ->
         com.rm.parrotmetric.ui.ScrollSource.pan = if (kind == 1) androidx.compose.ui.geometry.Offset(dx.toFloat(), dy.toFloat()) else null
         com.rm.parrotmetric.ui.ScrollSource.zoom = if (kind == 2) kotlin.math.exp(-dy * 0.01).toFloat() else null

@@ -18,7 +18,7 @@ The bar at the top has the menu under the parrot, the design's name and how many
 - The cube in the corner shows which way you're looking. Tap one of its faces to look straight at that side.
 - The camera button below them keeps the view as it is under a name, **Keep this view…**, and lists the views kept, to go back to. They're saved with the design.
 
-With a mouse, the middle button moves the view, and right drag or Shift and middle drag turns it. The wheel zooms towards the pointer, and a double middle click fits everything.
+With a mouse or touchpad, **right drag** turns the view and **Shift + right drag** moves it along (pans). No middle button is needed. The wheel zooms towards the pointer; **V** or the button under the cube fits everything in view. If you have a middle button, dragging it pans, Shift and middle drag turns the view, and a double middle click fits everything.
 
 ## Picking things
 

@@ -453,6 +453,7 @@ fun ModelScreen(
             } else Column(Modifier.fillMaxSize().safeDrawingPadding()) {
                 TopBar(logo, state, design, actions, onParts = { sheet = if (sheet == "parts") null else "parts" }, onExport = { sheet = "export" }, onVersions = { sheet = "versions" })
                 Box(Modifier.weight(1f).fillMaxWidth().openArea(actions)) {
+                    NavigationHint(Modifier.align(Alignment.BottomCenter).padding(8.dp))
                     Column(
                         Modifier.align(Alignment.TopEnd).padding(top = 6.dp, end = 12.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -515,6 +516,21 @@ fun ModelScreen(
             if (keyList) KeyList(shortcuts) { keyList = false }
             }
         }
+    }
+}
+
+/** Keep mouse navigation discoverable even without a middle mouse button. */
+@Composable
+private fun NavigationHint(modifier: Modifier = Modifier) {
+    if (LocalKeyboard.current) {
+        Text(
+            "Right drag: rotate · Shift + right drag: pan · Scroll: zoom · V: fit",
+            modifier.clip(RoundedCornerShape(8.dp)).background(Palette.surface.copy(alpha = 0.85f))
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+            fontSize = 12.sp,
+            color = Palette.muted,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+        )
     }
 }
 
@@ -901,6 +917,7 @@ private fun ExpandedModel(
         Row(Modifier.weight(1f).fillMaxWidth().padding(10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             if (partsOpen) Box(Modifier.width(300.dp)) { com.rm.parrotmetric.ui.design.PartsSheet(design) { partsOpen = false } }
             Box(Modifier.weight(1f).fillMaxHeight().openArea(actions)) {
+                NavigationHint(Modifier.align(Alignment.BottomCenter).padding(8.dp))
                 Column(
                     Modifier.align(Alignment.TopEnd),
                     horizontalAlignment = Alignment.CenterHorizontally,

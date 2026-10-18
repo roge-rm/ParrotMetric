@@ -5,8 +5,8 @@ Everything works by touch, but with a mouse and a keyboard most things are quick
 
 ## The mouse
 
-- The middle button drags the view along, and Shift and the middle button turns it. Right drag turns it too, and Shift and a right drag drags it along, which is handy on a touchpad. Looking steeply down or up at the model, a turn started on the far half of the view goes the other way, so the side you grab follows the mouse.
-- The wheel zooms towards the pointer. A double middle click fits everything in view.
+- **Right drag** turns the view, and **Shift + right drag** moves it along (pans). These work with a mouse or a touchpad's secondary-click drag, without a middle button. If you have a middle button, dragging it pans and Shift and middle drag turns the view. Looking steeply down or up at the model, a turn started on the far half of the view goes the other way, so the side you grab follows the mouse.
+- The wheel zooms towards the pointer. **V** or the button under the cube fits everything in view; a double middle click does too.
 - In a browser, a two-finger scroll on a touchpad drags the view along and a pinch zooms.
 - A click picks one thing in place of what was picked, and Shift or Ctrl and a click adds to it or takes away.
 - A double-click on an edge also picks the edges running on smoothly from it.
@@ -20,6 +20,7 @@ Press **?** for the list of every key, **S** to find a tool by typing its name a
 - Most tools have a letter: **E** extrude, **F** fillet, **H** hole, **P** pattern, **M** move, **I** measure and so on. Shift and the letter is often the tool next to it, like **Shift+E** revolve and **Shift+F** chamfer. **N** sketches on what's picked.
 - **Ctrl+N**, **Ctrl+O**, **Ctrl+S**, **Ctrl+Shift+S** and **Ctrl+E** are new, open, save, save as and export. **Ctrl+Z** undoes, and **Ctrl+Shift+Z** or **Ctrl+Y** redoes. Alt works in place of Ctrl, for keyboards without one.
 - **1** to **6** look from the front, back, top, bottom, left and right, and **0** goes back to the home view. **V** fits everything in view.
+- **F11** switches full screen on or off in the desktop app and browser. In the desktop app, leaving full screen restores the previous window layout.
 - **Esc** or **Backspace** backs out of a tool or a sketch tool.
 - In a tool's panel, typing a number, a minus sign, or the name of a parameter, goes into its first size. **Tab** moves to the next one, and **Enter** is **Done**.
 

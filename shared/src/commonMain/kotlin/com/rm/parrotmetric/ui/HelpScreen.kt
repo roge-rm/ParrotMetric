@@ -3,15 +3,20 @@ package com.rm.parrotmetric.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -37,7 +42,8 @@ import androidx.compose.ui.unit.sp
 /**
  * The manual: its contents, and a section at a time. The words come from
  * manual/ through tools/gen_manual.py, so none are written here. Back goes
- * from a section to the contents, then out.
+ * from a section to the contents, then out. Wide screens keep the contents
+ * beside the article; smaller screens show one at a time.
  */
 @Composable
 fun HelpScreen(onBack: () -> Unit) {
@@ -45,34 +51,88 @@ fun HelpScreen(onBack: () -> Unit) {
     val scroll = rememberScrollState()
     LaunchedEffect(reading) { scroll.scrollTo(0) }
     val back = { if (!Help.back()) onBack() }
-    Box(Modifier.fillMaxSize().background(Palette.ground).safeDrawingPadding(), contentAlignment = Alignment.TopCenter) {
-        Column(Modifier.widthIn(max = 640.dp).fillMaxWidth()) {
+    BoxWithConstraints(Modifier.fillMaxSize().background(Palette.ground).safeDrawingPadding()) {
+        val wide = maxWidth >= 1000.dp
+        Column(Modifier.fillMaxSize()) {
             Row(Modifier.fillMaxWidth().padding(start = 6.dp, end = 16.dp, top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = back) { Icon(Icons.back, "Back", tint = Palette.text) }
-                Text(reading?.title ?: "Help", fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = Palette.text)
+                Text(if (wide) "Help" else reading?.title ?: "Help", fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = Palette.text)
             }
-            Column(
-                Modifier.fillMaxWidth().verticalScroll(scroll).padding(start = 20.dp, end = 20.dp, bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                val section = reading
-                if (section == null) {
-                    for (s in Manual.sections) Surface(
-                        onClick = { Help.reading = s },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(14.dp),
-                        color = Palette.surface,
-                        contentColor = Palette.text,
+            Row(Modifier.weight(1f).fillMaxWidth()) {
+                if (wide) {
+                    Column(
+                        Modifier.width(280.dp).fillMaxHeight().background(Palette.surface)
+                            .verticalScroll(rememberScrollState()).padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                            Text(s.title, fontSize = 16.sp, fontWeight = FontWeight.Medium)
-                            if (s.summary.isNotEmpty()) Text(s.summary, fontSize = 13.sp, color = Palette.muted)
+                        HelpTopic("All topics", reading == null) { Help.reading = null }
+                        for (section in Manual.sections) {
+                            HelpTopic(section.title, reading == section) { Help.reading = section }
                         }
                     }
-                } else {
-                    for (b in section.blocks) ManualLine(b)
+                }
+                Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.TopCenter) {
+                    val section = reading
+                    if (wide && section == null) {
+                        LazyVerticalGrid(
+                            columns = GridCells.Adaptive(260.dp),
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(24.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            items(Manual.sections, key = { it.title }) { HelpCard(it) }
+                        }
+                    } else {
+                        Column(
+                            Modifier.widthIn(max = if (wide) 960.dp else 640.dp).fillMaxWidth()
+                                .fillMaxHeight().verticalScroll(scroll)
+                                .padding(horizontal = if (wide) 32.dp else 20.dp).padding(bottom = 24.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            if (section == null) {
+                                for (topic in Manual.sections) HelpCard(topic)
+                            } else {
+                                if (wide) {
+                                    Text(section.title, Modifier.padding(top = 16.dp), fontSize = 28.sp, fontWeight = FontWeight.SemiBold, color = Palette.text)
+                                    if (section.summary.isNotEmpty()) Text(section.summary, fontSize = 16.sp, color = Palette.muted)
+                                }
+                                for (block in section.blocks) ManualLine(block)
+                            }
+                        }
+                    }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun HelpTopic(title: String, selected: Boolean, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(10.dp),
+        color = if (selected) Palette.line else Palette.surface,
+        contentColor = if (selected) Palette.mint else Palette.text,
+    ) {
+        Text(title, Modifier.padding(horizontal = 12.dp, vertical = 10.dp), fontSize = 14.sp,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
+    }
+}
+
+@Composable
+private fun HelpCard(section: ManualSection) {
+    Surface(
+        onClick = { Help.reading = section },
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = Palette.surface,
+        contentColor = Palette.text,
+    ) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            Text(section.title, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+            if (section.summary.isNotEmpty()) Text(section.summary, fontSize = 13.sp, color = Palette.muted)
         }
     }
 }

@@ -16,7 +16,7 @@ A Sculpt step remembers its strokes. If you change a step before it, say the siz
 
 ## Strokes
 
-On the model, a finger, a pen or the left mouse button makes a stroke. Off the model, it turns the view. Two fingers move the view and pinch to zoom; with a mouse, the right button turns it, the middle one moves it and the wheel zooms.
+On the model, a finger, a pen or the left mouse button makes a stroke. Off the model, it turns the view. Two fingers move the view and pinch to zoom; with a mouse or touchpad, **right drag** turns it and **Shift + right drag** moves it along (pans). The middle button also pans, and the wheel zooms.
 
 - Hold Shift to smooth with any brush, and Ctrl to do the opposite of the brush. A pen's eraser end does the opposite too.
 - **Size** is the brush's size on the screen, so zooming in works finer. **[** and **]** change it.

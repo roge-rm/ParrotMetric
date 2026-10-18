@@ -173,6 +173,7 @@ private val general = listOf(
     "Tab" to "Next field, or next size while drawing",
     "Digits" to "Type into the panel's first field, or a size while drawing",
     "Alt" to "Works as Ctrl",
+    "F11" to "Toggle full screen (desktop and browser)",
     "A tool's key again" to "The next way of drawing it",
 )
 

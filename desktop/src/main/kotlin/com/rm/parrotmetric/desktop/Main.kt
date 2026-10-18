@@ -3,9 +3,20 @@ package com.rm.parrotmetric.desktop
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.unit.DpSize
@@ -199,6 +210,8 @@ fun main(args: Array<String>) {
             size = DpSize(1280.dp, 860.dp),
             placement = if (smallScreen()) WindowPlacement.Maximized else WindowPlacement.Floating,
         )
+        var beforeFullscreen by remember { mutableStateOf(window.placement) }
+        var fullscreenKeyHeld by remember { mutableStateOf(false) }
         val painter = remember { image("parrotmetric-small.png") }
         val full = remember { image("parrotmetric.png") }
         var running: AppController? = null
@@ -207,7 +220,29 @@ fun main(args: Array<String>) {
             running?.let { a -> runBlocking { a.saveNow() } }
             exitApplication()
         }
-        Window(onCloseRequest = close, title = "ParrotMetric", icon = painter, state = window) {
+        Window(
+            onCloseRequest = close, title = "ParrotMetric", icon = painter, state = window,
+            onPreviewKeyEvent = { event ->
+                if (event.key != Key.F11) false
+                else if (event.type == KeyEventType.KeyUp) {
+                    val handled = fullscreenKeyHeld
+                    fullscreenKeyHeld = false
+                    handled
+                } else if (event.type == KeyEventType.KeyDown &&
+                    !event.isCtrlPressed && !event.isAltPressed && !event.isMetaPressed && !event.isShiftPressed
+                ) {
+                    if (!fullscreenKeyHeld) {
+                        if (window.placement == WindowPlacement.Fullscreen) window.placement = beforeFullscreen
+                        else {
+                            beforeFullscreen = window.placement
+                            window.placement = WindowPlacement.Fullscreen
+                        }
+                    }
+                    fullscreenKeyHeld = true
+                    true
+                } else false
+            },
+        ) {
             val scope = rememberCoroutineScope()
             lateinit var app: AppController
             val view = remember { DesktopView(onCamera = { app.cameraChanged(it) }, onSelection = { app.selectionChanged(it) }) }
@@ -221,6 +256,7 @@ fun main(args: Array<String>) {
             androidx.compose.runtime.DisposableEffect(window) {
                 val listener = object : java.awt.event.WindowAdapter() {
                     override fun windowGainedFocus(e: java.awt.event.WindowEvent?) = app.resumed()
+                    override fun windowLostFocus(e: java.awt.event.WindowEvent?) { fullscreenKeyHeld = false }
                 }
                 this@Window.window.addWindowFocusListener(listener)
                 onDispose { this@Window.window.removeWindowFocusListener(listener) }
